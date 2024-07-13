@@ -1,0 +1,354 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model bookmark {
+  bookmarkId Int      @id @default(autoincrement()) @db.UnsignedInt
+  mediaId    Int      @db.UnsignedInt
+  mangaId    Int      @db.UnsignedInt
+  chapterId  Int      @db.UnsignedInt
+  userId     Int      @db.UnsignedInt
+  browseType String   @default("flow") @db.VarChar(191)
+  page       Int      @db.UnsignedInt
+  createTime DateTime @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @db.DateTime(6)
+  pageImage  String?  @db.VarChar(191)
+
+  @@unique([chapterId, page], map: "opage")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model chapter {
+  chapterId    Int      @id @default(autoincrement()) @db.UnsignedInt
+  mangaId      Int      @db.UnsignedInt
+  mediaId      Int      @db.UnsignedInt
+  pathId       Int      @db.UnsignedInt
+  browseType   String   @default("flow") @db.VarChar(191)
+  subTitle     String?  @db.VarChar(191)
+  picNum       Int?     @db.UnsignedInt
+  createTime   DateTime @default(now()) @db.DateTime(6)
+  updateTime   DateTime @default(now()) @db.DateTime(6)
+  chapterName  String   @db.VarChar(191)
+  chapterPath  String   @db.VarChar(191)
+  chapterType  String   @default("image") @db.VarChar(191)
+  chapterCover String?  @db.VarChar(191)
+
+  @@unique([mangaId, chapterName], map: "oname")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model collect {
+  collectId   Int      @id @default(autoincrement()) @db.UnsignedInt
+  collectType String   @default("manga") @db.VarChar(191)
+  userId      Int      @db.UnsignedInt
+  mediaId     Int      @db.UnsignedInt
+  mangaId     Int      @db.UnsignedInt
+  mangaName   String?  @db.VarChar(191)
+  chapterId   Int?     @db.UnsignedInt
+  chapterName String?  @db.VarChar(191)
+  createTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @db.DateTime(6)
+
+  @@unique([collectType, chapterId], map: "uChapter")
+  @@unique([collectType, mangaId], map: "uManga")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model compress {
+  compressId     Int      @id @unique(map: "id") @default(autoincrement()) @db.UnsignedInt
+  compressType   String   @db.VarChar(191)
+  compressPath   String   @db.VarChar(191)
+  compressStatus String?  @db.VarChar(191)
+  imageCount     Int?     @db.UnsignedInt
+  mediaId        Int      @db.UnsignedInt
+  mangaId        Int      @db.UnsignedInt
+  chapterId      Int      @unique(map: "IDX_b2e3cd530cbc3bcf8753071c48") @db.UnsignedInt
+  chapterPath    String   @db.VarChar(191)
+  userId         Int?     @db.UnsignedInt
+  createTime     DateTime @default(now()) @db.DateTime(6)
+  updateTime     DateTime @default(now()) @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model history {
+  historyId   Int      @id @default(autoincrement()) @db.UnsignedInt
+  userid      Int      @db.UnsignedInt
+  mediaId     Int      @db.UnsignedInt
+  mangaId     Int      @db.UnsignedInt
+  mangaName   String?  @db.VarChar(191)
+  chapterId   Int      @db.UnsignedInt
+  chapterName String?  @db.VarChar(191)
+  chapterPath String?  @db.VarChar(191)
+  createTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model lastread {
+  lastReadId Int      @id @default(autoincrement()) @db.UnsignedInt
+  page       Int      @db.UnsignedInt
+  finish     Int      @default(0) @db.UnsignedInt
+  chapterId  Int      @db.UnsignedInt
+  mangaId    Int      @db.UnsignedInt
+  userId     Int      @db.UnsignedInt
+  createTime DateTime @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model latest {
+  latestId   Int      @id @default(autoincrement()) @db.UnsignedInt
+  page       Int      @db.UnsignedInt
+  finish     Int      @default(0) @db.UnsignedInt
+  chapterId  Int      @db.UnsignedInt
+  mangaId    Int      @db.UnsignedInt
+  userId     Int      @db.UnsignedInt
+  createTime DateTime @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model log {
+  logId       Int      @id @default(autoincrement()) @db.UnsignedInt
+  logType     String   @default("process") @db.VarChar(191)
+  logLevel    Int      @default(0) @db.UnsignedInt
+  module      String?  @db.VarChar(191)
+  queue       String?  @db.VarChar(191)
+  message     String   @db.VarChar(191)
+  exception   String?  @db.Text
+  version     String   @db.Text
+  environment String   @db.Text
+  context     Json?
+  device      Json?
+  createTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @db.DateTime(6)
+  userId      Int?     @db.UnsignedInt
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model login {
+  loginId    Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId     Int?     @db.UnsignedInt
+  userName   String?  @db.VarChar(191)
+  nickName   String?  @db.VarChar(191)
+  request    Int      @db.UnsignedInt
+  ip         String   @db.VarChar(191)
+  userAgent  Json?
+  createTime DateTime @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @db.DateTime(6)
+  token      String   @db.VarChar(191)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model manga {
+  mangaId      Int       @id @default(autoincrement()) @db.UnsignedInt
+  mediaId      Int       @db.UnsignedInt
+  pathId       Int       @db.UnsignedInt
+  mangaName    String    @db.VarChar(191)
+  mangaPath    String    @db.VarChar(191)
+  parentPath   String?   @db.VarChar(191)
+  mangaCover   String?   @db.VarChar(191)
+  chapterCount Int?      @db.UnsignedInt
+  browseType   String    @default("flow") @db.VarChar(191)
+  direction    Int       @default(1) @db.UnsignedInt
+  removeFirst  Int       @default(0) @db.UnsignedInt
+  title        String?   @db.VarChar(191)
+  subTitle     String?   @db.VarChar(191)
+  author       String?   @db.VarChar(191)
+  describe     String?   @db.VarChar(191)
+  publishDate  DateTime? @db.Date
+  createTime   DateTime  @default(now()) @db.DateTime(6)
+  updateTime   DateTime  @default(now()) @db.DateTime(6)
+
+  @@unique([mediaId, mangaPath], map: "oname")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model manga_tag {
+  mangaTagId Int      @id @default(autoincrement()) @db.UnsignedInt
+  mangaId    Int      @db.UnsignedInt
+  tagId      Int      @db.UnsignedInt
+  createTime DateTime @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @db.DateTime(6)
+
+  @@unique([mangaId, tagId], map: "manga-tag")
+  @@map("manga-tag")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model media {
+  mediaId         Int      @id @default(autoincrement()) @db.UnsignedInt
+  mediaName       String   @unique(map: "IDX_bee46d3473895100a6864a8f30") @db.VarChar(191)
+  mediaType       Int      @db.UnsignedInt
+  mediaRating     String   @default("child") @db.VarChar(191)
+  mediaCover      String?  @db.VarChar(191)
+  directoryFormat Int      @default(0) @db.UnsignedInt
+  browseType      String   @default("flow") @db.VarChar(191)
+  direction       Int      @default(1) @db.UnsignedInt
+  removeFirst     Int      @default(0) @db.UnsignedInt
+  createTime      DateTime @default(now()) @db.DateTime(6)
+  updateTime      DateTime @default(now()) @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model media_permisson {
+  mediaPermissonId Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId           Int      @db.UnsignedInt
+  mediaId          Int      @db.UnsignedInt
+  createTime       DateTime @default(now()) @db.DateTime(6)
+  updateTime       DateTime @default(now()) @db.DateTime(6)
+
+  @@unique([userId, mediaId], map: "user-media")
+  @@map("media-permisson")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model meta {
+  metaId      Int      @id @default(autoincrement()) @db.UnsignedInt
+  metaType    String   @db.VarChar(191)
+  mangaId     Int      @db.UnsignedInt
+  metaFile    String?  @db.VarChar(191)
+  metaContent String?  @db.VarChar(191)
+  createTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model path {
+  pathId       Int       @id @default(autoincrement()) @db.UnsignedInt
+  mediaId      Int       @db.UnsignedInt
+  pathType     String?   @db.VarChar(191)
+  autoScan     Int       @default(0) @db.UnsignedInt
+  include      String?   @db.VarChar(191)
+  exclude      String?   @db.VarChar(191)
+  lastScanTime DateTime? @db.DateTime(0)
+  createTime   DateTime  @default(now()) @db.DateTime(6)
+  updateTime   DateTime  @default(now()) @db.DateTime(6)
+  pathContent  String    @db.VarChar(191)
+
+  @@unique([mediaId, pathContent], map: "opath")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scan {
+  scanId      Int      @default(autoincrement()) @db.UnsignedInt
+  scanStatus  String   @db.VarChar(191)
+  targetPath  String?  @db.VarChar(191)
+  pathId      Int      @db.UnsignedInt
+  scanCount   Int?     @db.UnsignedInt
+  scanIndex   Int?     @default(0)
+  createTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @db.DateTime(6)
+  pathContent String   @db.VarChar(191)
+
+  @@id([scanId, pathId])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tag {
+  tagId       Int      @id @default(autoincrement()) @db.UnsignedInt
+  tagName     String   @db.VarChar(191)
+  tagColor    String   @default("#a0d911") @db.VarChar(191)
+  userId      Int?     @db.UnsignedInt
+  description String?  @db.VarChar(191)
+  createTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model task {
+  taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
+  taskName   String    @default("") @db.VarChar(191)
+  command    String    @db.Text
+  createTime DateTime  @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @db.DateTime(6)
+  status     String    @default("pending") @db.VarChar(191)
+  args       Json?
+  startTime  DateTime? @db.Timestamp(0)
+  endTime    DateTime? @db.Timestamp(0)
+  error      String?   @db.Text
+  priority   Int       @default(10)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model task_failed {
+  taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
+  taskName   String    @default("") @db.VarChar(191)
+  status     String    @db.VarChar(191)
+  command    String    @db.Text
+  args       Json?
+  startTime  DateTime? @db.Timestamp(0)
+  endTime    DateTime? @db.Timestamp(0)
+  error      String?   @db.Text
+  createTime DateTime  @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @db.DateTime(6)
+
+  @@map("task-failed")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model task_success {
+  taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
+  taskName   String    @default("") @db.VarChar(191)
+  status     String    @db.VarChar(191)
+  command    String    @db.Text
+  args       Json?
+  startTime  DateTime? @db.Timestamp(0)
+  endTime    DateTime? @db.Timestamp(0)
+  createTime DateTime  @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @db.DateTime(6)
+
+  @@map("task-success")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model token {
+  tokenId    Int       @id @default(autoincrement()) @db.UnsignedInt
+  userId     Int       @db.UnsignedInt
+  token      String    @db.VarChar(191)
+  expires    DateTime? @db.DateTime(0)
+  createTime DateTime  @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @db.DateTime(6)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user {
+  userId      Int      @id @default(autoincrement()) @db.UnsignedInt
+  userName    String   @unique(map: "username") @db.VarChar(191)
+  passWord    String   @db.Char(32)
+  nickName    String?  @db.VarChar(191)
+  header      String?  @db.VarChar(191)
+  role        String?  @db.VarChar(191)
+  mediaPermit String?  @db.VarChar(191)
+  createTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @db.DateTime(6)
+  userConfig  Json?
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_permisson {
+  userPermissonId Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId          Int      @db.UnsignedInt
+  module          String   @db.VarChar(100)
+  operation       String   @default("default") @db.VarChar(100)
+  createTime      DateTime @default(now()) @db.DateTime(6)
+  updateTime      DateTime @default(now()) @db.DateTime(6)
+
+  @@unique([userId, module, operation], map: "user-module-operation")
+  @@map("user-permisson")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model version {
+  versionId   Int      @id @default(autoincrement()) @db.UnsignedInt
+  version     String   @unique(map: "oVersion") @db.VarChar(191)
+  description String?  @db.VarChar(191)
+  createTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @db.DateTime(6)
+}
