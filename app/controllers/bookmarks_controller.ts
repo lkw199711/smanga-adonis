@@ -1,38 +1,53 @@
 import type { HttpContext } from '@adonisjs/core/http'
-
+import prisma from '#start/prisma'
+import { ListResponse, SResponse } from '../interfaces/response.interface.js'
+import { Prisma } from '@prisma/client'
 export default class BookmarksController {
-  /**
-   * Display a list of resource
-   */
-  async index({}: HttpContext) {}
+  public async index({ response }: HttpContext) { 
+    const list = await prisma.bookmark.findMany()
+    const listResponse = new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count: list.length,
+    })
+    return response.json(listResponse)
+  }
 
-  /**
-   * Display form to create a new record
-   */
-  async create({}: HttpContext) {}
+  public async show({ params, response }: HttpContext) { 
+    let { bookmarkId } = params
+    bookmarkId = Number(bookmarkId)
+    const bookmark = await prisma.bookmark.findUnique({ where: { bookmarkId } })
+    const showResponse = new SResponse({ code: 0, message: '', data: bookmark })
+    return response.json(showResponse)
+  }
 
-  /**
-   * Handle form submission for the create action
-   */
-  async store({ request }: HttpContext) {}
+  public async create({ request, response }: HttpContext) { 
+    const insertData = request.body() as Prisma.bookmarkCreateInput;
+    const bookmark = await prisma.bookmark.create({
+      data: insertData,
+    })
+    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: bookmark })
+    return response.json(saveResponse)
+  }
 
-  /**
-   * Show individual record
-   */
-  async show({ params }: HttpContext) {}
+  public async update({ params, request, response }: HttpContext) { 
+    let { bookmarkId } = params
+    bookmarkId = Number(bookmarkId)
+    const modifyData = request.body()
+    const bookmark = await prisma.bookmark.update({
+      where: { bookmarkId },
+      data: modifyData,
+    })
+    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: bookmark })
+    return response.json(updateResponse)
+  }
 
-  /**
-   * Edit individual record
-   */
-  async edit({ params }: HttpContext) {}
-
-  /**
-   * Handle form submission for the edit action
-   */
-  async update({ params, request }: HttpContext) {}
-
-  /**
-   * Delete record
-   */
-  async destroy({ params }: HttpContext) {}
+  public async destroy({ params, response }: HttpContext) { 
+    let { bookmarkId } = params
+    bookmarkId = Number(bookmarkId)
+    const bookmark = await prisma.bookmark.delete({ where: { bookmarkId } })
+    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: bookmark })
+    return response.json(destroyResponse)
+  }
 }

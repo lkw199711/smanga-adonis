@@ -1,0 +1,54 @@
+import type { HttpContext } from '@adonisjs/core/http'
+import prisma from '#start/prisma'
+import { ListResponse, SResponse } from '../interfaces/response.interface.js'
+import { Prisma } from '@prisma/client'
+
+export default class TaskFailedsController {
+    public async index({ response }: HttpContext) { 
+        const list = await prisma.task_failed.findMany()
+        const listResponse = new ListResponse({
+            code: 0,
+            message: '',
+            list,
+            count: list.length,
+        })
+        return response.json(listResponse)
+    }
+
+    public async show({ params, response }: HttpContext) { 
+        let { taskFailedId } = params
+        taskFailedId = Number(taskFailedId)
+        const taskFailed = await prisma.task_failed.findUnique({ where: { taskId: taskFailedId } })
+        const showResponse = new SResponse({ code: 0, message: '', data: taskFailed })
+        return response.json(showResponse)
+    }
+    
+    public async create({ request, response }: HttpContext) { 
+        const insertData = request.body() as Prisma.task_failedCreateInput;
+        const taskFailed = await prisma.task_failed.create({
+            data: insertData,
+        })
+        const saveResponse = new SResponse({ code: 0, message: '新增成功', data: taskFailed })
+        return response.json(saveResponse)
+    }
+
+    public async update({ params, request, response }: HttpContext) { 
+        let { taskFailedId } = params
+        taskFailedId = Number(taskFailedId)
+        const modifyData = request.body()
+        const taskFailed = await prisma.task_failed.update({
+            where: { taskId: taskFailedId },
+            data: modifyData,
+        })
+        const updateResponse = new SResponse({ code: 0, message: '更新成功', data: taskFailed })
+        return response.json(updateResponse)
+    }
+
+    public async destroy({ params, response }: HttpContext) { 
+        let { taskFailedId } = params
+        taskFailedId = Number(taskFailedId)
+        const taskFailed = await prisma.task_failed.delete({ where: { taskId: taskFailedId } })
+        const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: taskFailed })
+        return response.json(destroyResponse)
+    }
+}
