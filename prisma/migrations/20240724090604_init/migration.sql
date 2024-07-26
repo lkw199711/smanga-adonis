@@ -109,11 +109,12 @@ CREATE TABLE `latest` (
     `page` INTEGER UNSIGNED NOT NULL,
     `finish` INTEGER UNSIGNED NOT NULL DEFAULT 0,
     `chapterId` INTEGER UNSIGNED NOT NULL,
-    `mangaId` INTEGER UNSIGNED NOT NULL,
+    `mangaId` INTEGER NOT NULL,
     `userId` INTEGER UNSIGNED NOT NULL,
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
+    UNIQUE INDEX `latest_mangaId_key`(`mangaId`),
     PRIMARY KEY (`latestId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -140,7 +141,7 @@ CREATE TABLE `log` (
 -- CreateTable
 CREATE TABLE `login` (
     `loginId` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
-    `userId` INTEGER UNSIGNED NULL,
+    `userId` INTEGER UNSIGNED NOT NULL,
     `userName` VARCHAR(191) NULL,
     `nickName` VARCHAR(191) NULL,
     `request` INTEGER UNSIGNED NOT NULL,
@@ -379,3 +380,36 @@ CREATE TABLE `version` (
     UNIQUE INDEX `oVersion`(`version`),
     PRIMARY KEY (`versionId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey
+ALTER TABLE `bookmark` ADD CONSTRAINT `bookmark_chapterId_fkey` FOREIGN KEY (`chapterId`) REFERENCES `chapter`(`chfeatpterId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `chapter` ADD CONSTRAINT `chapter_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `collect` ADD CONSTRAINT `collect_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `compress` ADD CONSTRAINT `compress_chapterId_fkey` FOREIGN KEY (`chapterId`) REFERENCES `chapter`(`chapterId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `history` ADD CONSTRAINT `history_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `history` ADD CONSTRAINT `history_chapterId_fkey` FOREIGN KEY (`chapterId`) REFERENCES `chapter`(`chapterId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `latest` ADD CONSTRAINT `latest_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `login` ADD CONSTRAINT `login_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `manga` ADD CONSTRAINT `manga_mediaId_fkey` FOREIGN KEY (`mediaId`) REFERENCES `media`(`mediaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `path` ADD CONSTRAINT `path_mediaId_fkey` FOREIGN KEY (`mediaId`) REFERENCES `media`(`mediaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `token` ADD CONSTRAINT `token_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE RESTRICT ON UPDATE CASCADE;

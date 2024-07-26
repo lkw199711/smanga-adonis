@@ -1,4 +1,11 @@
 /*
+ * @Author: 梁楷文 lkw199711@163.com
+ * @Date: 2024-06-20 19:41:31
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-07-22 14:26:48
+ * @FilePath: \smanga-adonis\start\kernel.ts
+ */
+/*
 |--------------------------------------------------------------------------
 | HTTP kernel file
 |--------------------------------------------------------------------------
@@ -10,6 +17,7 @@
 
 import router from '@adonisjs/core/services/router'
 import server from '@adonisjs/core/services/server'
+import TaskProcess from '#services/task_service'
 
 /**
  * The error handler is used to convert an exception
@@ -27,7 +35,6 @@ server.use([
   () => import('#middleware/force_json_response_middleware'),
   () => import('@adonisjs/cors/cors_middleware'),
 ])
-
 /**
  * The router middleware stack runs middleware on all the HTTP
  * requests with a registered route.
@@ -41,3 +48,17 @@ router.use([() => import('@adonisjs/core/bodyparser_middleware'), () => import('
 export const middleware = router.named({
   auth: () => import('#middleware/auth_middleware')
 })
+
+/*
+|--------------------------------------------------------------------------
+| 启动任务处理器
+|--------------------------------------------------------------------------
+|
+| 在项目启动时自动运行任务处理器
+|
+*/
+const taskProcess = new TaskProcess()
+
+setInterval(() => { 
+  taskProcess.handleTaskQueue();
+}, 1000)

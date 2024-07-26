@@ -3,5 +3,34 @@
   "compilerOptions": {
     "rootDir": "./",
     "outDir": "./build",
+    "baseUrl": "./",
+    "paths": {
+      "@type/*": [
+        "type/*"
+      ]
+    }
   },
+  "include": [
+    "start/**/*.ts",
+    "type/**/*.ts",
+    "contracts/**/*.ts",
+    "app/**/*.ts",
+    "database/**/*.ts",
+    "resources/**/*.ts",
+    "ace/**/*.ts",
+    "adonis-typings/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "build",
+    "tmp",
+    "test",
+    "public",
+    "resources",
+    "docs",
+    "start",
+    "ace",
+    "adonis-typings",
+    "**/*.spec.ts",
+  ]
 }
