@@ -75,7 +75,7 @@ model compress {
   mediaId        Int      @db.UnsignedInt
   mangaId        Int      @db.UnsignedInt
   chapter        chapter  @relation(fields:[chapterId],references:[chapterId])
-  chapterId      Int      @unique(map: "IDX_b2e3cd530cbc3bcf8753071c48") @db.UnsignedInt
+  chapterId      Int      @unique(map: "unique-chapter") @db.UnsignedInt
   chapterPath    String   @db.VarChar(191)
   userId         Int?     @db.UnsignedInt
   createTime     DateTime @default(now()) @db.DateTime(6)
@@ -117,7 +117,7 @@ model latest {
   finish     Int      @default(0) @db.UnsignedInt
   manga      manga    @relation(fields:[mangaId],references:[mangaId])
   chapterId  Int      @db.UnsignedInt
-  mangaId    Int      @unique
+  mangaId    Int      @unique(map: "unique-manga") @db.UnsignedInt
   userId     Int      @db.UnsignedInt
   createTime DateTime @default(now()) @db.DateTime(6)
   updateTime DateTime @default(now()) @db.DateTime(6)
@@ -200,7 +200,7 @@ model manga_tag {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model media {
   mediaId         Int      @id @default(autoincrement()) @db.UnsignedInt
-  mediaName       String   @unique(map: "IDX_bee46d3473895100a6864a8f30") @db.VarChar(191)
+  mediaName       String   @unique(map: "unique-medianame") @db.VarChar(191)
   mediaType       Int      @db.UnsignedInt
   mediaRating     String   @default("child") @db.VarChar(191)
   mediaCover      String?  @db.VarChar(191)
@@ -340,7 +340,7 @@ model token {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model user {
   userId      Int      @id @default(autoincrement()) @db.UnsignedInt
-  userName    String   @unique(map: "username") @db.VarChar(191)
+  userName    String   @unique(map: "unique-username") @db.VarChar(191)
   passWord    String   @db.Char(32)
   nickName    String?  @db.VarChar(191)
   header      String?  @db.VarChar(191)
@@ -369,7 +369,7 @@ model user_permisson {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model version {
   versionId   Int      @id @default(autoincrement()) @db.UnsignedInt
-  version     String   @unique(map: "oVersion") @db.VarChar(191)
+  version     String   @unique(map: "unique-version") @db.VarChar(191)
   description String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)

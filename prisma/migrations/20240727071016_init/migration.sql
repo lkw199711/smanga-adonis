@@ -69,7 +69,7 @@ CREATE TABLE `compress` (
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
     UNIQUE INDEX `id`(`compressId`),
-    UNIQUE INDEX `IDX_b2e3cd530cbc3bcf8753071c48`(`chapterId`),
+    UNIQUE INDEX `unique-chapter`(`chapterId`),
     PRIMARY KEY (`compressId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -109,12 +109,12 @@ CREATE TABLE `latest` (
     `page` INTEGER UNSIGNED NOT NULL,
     `finish` INTEGER UNSIGNED NOT NULL DEFAULT 0,
     `chapterId` INTEGER UNSIGNED NOT NULL,
-    `mangaId` INTEGER NOT NULL,
+    `mangaId` INTEGER UNSIGNED NOT NULL,
     `userId` INTEGER UNSIGNED NOT NULL,
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `latest_mangaId_key`(`mangaId`),
+    UNIQUE INDEX `unique-manga`(`mangaId`),
     PRIMARY KEY (`latestId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -205,7 +205,7 @@ CREATE TABLE `media` (
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `IDX_bee46d3473895100a6864a8f30`(`mediaName`),
+    UNIQUE INDEX `unique-medianame`(`mediaName`),
     PRIMARY KEY (`mediaId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -352,7 +352,7 @@ CREATE TABLE `user` (
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `userConfig` JSON NULL,
 
-    UNIQUE INDEX `username`(`userName`),
+    UNIQUE INDEX `unique-username`(`userName`),
     PRIMARY KEY (`userId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -377,12 +377,12 @@ CREATE TABLE `version` (
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `oVersion`(`version`),
+    UNIQUE INDEX `unique-version`(`version`),
     PRIMARY KEY (`versionId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE `bookmark` ADD CONSTRAINT `bookmark_chapterId_fkey` FOREIGN KEY (`chapterId`) REFERENCES `chapter`(`chfeatpterId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `bookmark` ADD CONSTRAINT `bookmark_chapterId_fkey` FOREIGN KEY (`chapterId`) REFERENCES `chapter`(`chapterId`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `chapter` ADD CONSTRAINT `chapter_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -24,7 +24,8 @@ export default class MediaController {
     }
 
     public async create({ request, response }: HttpContext) { 
-        const insertData = request.body() as Prisma.mediaCreateInput;
+        const requestData = request.body();
+        const insertData = requestData.data as Prisma.mediaCreateInput
         const media = await prisma.media.create({
             data: insertData,
         })
