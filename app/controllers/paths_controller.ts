@@ -66,4 +66,22 @@ export default class PathsController {
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: path })
     return response.json(destroyResponse)
   }
+
+  public async scan({ params, response }: HttpContext) { 
+    let { pathId } = params
+    pathId = Number(pathId)
+
+    const task = await prisma.task.create({
+      data: {
+        taskName: 'scan',
+        priority: TaskPriority.scan,
+        command: 'task_scan',
+        args: { pathId },
+        status: 'pending',
+      },
+    })
+    
+    const scanResponse = new SResponse({ code: 0, message: '扫描任务已提交', data: task })
+    return response.json(scanResponse)
+  }
 }

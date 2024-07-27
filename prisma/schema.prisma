@@ -11,6 +11,7 @@ datasource db {
 model bookmark {
   bookmarkId Int      @id @default(autoincrement()) @db.UnsignedInt
   mediaId    Int      @db.UnsignedInt
+  manga      manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId    Int      @db.UnsignedInt
   chapter    chapter  @relation(fields:[chapterId],references:[chapterId])
   chapterId  Int      @db.UnsignedInt
@@ -29,6 +30,7 @@ model chapter {
   chapterId    Int      @id @default(autoincrement()) @db.UnsignedInt
   manga        manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId      Int      @db.UnsignedInt
+  media        media    @relation(fields: [mediaId], references: [mediaId])
   mediaId      Int      @db.UnsignedInt
   pathId       Int      @db.UnsignedInt
   browseType   String   @default("flow") @db.VarChar(191)
@@ -73,6 +75,7 @@ model compress {
   compressStatus String?  @db.VarChar(191)
   imageCount     Int?     @db.UnsignedInt
   mediaId        Int      @db.UnsignedInt
+  manga          manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId        Int      @db.UnsignedInt
   chapter        chapter  @relation(fields:[chapterId],references:[chapterId])
   chapterId      Int      @unique(map: "unique-chapter") @db.UnsignedInt
@@ -96,18 +99,6 @@ model history {
   chapterPath String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model lastread {
-  lastReadId Int      @id @default(autoincrement()) @db.UnsignedInt
-  page       Int      @db.UnsignedInt
-  finish     Int      @default(0) @db.UnsignedInt
-  chapterId  Int      @db.UnsignedInt
-  mangaId    Int      @db.UnsignedInt
-  userId     Int      @db.UnsignedInt
-  createTime DateTime @default(now()) @db.DateTime(6)
-  updateTime DateTime @default(now()) @db.DateTime(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -161,6 +152,7 @@ model manga {
   mangaId      Int       @id @default(autoincrement()) @db.UnsignedInt
   media        media     @relation(fields: [mediaId], references: [mediaId])
   mediaId      Int       @db.UnsignedInt
+  path         path      @relation(fields: [pathId], references: [pathId])
   pathId       Int       @db.UnsignedInt
   mangaName    String    @db.VarChar(191)
   mangaPath    String    @db.VarChar(191)
@@ -181,6 +173,10 @@ model manga {
   historys     history[]
   chapters     chapter[]
   collects     collect[]
+  bookmarks    bookmark[]
+  compress     compress[]
+  metas        meta[]
+  manga_tags   manga_tag[]
 
   @@unique([mediaId, mangaPath], map: "oname")
 }
@@ -188,7 +184,9 @@ model manga {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model manga_tag {
   mangaTagId Int      @id @default(autoincrement()) @db.UnsignedInt
+  manga      manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId    Int      @db.UnsignedInt
+  tag        tag      @relation(fields:[tagId],references:[tagId])
   tagId      Int      @db.UnsignedInt
   createTime DateTime @default(now()) @db.DateTime(6)
   updateTime DateTime @default(now()) @db.DateTime(6)
@@ -212,12 +210,16 @@ model media {
   updateTime      DateTime @default(now()) @db.DateTime(6)
   paths           path[]
   mangas          manga[]
+  chapters        chapter[]
+  media_permissons    media_permisson[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model media_permisson {
   mediaPermissonId Int      @id @default(autoincrement()) @db.UnsignedInt
+  user             user     @relation(fields: [userId], references: [userId])
   userId           Int      @db.UnsignedInt
+  media            media    @relation(fields: [mediaId], references: [mediaId])
   mediaId          Int      @db.UnsignedInt
   createTime       DateTime @default(now()) @db.DateTime(6)
   updateTime       DateTime @default(now()) @db.DateTime(6)
@@ -230,6 +232,7 @@ model media_permisson {
 model meta {
   metaId      Int      @id @default(autoincrement()) @db.UnsignedInt
   metaType    String   @db.VarChar(191)
+  manga       manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId     Int      @db.UnsignedInt
   metaFile    String?  @db.VarChar(191)
   metaContent String?  @db.VarChar(191)
@@ -250,6 +253,7 @@ model path {
   createTime   DateTime  @default(now()) @db.DateTime(6)
   updateTime   DateTime  @default(now()) @db.DateTime(6)
   pathContent  String    @db.VarChar(191)
+  mangas       manga[]
 
   @@unique([mediaId, pathContent], map: "opath")
 }
@@ -259,7 +263,7 @@ model scan {
   scanId      Int      @default(autoincrement()) @db.UnsignedInt
   scanStatus  String   @db.VarChar(191)
   targetPath  String?  @db.VarChar(191)
-  pathId      Int      @db.UnsignedInt
+  pathId      Int      @unique(map: "unique-path") @db.UnsignedInt
   scanCount   Int?     @db.UnsignedInt
   scanIndex   Int?     @default(0)
   createTime  DateTime @default(now()) @db.DateTime(6)
@@ -278,6 +282,7 @@ model tag {
   description String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)
+  manga_tags  manga_tag[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -351,11 +356,14 @@ model user {
   userConfig  Json?
   logins      login[]
   tokens      token[]
+  user_permissons   user_permisson[]
+  media_permissons  media_permisson[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model user_permisson {
   userPermissonId Int      @id @default(autoincrement()) @db.UnsignedInt
+  user            user     @relation(fields:[userId],references:[userId])
   userId          Int      @db.UnsignedInt
   module          String   @db.VarChar(100)
   operation       String   @default("default") @db.VarChar(100)

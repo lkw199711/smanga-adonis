@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-27 15:32:31
+ * @LastEditTime: 2024-07-27 17:06:00
  * @FilePath: \smanga-adonis\start\routes.ts
  */
 /*
@@ -122,3 +122,4 @@ router.get('/path/:pathId', [PathsController, 'show'])
 router.post('/path', [PathsController, 'create'])
 router.patch('/path/:pathId', [PathsController, 'update'])
 router.delete('/path/:pathId', [PathsController, 'destroy'])
+router.put('/path/scan/:pathId', [PathsController, 'scan'])
