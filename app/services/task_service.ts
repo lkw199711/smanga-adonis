@@ -1,6 +1,7 @@
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import scan_job from './scan_job.js'
+import scan_manga_job from './scan_manga_job.js'
 
 type TaskType = Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput
 
@@ -74,7 +75,7 @@ export default class TaskProcess {
         case 'task_scan_manga':
           console.log('执行扫描漫画任务')
           //扫描漫画任务调用
-          //await this.scanMangaJob.handle(task.args);
+          await scan_manga_job(task.args);
           break
         default:
           break

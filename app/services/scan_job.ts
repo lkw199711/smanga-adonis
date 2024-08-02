@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-23 18:34:07
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-27 17:23:16
+ * @LastEditTime: 2024-07-30 19:33:18
  * @FilePath: \smanga-adonis\app\services\scan_job.ts
  */
 import prisma from '#start/prisma'
@@ -62,7 +62,7 @@ export default async function handle({ pathId }: any) {
   })
 
   // 目录中的漫画
-  let mangaList = []
+  let mangaList: mangaItem[] = []
   // 数据库中的漫画
   let mangaListSql = []
 
@@ -82,27 +82,24 @@ export default async function handle({ pathId }: any) {
 
   mangaListSql = await prisma.manga.findMany({ where: { pathId } })
 
-  if (mangaList.length === mangaListSql.length) {
-    // 无需更新
-    return
-  } else if (mangaList.length < mangaListSql.length) {
+  if (mangaList.length < mangaListSql.length) {
     // 现存漫画少于库中漫画, 说明删除了文件. 不进行新增,只删除库中的记录
   } else {
     // 现存漫画多于库中漫画, 说明新增了文件. 进行新增 dev_log
-    console.log(mangaList)
-    
-    mangaList.forEach(async (item,index) => {
+    mangaList.forEach(async (item: mangaItem, index: number) => {
       await prisma.task.create({
         data: {
-          taskName: 'scan',
-          priority: TaskPriority.scan,
+          taskName: `scan_${pathId}`,
+          // 使任务按顺序执行
+          priority: TaskPriority.scan_manga + index,
           command: 'task_scan_manga',
           args: {
-            pathContent: pathInfo.pathContent,
-            mangaRouteArgs: item,
-            pathId: pathId,
+            pathId,
+            pathInfo,
+            mediaInfo,
             mangaCount: mangaList.length,
-            scanIndex: index,
+            mangaIndex: index,
+            ...item,
           },
         },
       })
@@ -116,9 +113,22 @@ export default async function handle({ pathId }: any) {
  * @returns
  */
 function scan_path(dir: string) {
-  let mangaList = fs.readdirSync(dir)
-  mangaList = mangaList.filter((item) => {
+  let folderList = fs.readdirSync(dir)
+  let mangaList = []
+
+  // 在列表中去除. .. 文件夹
+  folderList = folderList.filter((item) => {
+    return item !== '.' && item !== '..'
+  })
+
+  // 根据正则规则过滤出漫画目录
+  folderList = folderList.filter((item) => {
     const itemPath = path.join(dir, item)
+
+    // 检查是否为文件夹
+    if (!fs.statSync(itemPath).isDirectory()) {
+      return false
+    }
 
     // 排除元数据文件夹
     if (/smanga-info/.test(itemPath)) {
@@ -138,6 +148,17 @@ function scan_path(dir: string) {
     return true
   })
 
+  mangaList = folderList.map((item: any) => {
+    const itemPath = path.join(dir, item)
+
+    return {
+      mangaPath: itemPath,
+      mangaName: item,
+      mangaType: 'img',
+      parentPath: dir,
+    }
+  })
+
   return mangaList
 }
 
@@ -146,8 +167,14 @@ function scan_path(dir: string) {
  * @returns 漫画列表平铺
  */
 function scan_path_parent() {
-  let mangaList: string[] = []
+  let mangaList: mangaItem[] = []
   let folderList = fs.readdirSync(pathInfo.pathContent)
+
+  // 在列表中去除. .. 文件夹
+  folderList = folderList.filter((item) => {
+    return item !== '.' && item !== '..'
+  })
+
   folderList = folderList.filter((item) => {
     const itemPath = path.join(pathInfo.pathContent, item)
 

@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-27 17:06:00
+ * @LastEditTime: 2024-08-02 09:20:17
  * @FilePath: \smanga-adonis\start\routes.ts
  */
 /*
@@ -27,6 +27,10 @@ const TasksController = () => import('#controllers/tasks_controller')
 const MediaController = () => import('#controllers/media_controller')
 const PathsController = () => import('#controllers/paths_controller')
 const BookmarksController = () => import('#controllers/bookmarks_controller')
+const TagsController = () => import('#controllers/tags_controller')
+const MangaController = () => import('#controllers/manga_controller')
+const chaptersController = () => import('#controllers/chapters_controller')
+const ImagesController = () => import('#controllers/images_controller')
 
 import prisma from '#start/prisma'
 
@@ -45,6 +49,8 @@ router.get('/test', async () => {
   })
   return pathInfo
 })
+
+router.get('/image', [ImagesController, 'index'])
 
 // 收藏模块 collect
 router.get('/collect', [CollectsController, 'index'])
@@ -123,3 +129,24 @@ router.post('/path', [PathsController, 'create'])
 router.patch('/path/:pathId', [PathsController, 'update'])
 router.delete('/path/:pathId', [PathsController, 'destroy'])
 router.put('/path/scan/:pathId', [PathsController, 'scan'])
+
+// 标签
+router.get('/tag', [TagsController, 'index'])
+router.get('/tag/:tagId', [TagsController, 'show'])
+router.post('/tag', [TagsController, 'create'])
+router.patch('/tag/:tagId', [TagsController, 'update'])
+router.delete('/tag/:tagId', [TagsController, 'destroy'])
+
+// 漫画
+router.get('/manga', [MangaController, 'index'])
+router.get('/manga/:mangaId', [MangaController, 'show'])
+router.post('/manga', [MangaController, 'create'])
+router.patch('/manga/:mangaId', [MangaController, 'update'])
+router.delete('/manga/:mangaId', [MangaController, 'destroy'])
+
+// 章节
+router.get('/chapter', [chaptersController, 'index'])
+router.get('/chapter/:chapterId', [chaptersController, 'show'])
+router.post('/chapter', [chaptersController, 'create'])
+router.patch('/chapter/:chapterId', [chaptersController, 'update'])
+router.delete('/chapter/:chapterId', [chaptersController, 'destroy'])

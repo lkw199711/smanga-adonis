@@ -8,7 +8,11 @@
       "@type/*": [
         "type/*"
       ]
-    }
+    },
+    "typeRoots": [
+      "./node_modules/@types",
+      "./types"
+    ]
   },
   "include": [
     "start/**/*.ts",

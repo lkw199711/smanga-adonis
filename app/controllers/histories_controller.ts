@@ -26,7 +26,7 @@ export default class HistoriesController {
       'historyType',
     ])
     const history = await prisma.history.create({
-      data: insertData,
+      data: Object.assign(insertData, {  }),
     })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: history })
     return response.json(saveResponse)

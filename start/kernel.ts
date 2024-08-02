@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-27 17:12:55
+ * @LastEditTime: 2024-07-30 18:50:20
  * @FilePath: \smanga-adonis\start\kernel.ts
  */
 /*
@@ -18,6 +18,7 @@
 import router from '@adonisjs/core/services/router'
 import server from '@adonisjs/core/services/server'
 import TaskProcess from '#services/task_service'
+import clear_scan from '#services/clear_scan_service'
 
 /**
  * The error handler is used to convert an exception
@@ -39,14 +40,17 @@ server.use([
  * The router middleware stack runs middleware on all the HTTP
  * requests with a registered route.
  */
-router.use([() => import('@adonisjs/core/bodyparser_middleware'), () => import('@adonisjs/auth/initialize_auth_middleware')])
+router.use([
+  () => import('@adonisjs/core/bodyparser_middleware'),
+  () => import('@adonisjs/auth/initialize_auth_middleware'),
+])
 
 /**
  * Named middleware collection must be explicitly assigned to
  * the routes or the routes group.
  */
 export const middleware = router.named({
-  auth: () => import('#middleware/auth_middleware')
+  auth: () => import('#middleware/auth_middleware'),
 })
 
 /*
@@ -57,8 +61,15 @@ export const middleware = router.named({
 | 在项目启动时自动运行任务处理器
 |
 */
+let period = 0
 const taskProcess = new TaskProcess()
 
-setInterval(() => { 
-  taskProcess.handleTaskQueue();
+setInterval(() => {
+  // 每个周期执行
+  taskProcess.handleTaskQueue()
+  // 每十个周期执行
+  if (period === 10) {
+    clear_scan()
+  }
+  period = (period % 10) + 1
 }, 1000)

@@ -1,3 +1,10 @@
+/*
+ * @Author: 梁楷文 lkw199711@163.com
+ * @Date: 2024-07-15 19:21:48
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-07-30 18:37:20
+ * @FilePath: \smanga-adonis\app\controllers\paths_controller.ts
+ */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.interface.js'
@@ -34,7 +41,7 @@ export default class PathsController {
     // 新增扫描任务
     await prisma.task.create({
       data: {
-        taskName: 'scan',
+        taskName: `scan_${path.pathId}`,
         priority: TaskPriority.scan,
         command: 'task_scan',
         args: { pathId: path.pathId },
@@ -73,7 +80,7 @@ export default class PathsController {
 
     const task = await prisma.task.create({
       data: {
-        taskName: 'scan',
+        taskName: `scan_${pathId}`,
         priority: TaskPriority.scan,
         command: 'task_scan',
         args: { pathId },
