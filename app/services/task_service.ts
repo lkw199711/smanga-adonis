@@ -16,37 +16,53 @@ type TaskType = Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput
  */
 export default class TaskProcess {
   // 执行中的任务数量
-  private processing = 0
+  // private processing = 0
   // 最大并发任务数
-  private readonly maxConcurrentTasks = 10
+  private readonly maxConcurrentTasks = 1
+  // 事务锁
+  private sqlLock = false
 
   /**
    * 任务监控
    */
   public async handleTaskQueue() {
-    if (this.processing >= this.maxConcurrentTasks) {
+    if (this.sqlLock) {
+      return
+    }
+
+    // 上锁
+    this.sqlLock = true
+
+    const inTaskCount = await prisma.task.count({ where: { status: 'in-progress' } })
+    if (inTaskCount >= this.maxConcurrentTasks) {
+      this.sqlLock = false
       return
     }
 
     // 获取任务列表
-    const tasks = await prisma.task.findMany({
+    let task = await prisma.task.findFirst({
       where: { status: 'pending' },
       orderBy: { priority: 'asc' },
     })
 
-    // 遍历任务列表
-    for (const task of tasks) {
-      if (this.processing >= this.maxConcurrentTasks) {
-        break
-      }
+    if (!task) {
+      this.sqlLock = false
+      return
+    };
 
-      this.processing++
-      try {
-        await this.process(task as TaskType)
-      } finally {
-        this.processing--
-      }
-    }
+    // 更新任务状态 执行中
+    task = await prisma.task.update({
+      where: { taskId: task.taskId },
+      data: {
+        status: 'in-progress',
+        startTime: new Date(),
+      },
+    })
+
+    this.process(task as TaskType)
+
+    // 下锁
+    this.sqlLock = false
   }
 
   /**
@@ -55,16 +71,6 @@ export default class TaskProcess {
    * @returns
    */
   public async process(task: Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput) {
-    // 任务状态开始
-    task.status = 'in-progress'
-    // 任务开始时间
-    task.startTime = new Date()
-    // 更新任务状态 执行中
-    await prisma.task.update({
-      where: { taskId: task.taskId },
-      data: task,
-    })
-
     try {
       switch (task.command) {
         case 'task_scan':
@@ -75,7 +81,7 @@ export default class TaskProcess {
         case 'task_scan_manga':
           console.log('执行扫描漫画任务')
           //扫描漫画任务调用
-          await scan_manga_job(task.args);
+          await scan_manga_job(task.args)
           break
         default:
           break

@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-30 18:50:20
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-03 23:28:39
  * @FilePath: \smanga-adonis\start\kernel.ts
  */
 /*
@@ -19,6 +19,7 @@ import router from '@adonisjs/core/services/router'
 import server from '@adonisjs/core/services/server'
 import TaskProcess from '#services/task_service'
 import clear_scan from '#services/clear_scan_service'
+import init from './init.js'
 
 /**
  * The error handler is used to convert an exception
@@ -43,6 +44,7 @@ server.use([
 router.use([
   () => import('@adonisjs/core/bodyparser_middleware'),
   () => import('@adonisjs/auth/initialize_auth_middleware'),
+  () => import('#middleware/params_middleware'),
 ])
 
 /**
@@ -61,6 +63,11 @@ export const middleware = router.named({
 | 在项目启动时自动运行任务处理器
 |
 */
+
+// 初始化方法 检查根目录以及配置文件
+init()
+
+// 启动任务队列处理器
 let period = 0
 const taskProcess = new TaskProcess()
 
@@ -68,8 +75,8 @@ setInterval(() => {
   // 每个周期执行
   taskProcess.handleTaskQueue()
   // 每十个周期执行
-  if (period === 10) {
+  if (period % 10) {
     clear_scan()
   }
-  period = (period % 10) + 1
+  period ++
 }, 1000)

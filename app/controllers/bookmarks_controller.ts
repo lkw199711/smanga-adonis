@@ -1,20 +1,87 @@
+/*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-08-03 05:28:15
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-04 22:35:25
+ * @FilePath: \smanga-adonis\app\controllers\bookmarks_controller.ts
+ */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.interface.js'
-import { Prisma } from '@prisma/client'
 export default class BookmarksController {
-  public async index({ response }: HttpContext) { 
-    const list = await prisma.bookmark.findMany()
-    const listResponse = new ListResponse({
+  public async index({ request, response }: HttpContext) {
+    const { chapterId, page, pageSize } = request.only(['page', 'pageSize', 'chapterId', 'order'])
+
+    let listResponse = null
+    if (page) {
+      listResponse = await this.paginate(chapterId, page, pageSize)
+    } else {
+      listResponse = await this.no_paginate(chapterId)
+    }
+
+    return response.json(listResponse)
+  }
+
+  // 不分页
+  private async no_paginate(chapterId: number) {
+    const queryParams = {
+      where: {
+        ...(chapterId && { chapterId }),
+      },
+    }
+
+    const list = await prisma.bookmark.findMany(queryParams)
+
+    return new ListResponse({
       code: 0,
       message: '',
       list,
       count: list.length,
     })
-    return response.json(listResponse)
   }
 
-  public async show({ params, response }: HttpContext) { 
+  // 分页
+  private async paginate(chapterId: number, page: number, pageSize: number) {
+    const queryParams = {
+      ...(page && {
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      where: {
+        ...(chapterId && { chapterId }),
+      },
+      include: {
+        chapter: {
+          select: {
+            chapterName: true,
+          },
+        },
+        manga: {
+          select: {
+            mangaName: true,
+          },
+        },
+      },
+    }
+
+    const [list, count] = await Promise.all([
+      prisma.bookmark.findMany(queryParams),
+      prisma.bookmark.count({ where: queryParams.where }),
+    ])
+
+    return new ListResponse({
+      code: 0,
+      message: '',
+      list: list.map((item) => ({
+        ...item,
+        chapterName: item.chapter.chapterName,
+        mangaName: item.manga.mangaName,
+      })),
+      count: count,
+    })
+  }
+
+  public async show({ params, response }: HttpContext) {
     let { bookmarkId } = params
     bookmarkId = Number(bookmarkId)
     const bookmark = await prisma.bookmark.findUnique({ where: { bookmarkId } })
@@ -22,8 +89,16 @@ export default class BookmarksController {
     return response.json(showResponse)
   }
 
-  public async create({ request, response }: HttpContext) { 
-    const insertData = request.body() as Prisma.bookmarkCreateInput;
+  public async create({ request, response }: HttpContext) {
+    const insertData = request.only([
+      'chapterId',
+      'mangaId',
+      'userId',
+      'mediaId',
+      'browseType',
+      'page',
+      'pageImage',
+    ])
     const bookmark = await prisma.bookmark.create({
       data: insertData,
     })
@@ -31,7 +106,7 @@ export default class BookmarksController {
     return response.json(saveResponse)
   }
 
-  public async update({ params, request, response }: HttpContext) { 
+  public async update({ params, request, response }: HttpContext) {
     let { bookmarkId } = params
     bookmarkId = Number(bookmarkId)
     const modifyData = request.body()
@@ -43,7 +118,7 @@ export default class BookmarksController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) { 
+  public async destroy({ params, response }: HttpContext) {
     let { bookmarkId } = params
     bookmarkId = Number(bookmarkId)
     const bookmark = await prisma.bookmark.delete({ where: { bookmarkId } })

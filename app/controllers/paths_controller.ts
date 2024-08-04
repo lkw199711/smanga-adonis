@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:21:48
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-30 18:37:20
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-03 21:58:22
  * @FilePath: \smanga-adonis\app\controllers\paths_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -12,8 +12,17 @@ import { Prisma } from '@prisma/client'
 import { TaskPriority } from '../../type/index.js'
 
 export default class PathsController {
-  public async index({ response }: HttpContext) {
-    const list = await prisma.path.findMany()
+  public async index({ request, response }: HttpContext) {
+    const { mediaId, page, pageSize } = request.only(['mediaId', 'page', 'pageSize'])
+    const list = await prisma.path.findMany({
+      ...(page && {
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      where: {
+        ...(mediaId && { mediaId }),
+      },
+    })
     const listResponse = new ListResponse({
       code: 0,
       message: '',
@@ -74,7 +83,7 @@ export default class PathsController {
     return response.json(destroyResponse)
   }
 
-  public async scan({ params, response }: HttpContext) { 
+  public async scan({ params, response }: HttpContext) {
     let { pathId } = params
     pathId = Number(pathId)
 
@@ -87,7 +96,7 @@ export default class PathsController {
         status: 'pending',
       },
     })
-    
+
     const scanResponse = new SResponse({ code: 0, message: '扫描任务已提交', data: task })
     return response.json(scanResponse)
   }

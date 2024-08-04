@@ -1,7 +1,13 @@
+/*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-08-03 05:28:15
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-04 02:39:11
+ * @FilePath: \smanga-adonis\app\controllers\histories_controller.ts
+ */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.interface.js'
-import { Prisma } from '@prisma/client'
 
 export default class HistoriesController {
   public async index({ response }: HttpContext) {
@@ -16,19 +22,38 @@ export default class HistoriesController {
   }
 
   public async create({ request, response }: HttpContext) {
-    const insertData: Prisma.historyCreateInput = request.only([
-      'userid',
+    const { userId, mediaId, mangaId, chapterId, chapterName, mangaName } = request.only([
+      'userId',
       'mediaId',
       'mangaId',
       'chapterId',
       'chapterName',
       'mangaName',
-      'historyType',
     ])
+
     const history = await prisma.history.create({
-      data: Object.assign(insertData, {  }),
+      data: {
+        manga: {
+          connect: {
+            mangaId: Number(mangaId),
+          },
+        },
+        chapter: {
+          connect: {
+            chapterId: Number(chapterId),
+          },
+        },
+        user: {
+          connect: {
+            userId: Number(userId),
+          },
+        },
+        mediaId: Number(mediaId),
+        chapterName,
+        mangaName,
+      },
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: history })
+    const saveResponse = new SResponse({ code: 0, message: '', data: history })
     return response.json(saveResponse)
   }
 

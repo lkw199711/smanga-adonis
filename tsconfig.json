@@ -23,7 +23,7 @@
     "resources/**/*.ts",
     "ace/**/*.ts",
     "adonis-typings/**/*.ts"
-  ],
+, "app/utils/unzip.cjs"  ],
   "exclude": [
     "node_modules",
     "build",

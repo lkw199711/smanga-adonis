@@ -42,6 +42,7 @@ model chapter {
   chapterPath  String   @db.VarChar(191)
   chapterType  String   @default("image") @db.VarChar(191)
   chapterCover String?  @db.VarChar(191)
+  chapterNumber String?  @db.VarChar(191)
   bookmarks    bookmark[]
   compress     compress[]
   history      history[]
@@ -88,7 +89,8 @@ model compress {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model history {
   historyId   Int      @id @default(autoincrement()) @db.UnsignedInt
-  userid      Int      @db.UnsignedInt
+  user        user     @relation(fields:[userId],references:[userId])
+  userId      Int      @db.UnsignedInt
   mediaId     Int      @db.UnsignedInt
   manga       manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId     Int      @db.UnsignedInt
@@ -107,11 +109,13 @@ model latest {
   page       Int      @db.UnsignedInt
   finish     Int      @default(0) @db.UnsignedInt
   manga      manga    @relation(fields:[mangaId],references:[mangaId])
+  mangaId    Int      @db.UnsignedInt
   chapterId  Int      @db.UnsignedInt
-  mangaId    Int      @unique(map: "unique-manga") @db.UnsignedInt
   userId     Int      @db.UnsignedInt
   createTime DateTime @default(now()) @db.DateTime(6)
   updateTime DateTime @default(now()) @db.DateTime(6)
+
+  @@unique([mangaId, userId], map: "unique-manga-user")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -158,6 +162,7 @@ model manga {
   mangaPath    String    @db.VarChar(191)
   parentPath   String?   @db.VarChar(191)
   mangaCover   String?   @db.VarChar(191)
+  mangaNumber   String?   @db.VarChar(191)
   chapterCount Int?      @db.UnsignedInt
   browseType   String    @default("flow") @db.VarChar(191)
   direction    Int       @default(1) @db.UnsignedInt
@@ -169,7 +174,7 @@ model manga {
   publishDate  DateTime? @db.Date
   createTime   DateTime  @default(now()) @db.DateTime(6)
   updateTime   DateTime  @default(now()) @db.DateTime(6)
-  latest       latest?
+  latests      latest[]
   historys     history[]
   chapters     chapter[]
   collects     collect[]
@@ -231,11 +236,12 @@ model media_permisson {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model meta {
   metaId      Int      @id @default(autoincrement()) @db.UnsignedInt
-  metaType    String   @db.VarChar(191)
+  metaName    String   @db.VarChar(191)
   manga       manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId     Int      @db.UnsignedInt
   metaFile    String?  @db.VarChar(191)
   metaContent String?  @db.VarChar(191)
+  description String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)
 }
@@ -358,6 +364,7 @@ model user {
   tokens      token[]
   user_permissons   user_permisson[]
   media_permissons  media_permisson[]
+  historys    history[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

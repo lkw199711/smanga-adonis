@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-02 09:20:17
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-04 19:03:00
  * @FilePath: \smanga-adonis\start\routes.ts
  */
 /*
@@ -50,7 +50,7 @@ router.get('/test', async () => {
   return pathInfo
 })
 
-router.get('/image', [ImagesController, 'index'])
+router.any('/image', [ImagesController, 'index'])
 
 // 收藏模块 collect
 router.get('/collect', [CollectsController, 'index'])
@@ -58,6 +58,7 @@ router.get('/collect/:collectId', [CollectsController, 'show'])
 router.post('/collect', [CollectsController, 'create'])
 router.patch('/collect/:collectId', [CollectsController, 'update'])
 router.delete('/collect/:collectId', [CollectsController, 'destroy'])
+router.get('/manga-collect/:mangaId', [CollectsController, 'is_collect'])
 
 // 书签
 router.get('/bookmark', [BookmarksController, 'index'])
@@ -87,9 +88,9 @@ router.post('/lastread', [LastreadsController, 'create'])
 router.patch('/lastread/:lastReadId', [LastreadsController, 'update'])
 router.delete('/lastread/:lastReadId', [LastreadsController, 'destroy'])
 
-// 最后阅读记录 lastread
+// 最后阅读记录 latest
 router.get('/latest', [LatestsController, 'index'])
-router.get('/latest/:latestId', [LatestsController, 'show'])
+router.get('/latest/:mangaId', [LatestsController, 'show'])
 router.post('/latest', [LatestsController, 'create'])
 router.patch('/latest/:latestId', [LatestsController, 'update'])
 router.delete('/latest/:latestId', [LatestsController, 'destroy'])
@@ -150,3 +151,12 @@ router.get('/chapter/:chapterId', [chaptersController, 'show'])
 router.post('/chapter', [chaptersController, 'create'])
 router.patch('/chapter/:chapterId', [chaptersController, 'update'])
 router.delete('/chapter/:chapterId', [chaptersController, 'destroy'])
+router.get('/chapter-images/:chapterId', [chaptersController, 'images'])
+router.get('/chapter-first', [chaptersController, 'first'])
+
+// 用户
+router.get('/user', [UsersController, 'index'])
+router.get('/user/:userId', [UsersController, 'show'])
+router.post('/user', [UsersController, 'create'])
+router.patch('/user/:userId', [UsersController, 'update'])
+router.delete('/user/:userId', [UsersController, 'destroy'])

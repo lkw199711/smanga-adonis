@@ -12,23 +12,25 @@
  * @return {*}
  */
 export interface ResponseInterface {
-  code: number;
-  message: string;
-  data?: any;
-  error?: any;
+  code: number
+  message: string
+  data?: any
+  error?: any
 }
 
 export class SResponse implements ResponseInterface {
-  code: number;
-  message: string;
-  data?: any;
-  error?: any;
+  code: number
+  message: string
+  data?: any
+  error?: any
+  status?: string
 
-  constructor(sResponse: SResponse = { code: 0, message: '操作成功' }) {
-    this.code = sResponse.code ?? 0;
-    this.message = sResponse.message ?? '';
-    this.data = sResponse.data ?? '';
-    this.error = sResponse.error ?? '';
+  constructor(sResponse: SResponse = { code: 0, message: '操作成功', status: 'success' }) {
+    this.code = sResponse.code ?? 0
+    this.message = sResponse.message ?? ''
+    this.data = sResponse.data ?? ''
+    this.error = sResponse.error ?? ''
+    this.status = sResponse.status ?? 'success'
   }
 }
 
@@ -37,15 +39,15 @@ export class SResponse implements ResponseInterface {
  * @return {*}
  */
 export interface ListResponseInterface extends ResponseInterface {
-  list: [];
-  count: number;
+  list: []
+  count: number
 }
 
 export class ListResponse implements ListResponseInterface {
-  code: number;
-  message: string;
-  list: any;
-  count: number;
+  code: number
+  message: string
+  list: any
+  count: number
 
   constructor(
     listResponse: ListResponse = {
@@ -53,11 +55,11 @@ export class ListResponse implements ListResponseInterface {
       message: '操作成功',
       list: [],
       count: 0,
-    },
+    }
   ) {
-    this.code = listResponse.code ?? 0;
-    this.message = listResponse.message ?? '';
-    this.list = listResponse.list ?? [];
-    this.count = listResponse.count ?? 0;
+    this.code = listResponse.code ?? 0
+    this.message = listResponse.message ?? ''
+    this.list = listResponse.list ?? []
+    this.count = listResponse.count ?? 0
   }
 }
