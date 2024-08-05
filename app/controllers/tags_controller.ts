@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:22:15
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-16 16:46:17
+ * @LastEditTime: 2024-08-05 18:11:05
  * @FilePath: \smanga-adonis\app\controllers\tags_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -11,15 +11,52 @@ import { ListResponse, SResponse } from '../interfaces/response.interface.js'
 import { Prisma } from '@prisma/client'
 
 export default class TagsController {
-  public async index({ response }: HttpContext) {
+  public async index({ request, response }: HttpContext) {
+    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
+
+    let listResponse = null
+    if (page) {
+      listResponse = await this.paginate(page, pageSize)
+    } else {
+      listResponse = await this.no_paginate()
+    }
+
+    return response.json(listResponse)
+  }
+
+  // 不分页
+  private async no_paginate() {
     const list = await prisma.tag.findMany()
-    const listResponse = new ListResponse({
+
+    return new ListResponse({
       code: 0,
       message: '',
       list,
       count: list.length,
     })
-    return response.json(listResponse)
+  }
+
+  // 分页
+  private async paginate(page: number, pageSize: number) {
+    const queryParams = {
+      ...(page && {
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      where: {},
+    }
+
+    const [list, count] = await Promise.all([
+      prisma.tag.findMany(queryParams),
+      prisma.tag.count({ where: queryParams.where }),
+    ])
+
+    return new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count: count,
+    })
   }
 
   public async show({ params, response }: HttpContext) {
@@ -41,8 +78,7 @@ export default class TagsController {
 
   public async update({ params, request, response }: HttpContext) {
     let { tagId } = params
-    tagId = Number(tagId)
-    const modifyData = request.body()
+    const modifyData = request.only(['tagName', 'description', 'tagColor'])
     const tag = await prisma.tag.update({
       where: { tagId },
       data: modifyData,
@@ -54,6 +90,8 @@ export default class TagsController {
   public async destroy({ params, response }: HttpContext) {
     let { tagId } = params
     tagId = Number(tagId)
+    // 删除关联数据
+    await prisma.manga_tag.deleteMany({ where: { tagId } })
     const tag = await prisma.tag.delete({ where: { tagId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: tag })
     return response.json(destroyResponse)

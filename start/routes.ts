@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 19:03:00
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-05 19:25:41
  * @FilePath: \smanga-adonis\start\routes.ts
  */
 /*
@@ -31,6 +31,7 @@ const TagsController = () => import('#controllers/tags_controller')
 const MangaController = () => import('#controllers/manga_controller')
 const chaptersController = () => import('#controllers/chapters_controller')
 const ImagesController = () => import('#controllers/images_controller')
+const MangaTagController = () => import('#controllers/manga_tags_controller')
 
 import prisma from '#start/prisma'
 
@@ -136,7 +137,11 @@ router.get('/tag', [TagsController, 'index'])
 router.get('/tag/:tagId', [TagsController, 'show'])
 router.post('/tag', [TagsController, 'create'])
 router.patch('/tag/:tagId', [TagsController, 'update'])
+router.put('/tag/:tagId', [TagsController, 'update'])
 router.delete('/tag/:tagId', [TagsController, 'destroy'])
+router.get('/manga-tag', [MangaTagController, 'index'])
+router.post('/manga-tag', [MangaTagController, 'create'])
+router.delete('/manga-tag', [MangaTagController, 'destroy'])
 
 // 漫画
 router.get('/manga', [MangaController, 'index'])
