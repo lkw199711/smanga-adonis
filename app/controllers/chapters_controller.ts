@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 22:35:51
+ * @LastEditTime: 2024-08-06 00:04:17
  * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -68,13 +68,16 @@ export default class ChaptersController {
       orderBy: { ...(order && order_params(order)) },
     }
 
-    const list = await prisma.chapter.findMany(queryParams)
+    const [list, count] = await Promise.all([
+      prisma.chapter.findMany(queryParams),
+      prisma.chapter.count({ where: queryParams.where }),
+    ])
 
     return new ListResponse({
       code: 0,
       message: '',
       list,
-      count: list.length,
+      count
     })
   }
 
