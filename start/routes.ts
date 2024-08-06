@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-06 11:36:54
+ * @LastEditTime: 2024-08-06 14:24:12
  * @FilePath: \smanga-adonis\start\routes.ts
  */
 /*
@@ -41,15 +41,15 @@ router.get('/', async () => {
   }
 })
 
-
-router.get('/test', async () => {
+router.get('/test', async ({ request }) => {
+  const headers = request.headers()
   const pathInfo = await prisma.path.findMany({
     where: { pathId: 1 },
     include: {
       media: true,
     },
   })
-  return pathInfo
+  return headers
 })
 
 router.any('/image', [ImagesController, 'index'])

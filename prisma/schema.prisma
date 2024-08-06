@@ -139,8 +139,8 @@ model log {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model login {
   loginId    Int      @id @default(autoincrement()) @db.UnsignedInt
-  user       user     @relation(fields:[userId],references:[userId])
-  userId     Int      @db.UnsignedInt
+  user       user?    @relation(fields:[userId],references:[userId])
+  userId     Int?     @db.UnsignedInt
   userName   String?  @db.VarChar(191)
   nickName   String?  @db.VarChar(191)
   request    Int      @db.UnsignedInt
@@ -148,7 +148,7 @@ model login {
   userAgent  Json?
   createTime DateTime @default(now()) @db.DateTime(6)
   updateTime DateTime @default(now()) @db.DateTime(6)
-  token      String   @db.VarChar(191)
+  token      String?  @db.VarChar(191)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

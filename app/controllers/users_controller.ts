@@ -31,7 +31,7 @@ export default class UsersController {
       code: 0,
       message: '',
       list,
-      count
+      count,
     })
     return response.json(listResponse)
   }
@@ -63,7 +63,7 @@ export default class UsersController {
     const { userName, passWord } = request.only(['userName', 'passWord'])
     const user = await prisma.user.update({
       where: { userId },
-      data: { userName, ...(passWord && { passWord }) },
+      data: { userName, ...(passWord && { passWord: md5(passWord) }) },
     })
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
     return response.json(updateResponse)

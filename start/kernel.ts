@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-03 23:28:39
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-06 20:30:47
  * @FilePath: \smanga-adonis\start\kernel.ts
  */
 /*
@@ -45,6 +45,7 @@ router.use([
   () => import('@adonisjs/core/bodyparser_middleware'),
   () => import('@adonisjs/auth/initialize_auth_middleware'),
   () => import('#middleware/params_middleware'),
+  // () => import('#middleware/auth_middleware'),
 ])
 
 /**

@@ -1,15 +1,12 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 07:42:48
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 19:07:03
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-06 20:27:41
  * @FilePath: \smanga-adonis\app\middleware\params_middleware.ts
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
-import { exit } from 'process'
-
 export default class ParamsMiddleware {
   async handle({ request }: HttpContext, next: NextFn) {
     // 处理 query 参数
