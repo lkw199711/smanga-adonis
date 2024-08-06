@@ -2,13 +2,13 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 18:53:30
+ * @LastEditTime: 2024-08-07 00:39:34
  * @FilePath: \smanga-adonis\app\controllers\latests_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
+import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.interface.js'
-import { Prisma } from '@prisma/client'
+import { ListResponse, SResponse } from '../interfaces/response.js'
 
 export default class LatestsController {
   public async index({ response }: HttpContext) {
@@ -24,8 +24,8 @@ export default class LatestsController {
 
   public async show({ params, response }: HttpContext) {
     let { mangaId } = params
-    console.log(mangaId, 'mangaId');
-    
+    console.log(mangaId, 'mangaId')
+
     const latest = await prisma.latest.findUnique({
       where: {
         mangaId_userId: {
@@ -38,17 +38,23 @@ export default class LatestsController {
     return response.json(showResponse)
   }
 
-  public async create({ request, response }: HttpContext) {
-    const insertData = request.only(['page', 'chapterId', 'mangaId', 'finish', 'userId'])
+  public async create({ request, response }: HttpContextWithUserId) {
+    const { page, chapterId, mangaId, finish } = request.only([
+      'page',
+      'chapterId',
+      'mangaId',
+      'finish',
+    ])
+    const userId = request.userId
     const latest = await prisma.latest.upsert({
       where: {
         mangaId_userId: {
-          mangaId: insertData.mangaId,
-          userId: insertData.userId,
+          mangaId,
+          userId,
         },
       },
-      update: insertData,
-      create: insertData,
+      update: { page, chapterId, mangaId, finish, userId },
+      create: { page, chapterId, mangaId, finish, userId },
     })
     const saveResponse = new SResponse({ code: 0, message: '', data: latest })
     return response.json(saveResponse)

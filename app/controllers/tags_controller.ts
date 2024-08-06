@@ -6,8 +6,9 @@
  * @FilePath: \smanga-adonis\app\controllers\tags_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
+import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.interface.js'
+import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 
 export default class TagsController {
@@ -67,10 +68,10 @@ export default class TagsController {
     return response.json(showResponse)
   }
 
-  public async create({ request, response }: HttpContext) {
-    const insertData = request.body() as Prisma.tagCreateInput
+  public async create({ request, response }: HttpContextWithUserId) {
+    const insertData = request.only(['tagName', 'description', 'tagColor'])
     const tag = await prisma.tag.create({
-      data: insertData,
+      data: { ...insertData, userId: request.userId },
     })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: tag })
     return response.json(saveResponse)

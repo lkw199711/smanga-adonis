@@ -99,6 +99,7 @@ model history {
   chapterId   Int      @db.UnsignedInt
   chapterName String?  @db.VarChar(191)
   chapterPath String?  @db.VarChar(191)
+  browseType  String   @default("flow") @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)
 }

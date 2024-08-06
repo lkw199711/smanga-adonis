@@ -2,34 +2,75 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 02:39:11
+ * @LastEditTime: 2024-08-07 01:04:12
  * @FilePath: \smanga-adonis\app\controllers\histories_controller.ts
  */
+
 import type { HttpContext } from '@adonisjs/core/http'
+import type { HttpContextWithUserId } from '#type/http.js'
+import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.interface.js'
 
 export default class HistoriesController {
-  public async index({ response }: HttpContext) {
-    const list = await prisma.history.findMany()
+  public async index({ request, response }: HttpContextWithUserId) {
+    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
+    const userId = request.userId
+    const queryParams = {
+      ...(page && {
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      where: {
+        userId,
+      },
+      include: {
+        manga: {
+          select: {
+            mangaId: true,
+            mangaName: true,
+            mangaCover: true,
+          },
+        },
+        chapter: {
+          select: {
+            chapterId: true,
+            chapterName: true,
+            chapterCover: true,
+          },
+        },
+      },
+    }
+    const [list, count] = await Promise.all([
+      prisma.history.findMany(queryParams),
+      prisma.history.count({ where: queryParams.where }),
+    ])
+
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list,
-      count: list.length,
+      list: list.map((item) => {
+        return {
+          ...item,
+          ...item.manga,
+          ...item.chapter,
+        }
+      }),
+      count,
     })
+
     return response.json(listResponse)
   }
 
-  public async create({ request, response }: HttpContext) {
-    const { userId, mediaId, mangaId, chapterId, chapterName, mangaName } = request.only([
-      'userId',
+  public async create({ request, response }: HttpContextWithUserId) {
+    const { mediaId, mangaId, chapterId, chapterName, mangaName } = request.only([
       'mediaId',
       'mangaId',
       'chapterId',
       'chapterName',
       'mangaName',
     ])
+
+    const userId = request.userId
 
     const history = await prisma.history.create({
       data: {

@@ -2,12 +2,13 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 22:35:25
+ * @LastEditTime: 2024-08-07 00:40:05
  * @FilePath: \smanga-adonis\app\controllers\bookmarks_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
+import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.interface.js'
+import { ListResponse, SResponse } from '../interfaces/response.js'
 export default class BookmarksController {
   public async index({ request, response }: HttpContext) {
     const { chapterId, page, pageSize } = request.only(['page', 'pageSize', 'chapterId', 'order'])
@@ -89,18 +90,17 @@ export default class BookmarksController {
     return response.json(showResponse)
   }
 
-  public async create({ request, response }: HttpContext) {
+  public async create({ request, response }: HttpContextWithUserId) {
     const insertData = request.only([
       'chapterId',
       'mangaId',
-      'userId',
       'mediaId',
       'browseType',
       'page',
       'pageImage',
     ])
     const bookmark = await prisma.bookmark.create({
-      data: insertData,
+      data: { ...insertData, userId: request.userId },
     })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: bookmark })
     return response.json(saveResponse)

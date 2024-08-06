@@ -7,7 +7,7 @@
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.interface.js'
+import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
 
 export default class UsersController {

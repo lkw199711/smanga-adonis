@@ -7,7 +7,7 @@
  */
 import prisma from '#start/prisma'
 import { Prisma, path as pathType, media as mediaType } from '@prisma/client'
-import { TaskPriority } from '../../type/index.js'
+import { TaskPriority } from '../type/index.js'
 import * as fs from 'fs'
 import * as path from 'path'
 

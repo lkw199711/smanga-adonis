@@ -5,8 +5,17 @@
     "outDir": "./build",
     "baseUrl": "./",
     "paths": {
-      "@type/*": [
-        "type/*"
+      "#type/*": [
+        "./app/type/*"
+      ],
+      "#utils/*": [
+        "./app/utils/*"
+      ],
+      "#if/*": [
+        "./app/interfaces/*"
+      ],
+      "#iii/*": [
+        "./app/iii/*"
       ]
     },
     "typeRoots": [
@@ -16,14 +25,15 @@
   },
   "include": [
     "start/**/*.ts",
-    "type/**/*.ts",
+    "app/type/**/*.ts",
     "contracts/**/*.ts",
     "app/**/*.ts",
     "database/**/*.ts",
     "resources/**/*.ts",
     "ace/**/*.ts",
-    "adonis-typings/**/*.ts"
-, "app/utils/unzip.cjs"  ],
+    "adonis-typings/**/*.ts",
+    "app/utils/unzip.cjs"
+  ],
   "exclude": [
     "node_modules",
     "build",

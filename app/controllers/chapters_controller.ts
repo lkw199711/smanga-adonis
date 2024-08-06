@@ -7,7 +7,7 @@
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.interface.js'
+import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'

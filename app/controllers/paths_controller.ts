@@ -7,9 +7,9 @@
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.interface.js'
+import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
-import { TaskPriority } from '../../type/index.js'
+import { TaskPriority } from '../type/index.js'
 
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
