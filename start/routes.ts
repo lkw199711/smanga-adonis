@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-05 19:25:41
+ * @LastEditTime: 2024-08-06 11:03:49
  * @FilePath: \smanga-adonis\start\routes.ts
  */
 /*
@@ -40,6 +40,7 @@ router.get('/', async () => {
     hello: 'world',
   }
 })
+
 
 router.get('/test', async () => {
   const pathInfo = await prisma.path.findMany({

@@ -1,14 +1,14 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 20:33:01
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-03 09:39:02
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-06 11:20:21
  * @FilePath: \smanga-adonis\app\controllers\users_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.interface.js'
-import { Prisma } from '@prisma/client'
+import md5 from '../utils/md5.js'
 
 export default class UsersController {
   public async index({ response }: HttpContext) {
@@ -31,10 +31,14 @@ export default class UsersController {
   }
 
   public async create({ request, response }: HttpContext) {
-    const body = request.body()
-    const { userName, passWord } = body.data as Prisma.userCreateInput
+    const { userName, passWord } = request.only(['userName', 'passWord'])
+
+    if (!userName) {
+      return response.json(new SResponse({ code: 1, message: '用户名不能为空' }))
+    }
+
     const user = await prisma.user.create({
-      data: { userName, passWord },
+      data: { userName, passWord: md5(passWord) },
     })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: user })
     return response.json(saveResponse)
@@ -42,11 +46,10 @@ export default class UsersController {
 
   public async update({ params, request, response }: HttpContext) {
     let { userId } = params
-    userId = Number(userId)
-    const modifyData = request.body()
+    const { userName, passWord } = request.body()
     const user = await prisma.user.update({
       where: { userId },
-      data: modifyData,
+      data: { userName, passWord: md5(passWord) },
     })
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
     return response.json(updateResponse)
@@ -54,7 +57,6 @@ export default class UsersController {
 
   public async destroy({ params, response }: HttpContext) {
     let { userId } = params
-    userId = Number(userId)
     const user = await prisma.user.delete({ where: { userId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: user })
     return response.json(destroyResponse)
