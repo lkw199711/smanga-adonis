@@ -14,7 +14,7 @@ import { TaskPriority } from '../../type/index.js'
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
     const { mediaId, page, pageSize } = request.only(['mediaId', 'page', 'pageSize'])
-    const list = await prisma.path.findMany({
+    const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -22,12 +22,18 @@ export default class PathsController {
       where: {
         ...(mediaId && { mediaId }),
       },
-    })
+    }
+
+    const [list, count] = await Promise.all([
+      prisma.path.findMany(queryParams),
+      prisma.path.count({ where: queryParams.where }),
+    ])
+
     const listResponse = new ListResponse({
       code: 0,
       message: '',
       list,
-      count: list.length,
+      count: count,
     })
     return response.json(listResponse)
   }

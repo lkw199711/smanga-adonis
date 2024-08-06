@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 22:35:51
+ * @LastEditTime: 2024-08-06 01:14:19
  * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -27,20 +27,21 @@ export default class ChaptersController {
     if (page) {
       listResponse = await this.paginate({ mangaId, page, pageSize, order })
     } else {
-      listResponse = await this.no_paginate({ mangaId })
+      listResponse = await this.no_paginate({ mangaId, order })
     }
 
     return response.json(listResponse)
   }
 
   // 不分页
-  private async no_paginate({ mangaId }: any) {
+  private async no_paginate({ mangaId, order }: any) {
     const queryParams = {
       where: {
         ...(mangaId && {
           mangaId: mangaId,
         }),
       },
+      orderBy: { ...(order && order_params(order)) },
     }
 
     const list = await prisma.chapter.findMany(queryParams)
@@ -68,13 +69,16 @@ export default class ChaptersController {
       orderBy: { ...(order && order_params(order)) },
     }
 
-    const list = await prisma.chapter.findMany(queryParams)
+    const [list, count] = await Promise.all([
+      prisma.chapter.findMany(queryParams),
+      prisma.chapter.count({ where: queryParams.where }),
+    ])
 
     return new ListResponse({
       code: 0,
       message: '',
       list,
-      count: list.length,
+      count,
     })
   }
 

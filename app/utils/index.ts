@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 14:13:00
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 15:21:31
+ * @LastEditTime: 2024-08-06 00:10:29
  * @FilePath: \smanga-adonis\app\utils\index.ts
  */
 import * as os from 'os'
@@ -63,8 +63,9 @@ export function order_params(order: string = 'asc', model: string = 'chapter') {
   const sort = /desc/i.test(order) ? 'desc' : 'asc'
 
   if (/id/.test(order)) {
+    const nameField = model === 'chapter' ? 'chapterId' : 'mangaId'
     return {
-      id: sort,
+      [nameField]: sort,
     }
   }
 

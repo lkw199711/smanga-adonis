@@ -4,15 +4,66 @@ import { ListResponse, SResponse } from '../interfaces/response.interface.js'
 import { Prisma } from '@prisma/client'
 
 export default class MangaController {
-  public async index({ response }: HttpContext) {
-    const list = await prisma.manga.findMany()
-    const listResponse = new ListResponse({
+  public async index({ request, response }: HttpContext) {
+    const { mediaId, page, pageSize } = request.only([
+      'mediaId',
+      'page',
+      'pageSize',
+      'chapterId',
+      'order',
+    ])
+
+    let listResponse = null
+    if (page) {
+      listResponse = await this.paginate(mediaId, page, pageSize)
+    } else {
+      listResponse = await this.no_paginate(mediaId)
+    }
+    
+    return response.json(listResponse)
+  }
+
+  // 不分页
+  private async no_paginate(mediaId: number) {
+    const queryParams = {
+      where: {
+        ...(mediaId && { mediaId }),
+      },
+    }
+
+    const list = await prisma.manga.findMany(queryParams)
+
+    return new ListResponse({
       code: 0,
       message: '',
       list,
       count: list.length,
     })
-    return response.json(listResponse)
+  }
+
+  // 分页
+  private async paginate(mediaId: number, page: number, pageSize: number) {
+    const queryParams = {
+      ...(page && {
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      where: {
+        ...(mediaId && { mediaId }),
+      },
+    }
+
+    const [list, count] = await Promise.all([
+      prisma.manga.findMany(queryParams),
+      prisma.manga.count({ where: queryParams.where }),
+    ])
+
+    return new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count: count,
+    })
   }
 
   public async show({ params, response }: HttpContext) {

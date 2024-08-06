@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:22:21
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-22 14:46:29
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-06 00:24:39
  * @FilePath: \smanga-adonis\app\controllers\tasks_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -11,13 +11,23 @@ import { ListResponse, SResponse } from '../interfaces/response.interface.js'
 import { Prisma } from '@prisma/client'
 
 export default class TasksController {
-  public async index({ response }: HttpContext) {
-    const list = await prisma.task.findMany()
+  public async index({ request, response }: HttpContext) {
+    const { page, pageSize } = request.only(['page', 'pageSize'])
+    const queryParams = {
+      ...(page && {
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    }
+    const [list, count] = await Promise.all([
+      prisma.task.findMany(queryParams),
+      prisma.task.count(),
+    ])
     const listResponse = new ListResponse({
       code: 0,
       message: '',
       list,
-      count: list.length,
+      count,
     })
     return response.json(listResponse)
   }
