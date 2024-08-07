@@ -49,8 +49,8 @@ CREATE TABLE `collect` (
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `uChapter`(`collectType`, `chapterId`),
-    UNIQUE INDEX `uManga`(`collectType`, `mangaId`),
+    UNIQUE INDEX `uChapter`(`userId`, `collectType`, `chapterId`),
+    UNIQUE INDEX `uManga`(`userId`, `collectType`, `mangaId`),
     PRIMARY KEY (`collectId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -385,7 +385,13 @@ ALTER TABLE `chapter` ADD CONSTRAINT `chapter_mangaId_fkey` FOREIGN KEY (`mangaI
 ALTER TABLE `chapter` ADD CONSTRAINT `chapter_mediaId_fkey` FOREIGN KEY (`mediaId`) REFERENCES `media`(`mediaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `collect` ADD CONSTRAINT `collect_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `collect` ADD CONSTRAINT `collect_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `collect` ADD CONSTRAINT `collect_chapterId_fkey` FOREIGN KEY (`chapterId`) REFERENCES `chapter`(`chapterId`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `compress` ADD CONSTRAINT `compress_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;

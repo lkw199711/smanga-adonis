@@ -67,8 +67,7 @@ model collect {
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)
 
-  @@unique([userId, collectType, chapterId], map: "uChapter")
-  @@unique([userId, collectType, mangaId], map: "uManga")
+  @@unique([userId, collectType, mangaId, chapterId], map: "uniqueMangaChapter")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

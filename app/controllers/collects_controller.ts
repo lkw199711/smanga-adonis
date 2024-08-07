@@ -1,14 +1,15 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-07 20:51:12
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-08 00:14:51
  * @FilePath: \smanga-adonis\app\controllers\collects_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
+import { order_params } from '../utils/index.js'
 
 export default class CollectsController {
   public async index({ response }: HttpContext) {
@@ -24,19 +25,24 @@ export default class CollectsController {
 
   public async mangas({ request, response }: HttpContextWithUserId) {
     const { userId } = request
+    const { page, pageSize, order } = request.only(['page', 'pageSize', 'order'])
     const quertParams = {
       where: { userId, collectType: 'manga' },
+      include: { manga: true },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      // orderBy: order_params(order),
     }
 
     const [list, count] = await Promise.all([
       prisma.collect.findMany(quertParams),
-      prisma.collect.count(quertParams),
+      prisma.collect.count({ where: quertParams.where }),
     ])
 
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list,
+      list: list.map((item) => item.manga),
       count,
     })
     return response.json(listResponse)
@@ -44,19 +50,24 @@ export default class CollectsController {
 
   public async chapters({ request, response }: HttpContextWithUserId) {
     const { userId } = request
+    const { page, pageSize, order } = request.only(['page', 'pageSize', 'order'])
     const quertParams = {
       where: { userId, collectType: 'chapter' },
+      include: { chapter: true },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      // orderBy: order_params(order),
     }
 
     const [list, count] = await Promise.all([
       prisma.collect.findMany(quertParams),
-      prisma.collect.count(quertParams),
+      prisma.collect.count({ where: quertParams.where }),
     ])
 
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list,
+      list: list.map((item) => item.chapter),
       count,
     })
     return response.json(listResponse)
@@ -87,6 +98,43 @@ export default class CollectsController {
           mediaId,
           mangaId,
           mangaName,
+        },
+      })
+
+      const saveResponse = new SResponse({ code: 0, message: '收藏成功', data: collect })
+      return response.json(saveResponse)
+    }
+  }
+
+  public async collect_chapter({ request, response }: HttpContextWithUserId) {
+    const { userId } = request
+    const { chapterId, chapterName, mediaId, mangaId, mangaName } = request.only([
+      'chapterId',
+      'chapterName',
+      'mediaId',
+      'mangaId',
+      'mangaName',
+      'collectType',
+    ])
+
+    const collect = await prisma.collect.findFirst({
+      where: { userId, chapterId: chapterId, collectType: 'chapter' },
+    })
+
+    if (collect) {
+      const destroy = await prisma.collect.delete({ where: { collectId: collect.collectId } })
+      const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: false })
+      return response.json(destroyResponse)
+    } else {
+      const collect = await prisma.collect.create({
+        data: {
+          collectType: 'chapter',
+          userId,
+          mediaId,
+          mangaId,
+          mangaName,
+          chapterId,
+          chapterName,
         },
       })
 

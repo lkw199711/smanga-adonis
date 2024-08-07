@@ -65,6 +65,7 @@ router.put('/collect/:collectId', [CollectsController, 'update'])
 router.delete('/collect/:collectId', [CollectsController, 'destroy'])
 router.post('/collect-manga/:mangaId', [CollectsController, 'collect_manga'])
 router.get('/manga-iscollect/:mangaId', [CollectsController, 'is_collect'])
+router.post('/collect-chapter/:chapterId', [CollectsController, 'collect_chapter'])
 router.get('/chapter-iscollect/:chapterId', [CollectsController, 'is_collect'])
 
 // 书签
