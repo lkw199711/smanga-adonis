@@ -24,8 +24,6 @@ export default class LatestsController {
 
   public async show({ params, response }: HttpContext) {
     let { mangaId } = params
-    console.log(mangaId, 'mangaId')
-
     const latest = await prisma.latest.findUnique({
       where: {
         mangaId_userId: {

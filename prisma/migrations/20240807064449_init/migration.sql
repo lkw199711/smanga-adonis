@@ -70,7 +70,7 @@ CREATE TABLE `compress` (
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
     UNIQUE INDEX `id`(`compressId`),
-    UNIQUE INDEX `unique-chapter`(`chapterId`),
+    UNIQUE INDEX `uniqueChapter`(`chapterId`),
     PRIMARY KEY (`compressId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -102,7 +102,7 @@ CREATE TABLE `latest` (
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `unique-manga-user`(`mangaId`, `userId`),
+    UNIQUE INDEX `uniqueMangaUser`(`mangaId`, `userId`),
     PRIMARY KEY (`latestId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -169,14 +169,14 @@ CREATE TABLE `manga` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `manga-tag` (
+CREATE TABLE `mangaTag` (
     `mangaTagId` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
     `mangaId` INTEGER UNSIGNED NOT NULL,
     `tagId` INTEGER UNSIGNED NOT NULL,
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `manga-tag`(`mangaId`, `tagId`),
+    UNIQUE INDEX `mangaTag`(`mangaId`, `tagId`),
     PRIMARY KEY (`mangaTagId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -194,19 +194,19 @@ CREATE TABLE `media` (
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `unique-medianame`(`mediaName`),
+    UNIQUE INDEX `uniqueMedianame`(`mediaName`),
     PRIMARY KEY (`mediaId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `media-permisson` (
+CREATE TABLE `mediaPermisson` (
     `mediaPermissonId` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
     `userId` INTEGER UNSIGNED NOT NULL,
     `mediaId` INTEGER UNSIGNED NOT NULL,
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `user-media`(`userId`, `mediaId`),
+    UNIQUE INDEX `userMedia`(`userId`, `mediaId`),
     PRIMARY KEY (`mediaPermissonId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -253,7 +253,7 @@ CREATE TABLE `scan` (
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `pathContent` VARCHAR(191) NOT NULL,
 
-    UNIQUE INDEX `unique-path`(`pathId`),
+    UNIQUE INDEX `uniquePath`(`pathId`),
     PRIMARY KEY (`scanId`, `pathId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -288,7 +288,7 @@ CREATE TABLE `task` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `task-failed` (
+CREATE TABLE `taskFailed` (
     `taskId` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
     `taskName` VARCHAR(191) NOT NULL DEFAULT '',
     `status` VARCHAR(191) NOT NULL,
@@ -304,7 +304,7 @@ CREATE TABLE `task-failed` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `task-success` (
+CREATE TABLE `taskSuccess` (
     `taskId` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
     `taskName` VARCHAR(191) NOT NULL DEFAULT '',
     `status` VARCHAR(191) NOT NULL,
@@ -343,12 +343,12 @@ CREATE TABLE `user` (
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `userConfig` JSON NULL,
 
-    UNIQUE INDEX `unique-username`(`userName`),
+    UNIQUE INDEX `uniqueUsername`(`userName`),
     PRIMARY KEY (`userId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `user-permisson` (
+CREATE TABLE `userPermisson` (
     `userPermissonId` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
     `userId` INTEGER UNSIGNED NOT NULL,
     `module` VARCHAR(100) NOT NULL,
@@ -356,7 +356,7 @@ CREATE TABLE `user-permisson` (
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `user-module-operation`(`userId`, `module`, `operation`),
+    UNIQUE INDEX `userModuleOperation`(`userId`, `module`, `operation`),
     PRIMARY KEY (`userPermissonId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -368,7 +368,7 @@ CREATE TABLE `version` (
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `unique-version`(`version`),
+    UNIQUE INDEX `uniqueVersion`(`version`),
     PRIMARY KEY (`versionId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -415,16 +415,16 @@ ALTER TABLE `manga` ADD CONSTRAINT `manga_mediaId_fkey` FOREIGN KEY (`mediaId`) 
 ALTER TABLE `manga` ADD CONSTRAINT `manga_pathId_fkey` FOREIGN KEY (`pathId`) REFERENCES `path`(`pathId`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `manga-tag` ADD CONSTRAINT `manga-tag_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `mangaTag` ADD CONSTRAINT `mangaTag_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `manga-tag` ADD CONSTRAINT `manga-tag_tagId_fkey` FOREIGN KEY (`tagId`) REFERENCES `tag`(`tagId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `mangaTag` ADD CONSTRAINT `mangaTag_tagId_fkey` FOREIGN KEY (`tagId`) REFERENCES `tag`(`tagId`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `media-permisson` ADD CONSTRAINT `media-permisson_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `mediaPermisson` ADD CONSTRAINT `mediaPermisson_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `media-permisson` ADD CONSTRAINT `media-permisson_mediaId_fkey` FOREIGN KEY (`mediaId`) REFERENCES `media`(`mediaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `mediaPermisson` ADD CONSTRAINT `mediaPermisson_mediaId_fkey` FOREIGN KEY (`mediaId`) REFERENCES `media`(`mediaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `meta` ADD CONSTRAINT `meta_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -436,4 +436,4 @@ ALTER TABLE `path` ADD CONSTRAINT `path_mediaId_fkey` FOREIGN KEY (`mediaId`) RE
 ALTER TABLE `token` ADD CONSTRAINT `token_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `user-permisson` ADD CONSTRAINT `user-permisson_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `userPermisson` ADD CONSTRAINT `userPermisson_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-06 14:24:12
+ * @LastEditTime: 2024-08-07 18:09:23
  * @FilePath: \smanga-adonis\start\routes.ts
  */
 /*
@@ -32,6 +32,7 @@ const MangaController = () => import('#controllers/manga_controller')
 const chaptersController = () => import('#controllers/chapters_controller')
 const ImagesController = () => import('#controllers/images_controller')
 const MangaTagController = () => import('#controllers/manga_tags_controller')
+const ChartsController = () => import('#controllers/charts_controller')
 
 import prisma from '#start/prisma'
 
@@ -56,11 +57,15 @@ router.any('/image', [ImagesController, 'index'])
 
 // 收藏模块 collect
 router.get('/collect', [CollectsController, 'index'])
+router.get('/collect-manga', [CollectsController, 'mangas'])
+router.get('/collect-chapter', [CollectsController, 'chapters'])
 router.get('/collect/:collectId', [CollectsController, 'show'])
 router.post('/collect', [CollectsController, 'create'])
 router.put('/collect/:collectId', [CollectsController, 'update'])
 router.delete('/collect/:collectId', [CollectsController, 'destroy'])
-router.get('/manga-collect/:mangaId', [CollectsController, 'is_collect'])
+router.post('/collect-manga/:mangaId', [CollectsController, 'collect_manga'])
+router.get('/manga-iscollect/:mangaId', [CollectsController, 'is_collect'])
+router.get('/chapter-iscollect/:chapterId', [CollectsController, 'is_collect'])
 
 // 书签
 router.get('/bookmark', [BookmarksController, 'index'])
@@ -166,3 +171,9 @@ router.get('/user/:userId', [UsersController, 'show'])
 router.post('/user', [UsersController, 'create'])
 router.put('/user/:userId', [UsersController, 'update'])
 router.delete('/user/:userId', [UsersController, 'destroy'])
+
+// 图表
+router.get('chart-browse', [ChartsController, 'browse'])
+router.get('chart-tag', [ChartsController, 'tag'])
+router.get('chart-ranking', [ChartsController, 'ranking'])
+router.get('chart-frequency', [ChartsController, 'frequency'])

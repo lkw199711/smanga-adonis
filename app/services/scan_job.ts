@@ -92,7 +92,7 @@ export default async function handle({ pathId }: any) {
           taskName: `scan_${pathId}`,
           // 使任务按顺序执行
           priority: TaskPriority.scan_manga + index,
-          command: 'task_scan_manga',
+          command: 'taskScanManga',
           args: {
             pathId,
             pathInfo,

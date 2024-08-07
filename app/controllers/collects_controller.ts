@@ -1,12 +1,12 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 19:03:54
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-07 20:51:12
  * @FilePath: \smanga-adonis\app\controllers\collects_controller.ts
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 import type { HttpContext } from '@adonisjs/core/http'
+import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 
@@ -20,6 +20,79 @@ export default class CollectsController {
       count: collect.length,
     })
     return response.json(listResponse)
+  }
+
+  public async mangas({ request, response }: HttpContextWithUserId) {
+    const { userId } = request
+    const quertParams = {
+      where: { userId, collectType: 'manga' },
+    }
+
+    const [list, count] = await Promise.all([
+      prisma.collect.findMany(quertParams),
+      prisma.collect.count(quertParams),
+    ])
+
+    const listResponse = new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count,
+    })
+    return response.json(listResponse)
+  }
+
+  public async chapters({ request, response }: HttpContextWithUserId) {
+    const { userId } = request
+    const quertParams = {
+      where: { userId, collectType: 'chapter' },
+    }
+
+    const [list, count] = await Promise.all([
+      prisma.collect.findMany(quertParams),
+      prisma.collect.count(quertParams),
+    ])
+
+    const listResponse = new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count,
+    })
+    return response.json(listResponse)
+  }
+
+  public async collect_manga({ request, response }: HttpContextWithUserId) {
+    const { userId } = request
+    const { mangaId, mangaName, mediaId } = request.only([
+      'mangaId',
+      'mangaName',
+      'mediaId',
+      'collectType',
+    ])
+
+    const collect = await prisma.collect.findFirst({
+      where: { userId, mangaId: mangaId, collectType: 'manga' },
+    })
+
+    if (collect) {
+      const destroy = await prisma.collect.delete({ where: { collectId: collect.collectId } })
+      const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: false })
+      return response.json(destroyResponse)
+    } else {
+      const collect = await prisma.collect.create({
+        data: {
+          collectType: 'manga',
+          userId,
+          mediaId,
+          mangaId,
+          mangaName,
+        },
+      })
+
+      const saveResponse = new SResponse({ code: 0, message: '收藏成功', data: collect })
+      return response.json(saveResponse)
+    }
   }
 
   public async create({ request, response }: HttpContext) {

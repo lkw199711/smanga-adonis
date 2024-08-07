@@ -73,17 +73,17 @@ export default class MangaController {
       where: { mangaId },
       include: {
         metas: true,
-        manga_tags: {
+        mangaTags: {
           include: { tag: true },
         },
       },
     })
 
-    // 处理返回的数据 将manga_tags中的tag提取出来
+    // 处理返回的数据 将mangaTags中的tag提取出来
     const result = {
       ...manga,
-      tags: manga?.manga_tags.map((manga_tag) => manga_tag.tag),
-      manga_tags: undefined,
+      tags: manga?.mangaTags.map((mangaTag) => mangaTag.tag),
+      mangaTags: undefined,
     }
     const showResponse = new SResponse({ code: 0, message: '', data: result })
     return response.json(showResponse)

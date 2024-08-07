@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model bookmark {
   bookmarkId Int      @id @default(autoincrement()) @db.UnsignedInt
   mediaId    Int      @db.UnsignedInt
@@ -25,7 +25,7 @@ model bookmark {
   @@unique([chapterId, page], map: "opage")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model chapter {
   chapterId    Int      @id @default(autoincrement()) @db.UnsignedInt
   manga        manga    @relation(fields:[mangaId],references:[mangaId])
@@ -46,29 +46,32 @@ model chapter {
   bookmarks    bookmark[]
   compress     compress[]
   history      history[]
+  collects     collect[]
 
   @@unique([mangaId, chapterName], map: "oname")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model collect {
   collectId   Int      @id @default(autoincrement()) @db.UnsignedInt
   collectType String   @default("manga") @db.VarChar(191)
+  user        user     @relation(fields:[userId],references:[userId])
   userId      Int      @db.UnsignedInt
   mediaId     Int      @db.UnsignedInt
   manga       manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId     Int      @db.UnsignedInt
   mangaName   String?  @db.VarChar(191)
+  chapter     chapter? @relation(fields:[chapterId],references:[chapterId])
   chapterId   Int?     @db.UnsignedInt
   chapterName String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)
 
-  @@unique([collectType, chapterId], map: "uChapter")
-  @@unique([collectType, mangaId], map: "uManga")
+  @@unique([userId, collectType, chapterId], map: "uChapter")
+  @@unique([userId, collectType, mangaId], map: "uManga")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model compress {
   compressId     Int      @id @unique(map: "id") @default(autoincrement()) @db.UnsignedInt
   compressType   String   @db.VarChar(191)
@@ -79,14 +82,14 @@ model compress {
   manga          manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId        Int      @db.UnsignedInt
   chapter        chapter  @relation(fields:[chapterId],references:[chapterId])
-  chapterId      Int      @unique(map: "unique-chapter") @db.UnsignedInt
+  chapterId      Int      @unique(map: "uniqueChapter") @db.UnsignedInt
   chapterPath    String   @db.VarChar(191)
   userId         Int?     @db.UnsignedInt
   createTime     DateTime @default(now()) @db.DateTime(6)
   updateTime     DateTime @default(now()) @db.DateTime(6)
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model history {
   historyId   Int      @id @default(autoincrement()) @db.UnsignedInt
   user        user     @relation(fields:[userId],references:[userId])
@@ -104,7 +107,7 @@ model history {
   updateTime  DateTime @default(now()) @db.DateTime(6)
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model latest {
   latestId   Int      @id @default(autoincrement()) @db.UnsignedInt
   page       Int      @db.UnsignedInt
@@ -116,10 +119,10 @@ model latest {
   createTime DateTime @default(now()) @db.DateTime(6)
   updateTime DateTime @default(now()) @db.DateTime(6)
 
-  @@unique([mangaId, userId], map: "unique-manga-user")
+  @@unique([mangaId, userId], map: "uniqueMangaUser")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model log {
   logId       Int      @id @default(autoincrement()) @db.UnsignedInt
   logType     String   @default("process") @db.VarChar(191)
@@ -137,7 +140,7 @@ model log {
   userId      Int?     @db.UnsignedInt
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model login {
   loginId    Int      @id @default(autoincrement()) @db.UnsignedInt
   user       user?    @relation(fields:[userId],references:[userId])
@@ -152,7 +155,7 @@ model login {
   token      String?  @db.VarChar(191)
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model manga {
   mangaId      Int       @id @default(autoincrement()) @db.UnsignedInt
   media        media     @relation(fields: [mediaId], references: [mediaId])
@@ -182,13 +185,13 @@ model manga {
   bookmarks    bookmark[]
   compress     compress[]
   metas        meta[]
-  manga_tags   manga_tag[]
+  mangaTags   mangaTag[]
 
   @@unique([mediaId, mangaPath], map: "oname")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model manga_tag {
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
+model mangaTag {
   mangaTagId Int      @id @default(autoincrement()) @db.UnsignedInt
   manga      manga    @relation(fields:[mangaId],references:[mangaId])
   mangaId    Int      @db.UnsignedInt
@@ -197,14 +200,14 @@ model manga_tag {
   createTime DateTime @default(now()) @db.DateTime(6)
   updateTime DateTime @default(now()) @db.DateTime(6)
 
-  @@unique([mangaId, tagId], map: "manga-tag")
-  @@map("manga-tag")
+  @@unique([mangaId, tagId], map: "mangaTag")
+  @@map("mangaTag")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model media {
   mediaId         Int      @id @default(autoincrement()) @db.UnsignedInt
-  mediaName       String   @unique(map: "unique-medianame") @db.VarChar(191)
+  mediaName       String   @unique(map: "uniqueMedianame") @db.VarChar(191)
   mediaType       Int      @db.UnsignedInt
   mediaRating     String   @default("child") @db.VarChar(191)
   mediaCover      String?  @db.VarChar(191)
@@ -217,11 +220,11 @@ model media {
   paths           path[]
   mangas          manga[]
   chapters        chapter[]
-  media_permissons    media_permisson[]
+  mediaPermissons    mediaPermisson[]
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model media_permisson {
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
+model mediaPermisson {
   mediaPermissonId Int      @id @default(autoincrement()) @db.UnsignedInt
   user             user     @relation(fields: [userId], references: [userId])
   userId           Int      @db.UnsignedInt
@@ -230,11 +233,11 @@ model media_permisson {
   createTime       DateTime @default(now()) @db.DateTime(6)
   updateTime       DateTime @default(now()) @db.DateTime(6)
 
-  @@unique([userId, mediaId], map: "user-media")
-  @@map("media-permisson")
+  @@unique([userId, mediaId], map: "userMedia")
+  @@map("mediaPermisson")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model meta {
   metaId      Int      @id @default(autoincrement()) @db.UnsignedInt
   metaName    String   @db.VarChar(191)
@@ -247,7 +250,7 @@ model meta {
   updateTime  DateTime @default(now()) @db.DateTime(6)
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model path {
   pathId       Int       @id @default(autoincrement()) @db.UnsignedInt
   media        media     @relation(fields: [mediaId], references: [mediaId])
@@ -265,12 +268,12 @@ model path {
   @@unique([mediaId, pathContent], map: "opath")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model scan {
   scanId      Int      @default(autoincrement()) @db.UnsignedInt
   scanStatus  String   @db.VarChar(191)
   targetPath  String?  @db.VarChar(191)
-  pathId      Int      @unique(map: "unique-path") @db.UnsignedInt
+  pathId      Int      @unique(map: "uniquePath") @db.UnsignedInt
   scanCount   Int?     @db.UnsignedInt
   scanIndex   Int?     @default(0)
   createTime  DateTime @default(now()) @db.DateTime(6)
@@ -280,7 +283,7 @@ model scan {
   @@id([scanId, pathId])
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model tag {
   tagId       Int      @id @default(autoincrement()) @db.UnsignedInt
   tagName     String   @db.VarChar(191)
@@ -289,10 +292,10 @@ model tag {
   description String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)
-  manga_tags  manga_tag[]
+  mangaTags  mangaTag[]
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model task {
   taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
   taskName   String    @default("") @db.VarChar(191)
@@ -307,8 +310,8 @@ model task {
   priority   Int       @default(10)
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model task_failed {
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
+model taskFailed {
   taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
   taskName   String    @default("") @db.VarChar(191)
   status     String    @db.VarChar(191)
@@ -320,11 +323,11 @@ model task_failed {
   createTime DateTime  @default(now()) @db.DateTime(6)
   updateTime DateTime  @default(now()) @db.DateTime(6)
 
-  @@map("task-failed")
+  @@map("taskFailed")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model task_success {
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
+model taskSuccess {
   taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
   taskName   String    @default("") @db.VarChar(191)
   status     String    @db.VarChar(191)
@@ -335,10 +338,10 @@ model task_success {
   createTime DateTime  @default(now()) @db.DateTime(6)
   updateTime DateTime  @default(now()) @db.DateTime(6)
 
-  @@map("task-success")
+  @@map("taskSuccess")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model token {
   tokenId    Int       @id @default(autoincrement()) @db.UnsignedInt
   user       user      @relation(fields:[userId],references:[userId])
@@ -349,10 +352,10 @@ model token {
   updateTime DateTime  @default(now()) @db.DateTime(6)
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model user {
   userId      Int      @id @default(autoincrement()) @db.UnsignedInt
-  userName    String   @unique(map: "unique-username") @db.VarChar(191)
+  userName    String   @unique(map: "uniqueUsername") @db.VarChar(191)
   passWord    String   @db.Char(32)
   nickName    String?  @db.VarChar(191)
   header      String?  @db.VarChar(191)
@@ -363,13 +366,14 @@ model user {
   userConfig  Json?
   logins      login[]
   tokens      token[]
-  user_permissons   user_permisson[]
-  media_permissons  media_permisson[]
+  userPermissons   userPermisson[]
+  mediaPermissons  mediaPermisson[]
   historys    history[]
+  collects    collect[]
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model user_permisson {
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
+model userPermisson {
   userPermissonId Int      @id @default(autoincrement()) @db.UnsignedInt
   user            user     @relation(fields:[userId],references:[userId])
   userId          Int      @db.UnsignedInt
@@ -378,14 +382,14 @@ model user_permisson {
   createTime      DateTime @default(now()) @db.DateTime(6)
   updateTime      DateTime @default(now()) @db.DateTime(6)
 
-  @@unique([userId, module, operation], map: "user-module-operation")
-  @@map("user-permisson")
+  @@unique([userId, module, operation], map: "userModuleOperation")
+  @@map("userPermisson")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model version {
   versionId   Int      @id @default(autoincrement()) @db.UnsignedInt
-  version     String   @unique(map: "unique-version") @db.VarChar(191)
+  version     String   @unique(map: "uniqueVersion") @db.VarChar(191)
   description String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @db.DateTime(6)

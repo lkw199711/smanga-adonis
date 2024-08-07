@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client'
 
 export default class MangaTagsController {
   public async index({ response }: HttpContext) {
-    const list = await prisma.manga_tag.findMany()
+    const list = await prisma.mangaTag.findMany()
     const listResponse = new ListResponse({
       code: 0,
       message: '',
@@ -18,14 +18,14 @@ export default class MangaTagsController {
   public async show({ params, response }: HttpContext) {
     let { mangaTagId } = params
     mangaTagId = Number(mangaTagId)
-    const mangaTag = await prisma.manga_tag.findUnique({ where: { mangaTagId } })
+    const mangaTag = await prisma.mangaTag.findUnique({ where: { mangaTagId } })
     const showResponse = new SResponse({ code: 0, message: '', data: mangaTag })
     return response.json(showResponse)
   }
 
   public async create({ request, response }: HttpContext) {
     const insertData = request.only(['mangaId', 'tagId'])
-    const mangaTag = await prisma.manga_tag.create({
+    const mangaTag = await prisma.mangaTag.create({
       data: insertData,
     })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: mangaTag })
@@ -36,7 +36,7 @@ export default class MangaTagsController {
     let { mangaTagId } = params
     mangaTagId = Number(mangaTagId)
     const modifyData = request.body()
-    const mangaTag = await prisma.manga_tag.update({
+    const mangaTag = await prisma.mangaTag.update({
       where: { mangaTagId },
       data: modifyData,
     })
@@ -46,7 +46,7 @@ export default class MangaTagsController {
 
   public async destroy({ params, response }: HttpContext) {
     let { mangaTagId } = params
-    const mangaTag = await prisma.manga_tag.delete({ where: { mangaTagId } })
+    const mangaTag = await prisma.mangaTag.delete({ where: { mangaTagId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: mangaTag })
     return response.json(destroyResponse)
   }

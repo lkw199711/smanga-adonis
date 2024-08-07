@@ -73,12 +73,12 @@ export default class TaskProcess {
   public async process(task: Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput) {
     try {
       switch (task.command) {
-        case 'task_scan':
+        case 'taskScan':
           //扫描任务调用
           console.log('执行扫描任务')
           await scan_job(task.args)
           break
-        case 'task_scan_manga':
+        case 'taskScanManga':
           console.log('执行扫描漫画任务')
           //扫描漫画任务调用
           await scan_manga_job(task.args)
@@ -98,9 +98,9 @@ export default class TaskProcess {
         args,
         startTime,
         endTime,
-      } as Prisma.task_successCreateInput
+      } as Prisma.taskSuccessCreateInput
 
-      await prisma.task_success.create({
+      await prisma.taskSuccess.create({
         data: successTask,
       })
     } catch (catchError) {
@@ -117,9 +117,9 @@ export default class TaskProcess {
         startTime,
         endTime,
         error,
-      } as Prisma.task_failedCreateInput
+      } as Prisma.taskFailedCreateInput
 
-      await prisma.task_failed.create({ data: failedTask })
+      await prisma.taskFailed.create({ data: failedTask })
     }
 
     // 从表中删除任务

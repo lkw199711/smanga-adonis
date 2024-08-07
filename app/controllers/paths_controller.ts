@@ -58,7 +58,7 @@ export default class PathsController {
       data: {
         taskName: `scan_${path.pathId}`,
         priority: TaskPriority.scan,
-        command: 'task_scan',
+        command: 'taskScan',
         args: { pathId: path.pathId },
         status: 'pending',
       },
@@ -97,7 +97,7 @@ export default class PathsController {
       data: {
         taskName: `scan_${pathId}`,
         priority: TaskPriority.scan,
-        command: 'task_scan',
+        command: 'taskScan',
         args: { pathId },
         status: 'pending',
       },

@@ -304,7 +304,7 @@ export default async function handle({
           })
         }
 
-        const mangaTagRecord = await prisma.manga_tag.findFirst({
+        const mangaTagRecord = await prisma.mangaTag.findFirst({
           where: {
             mangaId: mangaRecord.mangaId,
             tagId: tagRecord.tagId,
@@ -312,7 +312,7 @@ export default async function handle({
         })
 
         if (!mangaTagRecord) {
-          await prisma.manga_tag
+          await prisma.mangaTag
             .create({
               data: {
                 mangaId: mangaRecord.mangaId,

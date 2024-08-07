@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:22:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-05 22:35:43
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-07 14:51:37
  * @FilePath: \smanga-adonis\app\controllers\tags_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -92,7 +92,7 @@ export default class TagsController {
     let { tagId } = params
     tagId = Number(tagId)
     // 删除关联数据
-    await prisma.manga_tag.deleteMany({ where: { tagId } })
+    await prisma.mangaTag.deleteMany({ where: { tagId } })
     const tag = await prisma.tag.delete({ where: { tagId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: tag })
     return response.json(destroyResponse)
@@ -100,7 +100,7 @@ export default class TagsController {
 
   public async manga_tags({ params, response }: HttpContext) {
     const { mangaId } = params
-    const mangaTags = await prisma.manga_tag.findMany({
+    const mangaTags = await prisma.mangaTag.findMany({
       where: { mangaId },
       include: {
         tag: true,
