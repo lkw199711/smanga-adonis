@@ -100,8 +100,14 @@ export default class MangaController {
 
   public async update({ params, request, response }: HttpContext) {
     let { mangaId } = params
-    mangaId = Number(mangaId)
-    const modifyData = request.body()
+    const modifyData = request.only([
+      'mangaName',
+      'mangaNumber',
+      'mangaPath',
+      'mangaCover',
+      'removeFirst',
+      'browseType',
+    ])
     const manga = await prisma.manga.update({
       where: { mangaId },
       data: modifyData,

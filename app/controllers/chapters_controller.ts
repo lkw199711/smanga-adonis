@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-06 01:14:19
+ * @LastEditTime: 2024-08-08 22:47:03
  * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -195,7 +195,7 @@ export default class ChaptersController {
 
   public async update({ params, request, response }: HttpContext) {
     let { chapterId } = params
-    const modifyData = request.body()
+    const modifyData = request.only(['chapterName', 'chapterPath', 'chapterCover'])
     const chapter = await prisma.chapter.update({
       where: { chapterId },
       data: modifyData,

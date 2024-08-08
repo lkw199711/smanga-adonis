@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-07 00:39:34
+ * @LastEditTime: 2024-08-08 21:49:39
  * @FilePath: \smanga-adonis\app\controllers\latests_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -11,12 +11,17 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 
 export default class LatestsController {
-  public async index({ response }: HttpContext) {
-    const list = await prisma.latest.findMany()
+  public async index({ request, response }: HttpContextWithUserId) {
+    const userId = request.userId
+    const list = await prisma.latest.findMany({
+      where: { userId },
+      include: { manga: true },
+      take: 10,
+    })
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list,
+      list: list.map((item) => item.manga),
       count: list.length,
     })
     return response.json(listResponse)

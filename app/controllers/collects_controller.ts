@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-08 00:14:51
+ * @LastEditTime: 2024-08-08 21:44:01
  * @FilePath: \smanga-adonis\app\controllers\collects_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -26,7 +26,7 @@ export default class CollectsController {
   public async mangas({ request, response }: HttpContextWithUserId) {
     const { userId } = request
     const { page, pageSize, order } = request.only(['page', 'pageSize', 'order'])
-    const quertParams = {
+    const queryParams = {
       where: { userId, collectType: 'manga' },
       include: { manga: true },
       skip: (page - 1) * pageSize,
@@ -35,8 +35,8 @@ export default class CollectsController {
     }
 
     const [list, count] = await Promise.all([
-      prisma.collect.findMany(quertParams),
-      prisma.collect.count({ where: quertParams.where }),
+      prisma.collect.findMany(queryParams),
+      prisma.collect.count({ where: queryParams.where }),
     ])
 
     const listResponse = new ListResponse({
