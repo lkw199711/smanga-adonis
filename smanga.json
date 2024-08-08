@@ -13,6 +13,7 @@
     "quality": 100
   },
   "scan": {
+    "auto": 0,
     "interval": 60
   },
   "debug": {
@@ -23,6 +24,7 @@
     "key": ""
   },
   "compress": {
+    "auto": 0,
     "saveDuration": 100,
     "poster": 300,
     "bookmark": 300

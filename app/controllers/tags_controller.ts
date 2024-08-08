@@ -2,14 +2,13 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:22:15
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-07 14:51:37
+ * @LastEditTime: 2024-08-08 10:15:44
  * @FilePath: \smanga-adonis\app\controllers\tags_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
-import { Prisma } from '@prisma/client'
 
 export default class TagsController {
   public async index({ request, response }: HttpContext) {
@@ -108,6 +107,47 @@ export default class TagsController {
     })
 
     const list = mangaTags.map((item) => Object.assign(item.tag, { mangaTagId: item.mangaTagId }))
+
+    const listResponse = new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count: list.length,
+    })
+
+    return response.json(listResponse)
+  }
+
+  public async tags_manga({ params, request, response }: HttpContext) {
+    const { tagIds, page, pageSize, order } = request.only(['tagIds', 'page', 'pageSize', 'order'])
+    console.log(tagIds)
+
+    // const tagArr = tagIds.split(',').map((item: string) => Number(item))
+    const mangaTags = await prisma.mangaTag.findMany({
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      where: {
+        tagId: {
+          in: tagIds.map((item: string) => Number(item)),
+        },
+      },
+      include: {
+        manga: true,
+      },
+    })
+
+    // 根据 mangaId 进行分组，确保每个 manga 只出现一次
+    const uniqueMangaTags = Object.values(
+      mangaTags.reduce((acc, curr) => {
+        // 如果 mangaId 不存在于分组对象中，添加它
+        if (!acc[curr.mangaId]) {
+          acc[curr.mangaId] = curr
+        }
+        return acc
+      }, {})
+    )
+
+    const list = mangaTags.map((item) => Object.assign(item.manga, { mangaTagId: item.mangaTagId }))
 
     const listResponse = new ListResponse({
       code: 0,

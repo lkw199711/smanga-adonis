@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-07 18:09:23
+ * @LastEditTime: 2024-08-08 10:07:31
  * @FilePath: \smanga-adonis\start\routes.ts
  */
 /*
@@ -33,6 +33,8 @@ const chaptersController = () => import('#controllers/chapters_controller')
 const ImagesController = () => import('#controllers/images_controller')
 const MangaTagController = () => import('#controllers/manga_tags_controller')
 const ChartsController = () => import('#controllers/charts_controller')
+const SearchesController = () => import('#controllers/searches_controller')
+const ConfigsController = () => import('#controllers/configs_controller')
 
 import prisma from '#start/prisma'
 
@@ -150,6 +152,8 @@ router.get('/manga-tag/:mangaId', [TagsController, 'manga_tags'])
 router.post('/manga-tag', [MangaTagController, 'create'])
 router.delete('/manga-tag/:mangaTagId', [MangaTagController, 'destroy'])
 
+router.get('/tags-manga', [TagsController, 'tags_manga'])
+
 // 漫画
 router.get('/manga', [MangaController, 'index'])
 router.get('/manga/:mangaId', [MangaController, 'show'])
@@ -178,3 +182,12 @@ router.get('chart-browse', [ChartsController, 'browse'])
 router.get('chart-tag', [ChartsController, 'tag'])
 router.get('chart-ranking', [ChartsController, 'ranking'])
 router.get('chart-frequency', [ChartsController, 'frequency'])
+
+// 搜索
+router.get('/search-mangas', [SearchesController, 'mangas'])
+router.get('/search-chapters', [SearchesController, 'chapters'])
+
+// 配置信息
+router.get('user-config', [UsersController, 'config'])
+router.get('serve-config', [ConfigsController, 'get'])
+router.put('serve-config', [ConfigsController, 'set'])

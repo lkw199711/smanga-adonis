@@ -11,9 +11,9 @@ datasource db {
 model bookmark {
   bookmarkId Int      @id @default(autoincrement()) @db.UnsignedInt
   mediaId    Int      @db.UnsignedInt
-  manga      manga    @relation(fields:[mangaId],references:[mangaId])
+  manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int      @db.UnsignedInt
-  chapter    chapter  @relation(fields:[chapterId],references:[chapterId])
+  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId  Int      @db.UnsignedInt
   userId     Int      @db.UnsignedInt
   browseType String   @default("flow") @db.VarChar(191)
@@ -27,26 +27,26 @@ model bookmark {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model chapter {
-  chapterId    Int      @id @default(autoincrement()) @db.UnsignedInt
-  manga        manga    @relation(fields:[mangaId],references:[mangaId])
-  mangaId      Int      @db.UnsignedInt
-  media        media    @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int      @db.UnsignedInt
-  pathId       Int      @db.UnsignedInt
-  browseType   String   @default("flow") @db.VarChar(191)
-  subTitle     String?  @db.VarChar(191)
-  picNum       Int?     @db.UnsignedInt
-  createTime   DateTime @default(now()) @db.DateTime(6)
-  updateTime   DateTime @default(now()) @db.DateTime(6)
-  chapterName  String   @db.VarChar(191)
-  chapterPath  String   @db.VarChar(191)
-  chapterType  String   @default("image") @db.VarChar(191)
-  chapterCover String?  @db.VarChar(191)
-  chapterNumber String?  @db.VarChar(191)
-  bookmarks    bookmark[]
-  compress     compress[]
-  history      history[]
-  collects     collect[]
+  chapterId     Int        @id @default(autoincrement()) @db.UnsignedInt
+  manga         manga      @relation(fields: [mangaId], references: [mangaId])
+  mangaId       Int        @db.UnsignedInt
+  media         media      @relation(fields: [mediaId], references: [mediaId])
+  mediaId       Int        @db.UnsignedInt
+  pathId        Int        @db.UnsignedInt
+  browseType    String     @default("flow") @db.VarChar(191)
+  subTitle      String?    @db.VarChar(191)
+  picNum        Int?       @db.UnsignedInt
+  createTime    DateTime   @default(now()) @db.DateTime(6)
+  updateTime    DateTime   @default(now()) @db.DateTime(6)
+  chapterName   String     @db.VarChar(191)
+  chapterPath   String     @db.VarChar(191)
+  chapterType   String     @default("image") @db.VarChar(191)
+  chapterCover  String?    @db.VarChar(191)
+  chapterNumber String?    @db.VarChar(191)
+  bookmarks     bookmark[]
+  compress      compress[]
+  history       history[]
+  collects      collect[]
 
   @@unique([mangaId, chapterName], map: "oname")
 }
@@ -55,13 +55,13 @@ model chapter {
 model collect {
   collectId   Int      @id @default(autoincrement()) @db.UnsignedInt
   collectType String   @default("manga") @db.VarChar(191)
-  user        user     @relation(fields:[userId],references:[userId])
+  user        user     @relation(fields: [userId], references: [userId])
   userId      Int      @db.UnsignedInt
   mediaId     Int      @db.UnsignedInt
-  manga       manga    @relation(fields:[mangaId],references:[mangaId])
+  manga       manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId     Int      @db.UnsignedInt
   mangaName   String?  @db.VarChar(191)
-  chapter     chapter? @relation(fields:[chapterId],references:[chapterId])
+  chapter     chapter? @relation(fields: [chapterId], references: [chapterId])
   chapterId   Int?     @db.UnsignedInt
   chapterName String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
@@ -78,9 +78,9 @@ model compress {
   compressStatus String?  @db.VarChar(191)
   imageCount     Int?     @db.UnsignedInt
   mediaId        Int      @db.UnsignedInt
-  manga          manga    @relation(fields:[mangaId],references:[mangaId])
+  manga          manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId        Int      @db.UnsignedInt
-  chapter        chapter  @relation(fields:[chapterId],references:[chapterId])
+  chapter        chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId      Int      @unique(map: "uniqueChapter") @db.UnsignedInt
   chapterPath    String   @db.VarChar(191)
   userId         Int?     @db.UnsignedInt
@@ -91,13 +91,13 @@ model compress {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model history {
   historyId   Int      @id @default(autoincrement()) @db.UnsignedInt
-  user        user     @relation(fields:[userId],references:[userId])
+  user        user     @relation(fields: [userId], references: [userId])
   userId      Int      @db.UnsignedInt
   mediaId     Int      @db.UnsignedInt
-  manga       manga    @relation(fields:[mangaId],references:[mangaId])
+  manga       manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId     Int      @db.UnsignedInt
   mangaName   String?  @db.VarChar(191)
-  chapter     chapter  @relation(fields:[chapterId],references:[chapterId])
+  chapter     chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId   Int      @db.UnsignedInt
   chapterName String?  @db.VarChar(191)
   chapterPath String?  @db.VarChar(191)
@@ -111,7 +111,7 @@ model latest {
   latestId   Int      @id @default(autoincrement()) @db.UnsignedInt
   page       Int      @db.UnsignedInt
   finish     Int      @default(0) @db.UnsignedInt
-  manga      manga    @relation(fields:[mangaId],references:[mangaId])
+  manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int      @db.UnsignedInt
   chapterId  Int      @db.UnsignedInt
   userId     Int      @db.UnsignedInt
@@ -142,7 +142,7 @@ model log {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model login {
   loginId    Int      @id @default(autoincrement()) @db.UnsignedInt
-  user       user?    @relation(fields:[userId],references:[userId])
+  user       user?    @relation(fields: [userId], references: [userId])
   userId     Int?     @db.UnsignedInt
   userName   String?  @db.VarChar(191)
   nickName   String?  @db.VarChar(191)
@@ -156,27 +156,27 @@ model login {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model manga {
-  mangaId      Int       @id @default(autoincrement()) @db.UnsignedInt
-  media        media     @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int       @db.UnsignedInt
-  path         path      @relation(fields: [pathId], references: [pathId])
-  pathId       Int       @db.UnsignedInt
-  mangaName    String    @db.VarChar(191)
-  mangaPath    String    @db.VarChar(191)
-  parentPath   String?   @db.VarChar(191)
-  mangaCover   String?   @db.VarChar(191)
-  mangaNumber   String?   @db.VarChar(191)
-  chapterCount Int?      @db.UnsignedInt
-  browseType   String    @default("flow") @db.VarChar(191)
-  direction    Int       @default(1) @db.UnsignedInt
-  removeFirst  Int       @default(0) @db.UnsignedInt
-  title        String?   @db.VarChar(191)
-  subTitle     String?   @db.VarChar(191)
-  author       String?   @db.VarChar(191)
-  describe     String?   @db.VarChar(191)
-  publishDate  DateTime? @db.Date
-  createTime   DateTime  @default(now()) @db.DateTime(6)
-  updateTime   DateTime  @default(now()) @db.DateTime(6)
+  mangaId      Int        @id @default(autoincrement()) @db.UnsignedInt
+  media        media      @relation(fields: [mediaId], references: [mediaId])
+  mediaId      Int        @db.UnsignedInt
+  path         path       @relation(fields: [pathId], references: [pathId])
+  pathId       Int        @db.UnsignedInt
+  mangaName    String     @db.VarChar(191)
+  mangaPath    String     @db.VarChar(191)
+  parentPath   String?    @db.VarChar(191)
+  mangaCover   String?    @db.VarChar(191)
+  mangaNumber  String?    @db.VarChar(191)
+  chapterCount Int?       @db.UnsignedInt
+  browseType   String     @default("flow") @db.VarChar(191)
+  direction    Int        @default(1) @db.UnsignedInt
+  removeFirst  Int        @default(0) @db.UnsignedInt
+  title        String?    @db.VarChar(191)
+  subTitle     String?    @db.VarChar(191)
+  author       String?    @db.VarChar(191)
+  describe     String?    @db.VarChar(191)
+  publishDate  DateTime?  @db.Date
+  createTime   DateTime   @default(now()) @db.DateTime(6)
+  updateTime   DateTime   @default(now()) @db.DateTime(6)
   latests      latest[]
   historys     history[]
   chapters     chapter[]
@@ -184,7 +184,7 @@ model manga {
   bookmarks    bookmark[]
   compress     compress[]
   metas        meta[]
-  mangaTags   mangaTag[]
+  mangaTags    mangaTag[]
 
   @@unique([mediaId, mangaPath], map: "oname")
 }
@@ -192,9 +192,9 @@ model manga {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model mangaTag {
   mangaTagId Int      @id @default(autoincrement()) @db.UnsignedInt
-  manga      manga    @relation(fields:[mangaId],references:[mangaId])
+  manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int      @db.UnsignedInt
-  tag        tag      @relation(fields:[tagId],references:[tagId])
+  tag        tag      @relation(fields: [tagId], references: [tagId])
   tagId      Int      @db.UnsignedInt
   createTime DateTime @default(now()) @db.DateTime(6)
   updateTime DateTime @default(now()) @db.DateTime(6)
@@ -205,21 +205,21 @@ model mangaTag {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model media {
-  mediaId         Int      @id @default(autoincrement()) @db.UnsignedInt
-  mediaName       String   @unique(map: "uniqueMedianame") @db.VarChar(191)
-  mediaType       Int      @db.UnsignedInt
-  mediaRating     String   @default("child") @db.VarChar(191)
-  mediaCover      String?  @db.VarChar(191)
-  directoryFormat Int      @default(0) @db.UnsignedInt
-  browseType      String   @default("flow") @db.VarChar(191)
-  direction       Int      @default(1) @db.UnsignedInt
-  removeFirst     Int      @default(0) @db.UnsignedInt
-  createTime      DateTime @default(now()) @db.DateTime(6)
-  updateTime      DateTime @default(now()) @db.DateTime(6)
+  mediaId         Int              @id @default(autoincrement()) @db.UnsignedInt
+  mediaName       String           @unique(map: "uniqueMedianame") @db.VarChar(191)
+  mediaType       Int              @db.UnsignedInt
+  mediaRating     String           @default("child") @db.VarChar(191)
+  mediaCover      String?          @db.VarChar(191)
+  directoryFormat Int              @default(0) @db.UnsignedInt
+  browseType      String           @default("flow") @db.VarChar(191)
+  direction       Int              @default(1) @db.UnsignedInt
+  removeFirst     Int              @default(0) @db.UnsignedInt
+  createTime      DateTime         @default(now()) @db.DateTime(6)
+  updateTime      DateTime         @default(now()) @db.DateTime(6)
   paths           path[]
   mangas          manga[]
   chapters        chapter[]
-  mediaPermissons    mediaPermisson[]
+  mediaPermissons mediaPermisson[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -240,7 +240,7 @@ model mediaPermisson {
 model meta {
   metaId      Int      @id @default(autoincrement()) @db.UnsignedInt
   metaName    String   @db.VarChar(191)
-  manga       manga    @relation(fields:[mangaId],references:[mangaId])
+  manga       manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId     Int      @db.UnsignedInt
   metaFile    String?  @db.VarChar(191)
   metaContent String?  @db.VarChar(191)
@@ -284,14 +284,14 @@ model scan {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model tag {
-  tagId       Int      @id @default(autoincrement()) @db.UnsignedInt
-  tagName     String   @db.VarChar(191)
-  tagColor    String   @default("#a0d911") @db.VarChar(191)
-  userId      Int?     @db.UnsignedInt
-  description String?  @db.VarChar(191)
-  createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @default(now()) @db.DateTime(6)
-  mangaTags  mangaTag[]
+  tagId       Int        @id @default(autoincrement()) @db.UnsignedInt
+  tagName     String     @db.VarChar(191)
+  tagColor    String     @default("#a0d911") @db.VarChar(191)
+  userId      Int?       @db.UnsignedInt
+  description String?    @db.VarChar(191)
+  createTime  DateTime   @default(now()) @db.DateTime(6)
+  updateTime  DateTime   @default(now()) @db.DateTime(6)
+  mangaTags   mangaTag[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -343,7 +343,7 @@ model taskSuccess {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model token {
   tokenId    Int       @id @default(autoincrement()) @db.UnsignedInt
-  user       user      @relation(fields:[userId],references:[userId])
+  user       user      @relation(fields: [userId], references: [userId])
   userId     Int       @db.UnsignedInt
   token      String    @db.VarChar(191)
   expires    DateTime? @db.DateTime(0)
@@ -353,28 +353,28 @@ model token {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model user {
-  userId      Int      @id @default(autoincrement()) @db.UnsignedInt
-  userName    String   @unique(map: "uniqueUsername") @db.VarChar(191)
-  passWord    String   @db.Char(32)
-  nickName    String?  @db.VarChar(191)
-  header      String?  @db.VarChar(191)
-  role        String?  @db.VarChar(191)
-  mediaPermit String?  @db.VarChar(191)
-  createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @default(now()) @db.DateTime(6)
-  userConfig  Json?
-  logins      login[]
-  tokens      token[]
-  userPermissons   userPermisson[]
-  mediaPermissons  mediaPermisson[]
-  historys    history[]
-  collects    collect[]
+  userId          Int              @id @default(autoincrement()) @db.UnsignedInt
+  userName        String           @unique(map: "uniqueUsername") @db.VarChar(191)
+  passWord        String           @db.Char(32)
+  nickName        String?          @db.VarChar(191)
+  header          String?          @db.VarChar(191)
+  role            String?          @db.VarChar(191)
+  mediaPermit     String?          @db.VarChar(191)
+  createTime      DateTime         @default(now()) @db.DateTime(6)
+  updateTime      DateTime         @default(now()) @db.DateTime(6)
+  userConfig      Json?
+  logins          login[]
+  tokens          token[]
+  userPermissons  userPermisson[]
+  mediaPermissons mediaPermisson[]
+  historys        history[]
+  collects        collect[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model userPermisson {
   userPermissonId Int      @id @default(autoincrement()) @db.UnsignedInt
-  user            user     @relation(fields:[userId],references:[userId])
+  user            user     @relation(fields: [userId], references: [userId])
   userId          Int      @db.UnsignedInt
   module          String   @db.VarChar(100)
   operation       String   @default("default") @db.VarChar(100)
