@@ -12,7 +12,8 @@ import { promises as fs } from 'fs'
 const defaultConfig = {
   sql: {
     client: 'mysql',
-    ip: '127.0.0.1',
+    host: '127.0.0.1',
+    port: 3306,
     username: 'smanga',
     password: 'smanga',
     database: 'smanga',
@@ -34,6 +35,7 @@ const defaultConfig = {
     key: '',
   },
   compress: {
+    auto: 0,
     saveDuration: 100,
     poster: 300,
     bookmark: 300,

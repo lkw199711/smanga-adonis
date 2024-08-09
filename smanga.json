@@ -1,10 +1,11 @@
 {
   "sql": {
-    "client": "mysql",
-    "ip": "127.0.0.1",
+    "client": "sqlite",
+    "host": "127.0.0.1",
+    "port": 3306,
     "username": "smanga",
     "password": "smanga",
-    "database": "smanga"
+    "database": "smanga2"
   },
   "imagick": {
     "memory": "1gb",

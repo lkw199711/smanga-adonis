@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:21:48
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-03 21:58:22
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-09 17:49:54
  * @FilePath: \smanga-adonis\app\controllers\paths_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -10,6 +10,7 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import { TaskPriority } from '../type/index.js'
+import { sql_parse_json, sql_stringify_json } from '../utils/index.js'
 
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
@@ -39,16 +40,15 @@ export default class PathsController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { pathId } = params
-    pathId = Number(pathId)
-    const path = await prisma.path.findUnique({ where: { pathId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: path })
-    return response.json(showResponse)
+    // let { pathId } = params
+    // pathId = Number(pathId)
+    // const path = await prisma.path.findUnique({ where: { pathId } })
+    // const showResponse = new SResponse({ code: 0, message: '', data: path })
+    // return response.json(showResponse)
   }
 
   public async create({ request, response }: HttpContext) {
-    const requestParams = request.body()
-    const insertData = requestParams.data as Prisma.pathCreateInput
+    const insertData = request.only(['pathContent', 'mediaId', 'autoScan', 'include', 'exclude'])
     const path = await prisma.path.create({
       data: insertData,
     })
@@ -59,7 +59,7 @@ export default class PathsController {
         taskName: `scan_${path.pathId}`,
         priority: TaskPriority.scan,
         command: 'taskScan',
-        args: { pathId: path.pathId },
+        args: sql_stringify_json({ pathId: path.pathId }) as string,
         status: 'pending',
       },
     })
@@ -98,7 +98,7 @@ export default class PathsController {
         taskName: `scan_${pathId}`,
         priority: TaskPriority.scan,
         command: 'taskScan',
-        args: { pathId },
+        args: sql_stringify_json({ pathId }) as string,
         status: 'pending',
       },
     })

@@ -2,14 +2,15 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-23 18:34:07
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-07-30 19:33:18
+ * @LastEditTime: 2024-08-09 17:51:29
  * @FilePath: \smanga-adonis\app\services\scan_job.ts
  */
 import prisma from '#start/prisma'
-import { Prisma, path as pathType, media as mediaType } from '@prisma/client'
 import { TaskPriority } from '../type/index.js'
 import * as fs from 'fs'
 import * as path from 'path'
+import { sql_stringify_json } from '../utils/index.js'
+import { exit } from 'process'
 
 type scanArgs = {
   pathId: number
@@ -32,7 +33,9 @@ let pathInfo: any = null
 let mediaInfo: any = null
 
 export default async function handle({ pathId }: any) {
-  pathInfo = await prisma.path.findUnique({
+  console.log('scan job start', pathId);
+  // exit()
+  pathInfo = await prisma.path.findFirst({
     where: { pathId },
     include: {
       media: true,
@@ -50,9 +53,13 @@ export default async function handle({ pathId }: any) {
     // 存在扫面任务 终止现在扫描
     return
   }
-
+  console.log('scan job start', pathId)
+  if (!pathId) {
+    console.log('pathId is required');
+    return;
+  }
   // 记录最新扫描时间
-  await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } })
+  await prisma.path.updateMany({ where: { pathId }, data: { lastScanTime: new Date() } })
   await prisma.scan.create({
     data: {
       pathId,
@@ -87,20 +94,23 @@ export default async function handle({ pathId }: any) {
   } else {
     // 现存漫画多于库中漫画, 说明新增了文件. 进行新增 dev_log
     mangaList.forEach(async (item: mangaItem, index: number) => {
+      // 生成参数
+      const args = sql_stringify_json({
+        pathId,
+        pathInfo,
+        mediaInfo,
+        mangaCount: mangaList.length,
+        mangaIndex: index,
+        ...item,
+      }) as string
+
       await prisma.task.create({
         data: {
           taskName: `scan_${pathId}`,
           // 使任务按顺序执行
           priority: TaskPriority.scan_manga + index,
           command: 'taskScanManga',
-          args: {
-            pathId,
-            pathInfo,
-            mediaInfo,
-            mangaCount: mangaList.length,
-            mangaIndex: index,
-            ...item,
-          },
+          args,
         },
       })
     })

@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 20:33:01
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-08 18:32:15
+ * @LastEditTime: 2024-08-09 16:16:13
  * @FilePath: \smanga-adonis\app\controllers\users_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -10,6 +10,7 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
 import { HttpContextWithUserId } from '#type/http.js'
+import { sql_parse_json } from '../utils/index.js'
 
 export default class UsersController {
   public async index({ request, response }: HttpContext) {
@@ -64,7 +65,11 @@ export default class UsersController {
     const { userName, passWord, userConfig } = request.only(['userName', 'passWord', 'userConfig'])
     const user = await prisma.user.update({
       where: { userId },
-      data: { userName, ...(passWord && { passWord: md5(passWord) }), userConfig },
+      data: {
+        userName,
+        ...(passWord && { passWord: md5(passWord) }),
+        userConfig: sql_parse_json(userConfig),
+      },
     })
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
     return response.json(updateResponse)
@@ -77,7 +82,7 @@ export default class UsersController {
     return response.json(destroyResponse)
   }
 
-  public async config({ request, response }: HttpContextWithUserId) { 
+  public async config({ request, response }: HttpContextWithUserId) {
     // const { userConfig } = request.only(['userId', 'userConfig'])
     const userId = request.userId
     const user = await prisma.user.findFirst({ where: { userId } })
@@ -85,6 +90,8 @@ export default class UsersController {
     if (!user) {
       return response.json(new SResponse({ code: 1, message: '获取用户信息错误' }))
     }
-    return response.json(new SResponse({ code: 0, message: '', data: user?.userConfig || {} }))
+
+    const config = sql_parse_json(user?.userConfig || {})
+    return response.json(new SResponse({ code: 0, message: '', data: config }))
   }
 }

@@ -2,6 +2,7 @@ import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import scan_job from './scan_job.js'
 import scan_manga_job from './scan_manga_job.js'
+import { sql_parse_json } from '../utils/index.js'
 
 type TaskType = Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput
 
@@ -48,7 +49,7 @@ export default class TaskProcess {
     if (!task) {
       this.sqlLock = false
       return
-    };
+    }
 
     // 更新任务状态 执行中
     task = await prisma.task.update({
@@ -59,7 +60,7 @@ export default class TaskProcess {
       },
     })
 
-    this.process(task as TaskType)
+    await this.process(task as TaskType)
 
     // 下锁
     this.sqlLock = false
@@ -72,16 +73,25 @@ export default class TaskProcess {
    */
   public async process(task: Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput) {
     try {
+      // console.log('执行任务', task.taskName, task)
+
+      if (!task.args) { return false; } else {
+        console.log('args', task.args);
+      }
+
+      const argsVal = sql_parse_json(task.args as string)
+      // console.log('argsVal', argsVal);
+      
       switch (task.command) {
         case 'taskScan':
           //扫描任务调用
           console.log('执行扫描任务')
-          await scan_job(task.args)
+          await scan_job(argsVal)
           break
         case 'taskScanManga':
           console.log('执行扫描漫画任务')
           //扫描漫画任务调用
-          await scan_manga_job(task.args)
+          await scan_manga_job(argsVal)
           break
         default:
           break

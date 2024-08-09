@@ -1,8 +1,8 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 14:13:00
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-06 00:10:29
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-09 10:59:09
  * @FilePath: \smanga-adonis\app\utils\index.ts
  */
 import * as os from 'os'
@@ -90,4 +90,33 @@ export function order_params(order: string = 'asc', model: string = 'chapter') {
   }
 
   return {}
+}
+
+/**
+ * 将值转为可以使用的json
+ * 因为sqlite不能直接存储json，所以需要转化为字符串
+ * 当然，如果是mysql等数据库，可以直接存储json
+ * @param jsonVal 目标json值
+ * @returns
+ */
+export function sql_parse_json(jsonVal: string | object) {
+  if (typeof jsonVal === 'string') {
+    return JSON.parse(jsonVal)
+  } else {
+    return jsonVal
+  }
+}
+
+/**
+ * 将数据转化为sql可以存储的json
+ * @param jsonVal 目标json值
+ * @returns 返回数据库能够存储的值
+ */
+export function sql_stringify_json(jsonVal: object) {
+  const config = get_config()
+  if (config.sql.client === 'sqlite') {
+    return JSON.stringify(jsonVal)
+  } else {
+    return jsonVal
+  }
 }

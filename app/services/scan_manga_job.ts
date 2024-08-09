@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-29 15:44:04
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-05 00:29:25
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-09 17:54:35
  * @FilePath: \smanga-adonis\app\services\scan_manga_job.ts
  */
 import * as fs from 'fs'
@@ -33,10 +33,12 @@ export default async function handle({
   let mangaRecord: any = null
   let chapterRecord: any = null
   let nonNumericChapterCounter: number | null = null
+  console.log('scan manga job start', pathId);
+  
   // 更新路径扫描时间
-  await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } })
+  await prisma.path.updateMany({ where: { pathId }, data: { lastScanTime: new Date() } })
   // 更新扫描记录-进行中
-  await prisma.scan.update({
+  await prisma.scan.updateMany({
     where: { pathId },
     data: {
       scanStatus: 'scaning',
@@ -203,7 +205,7 @@ export default async function handle({
 
   // 更新扫描记录-扫描结束
   if (mangaIndex >= mangaCount - 1) {
-    prisma.scan.update({
+    prisma.scan.updateMany({
       where: { pathId },
       data: {
         scanStatus: 'completed',
