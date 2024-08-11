@@ -27,6 +27,7 @@ const MangaTagController = () => import('#controllers/manga_tags_controller')
 const ChartsController = () => import('#controllers/charts_controller')
 const SearchesController = () => import('#controllers/searches_controller')
 const ConfigsController = () => import('#controllers/configs_controller')
+const TestsController = () => import('#controllers/tests_controller')
 
 router.get('/', async () => {
   return {
@@ -37,6 +38,7 @@ router.get('/', async () => {
 router.get('/test', async ({ request }) => {
   request
 })
+router.get('/test1', [TestsController, 'index'])
 
 router.any('/image', [ImagesController, 'index'])
 

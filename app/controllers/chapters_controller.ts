@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 14:05:51
+ * @LastEditTime: 2024-08-11 21:02:58
  * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -13,7 +13,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { unzipFile } from '../utils/unzip.js'
 import { path_compress, order_params } from '../utils/index.js'
-import { TaskPriority } from '#type/index.js'
+import { TaskPriority } from '#type/index'
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
     const { mangaId, page, pageSize, order } = request.only([
@@ -40,7 +40,7 @@ export default class ChaptersController {
         ...(mangaId && {
           mangaId: mangaId,
         }),
-        deleteFalg: 0,
+        deleteFlag: 0,
       },
       orderBy: { ...(order && order_params(order)) },
     }
@@ -66,7 +66,7 @@ export default class ChaptersController {
         ...(mangaId && {
           mangaId: mangaId,
         }),
-        deleteFalg: 0,
+        deleteFlag: 0,
       },
       orderBy: { ...(order && order_params(order)) },
     }

@@ -20,7 +20,7 @@
     "#mails/*": "./app/mails/*.js",
     "#services/*": "./app/services/*.js",
     "#utils/*": "./app/utils/*.js",
-    "#types/*": "./app/types/*.js",
+    "#type/*": "./app/type/*.js",
     "#interfaces/*": "./app/interfaces/*.js",
     "#listeners/*": "./app/listeners/*.js",
     "#events/*": "./app/events/*.js",
