@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-08 22:47:03
+ * @LastEditTime: 2024-08-11 14:05:51
  * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -11,9 +11,9 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
-// @ts-ignore
-import { unzipFile } from '../utils/unzip.cjs'
+import { unzipFile } from '../utils/unzip.js'
 import { path_compress, order_params } from '../utils/index.js'
+import { TaskPriority } from '#type/index.js'
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
     const { mangaId, page, pageSize, order } = request.only([
@@ -40,6 +40,7 @@ export default class ChaptersController {
         ...(mangaId && {
           mangaId: mangaId,
         }),
+        deleteFalg: 0,
       },
       orderBy: { ...(order && order_params(order)) },
     }
@@ -65,6 +66,7 @@ export default class ChaptersController {
         ...(mangaId && {
           mangaId: mangaId,
         }),
+        deleteFalg: 0,
       },
       orderBy: { ...(order && order_params(order)) },
     }
@@ -89,7 +91,7 @@ export default class ChaptersController {
     return response.json(showResponse)
   }
 
-  public async first({ params, request, response }: HttpContext) {
+  public async first({ request, response }: HttpContext) {
     let { mangaId, order } = request.only(['mangaId', 'order'])
     const chapter = await prisma.chapter.findFirst({
       where: { mangaId },
@@ -206,7 +208,15 @@ export default class ChaptersController {
 
   public async destroy({ params, response }: HttpContext) {
     let { chapterId } = params
-    const chapter = await prisma.chapter.delete({ where: { chapterId } })
+    const chapter = await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 1 } })
+    await prisma.task.create({
+      data: {
+        taskName: `delete_chapter_${chapter.chapterId}`,
+        command: 'deleteChapter',
+        priority: TaskPriority.deleteManga,
+        args: JSON.stringify({ chapterId: chapter.chapterId }),
+      },
+    })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapter })
     return response.json(destroyResponse)
   }

@@ -2,14 +2,12 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-08 21:44:01
+ * @LastEditTime: 2024-08-10 02:18:43
  * @FilePath: \smanga-adonis\app\controllers\collects_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
-import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
-import { order_params } from '../utils/index.js'
 
 export default class CollectsController {
   public async index({ response }: HttpContext) {
@@ -23,9 +21,9 @@ export default class CollectsController {
     return response.json(listResponse)
   }
 
-  public async mangas({ request, response }: HttpContextWithUserId) {
-    const { userId } = request
-    const { page, pageSize, order } = request.only(['page', 'pageSize', 'order'])
+  public async mangas({ request, response }: HttpContext) {
+    const { userId } = request as any
+    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
     const queryParams = {
       where: { userId, collectType: 'manga' },
       include: { manga: true },
@@ -48,9 +46,9 @@ export default class CollectsController {
     return response.json(listResponse)
   }
 
-  public async chapters({ request, response }: HttpContextWithUserId) {
-    const { userId } = request
-    const { page, pageSize, order } = request.only(['page', 'pageSize', 'order'])
+  public async chapters({ request, response }: HttpContext) {
+    const { userId } = request as any
+    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
     const quertParams = {
       where: { userId, collectType: 'chapter' },
       include: { chapter: true },
@@ -73,8 +71,8 @@ export default class CollectsController {
     return response.json(listResponse)
   }
 
-  public async collect_manga({ request, response }: HttpContextWithUserId) {
-    const { userId } = request
+  public async collect_manga({ request, response }: HttpContext) {
+    const { userId } = request as any
     const { mangaId, mangaName, mediaId } = request.only([
       'mangaId',
       'mangaName',
@@ -87,7 +85,7 @@ export default class CollectsController {
     })
 
     if (collect) {
-      const destroy = await prisma.collect.delete({ where: { collectId: collect.collectId } })
+      await prisma.collect.delete({ where: { collectId: collect.collectId } })
       const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: false })
       return response.json(destroyResponse)
     } else {
@@ -106,8 +104,8 @@ export default class CollectsController {
     }
   }
 
-  public async collect_chapter({ request, response }: HttpContextWithUserId) {
-    const { userId } = request
+  public async collect_chapter({ request, response }: HttpContext) {
+    const { userId } = request as any
     const { chapterId, chapterName, mediaId, mangaId, mangaName } = request.only([
       'chapterId',
       'chapterName',
@@ -122,7 +120,6 @@ export default class CollectsController {
     })
 
     if (collect) {
-      const destroy = await prisma.collect.delete({ where: { collectId: collect.collectId } })
       const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: false })
       return response.json(destroyResponse)
     } else {

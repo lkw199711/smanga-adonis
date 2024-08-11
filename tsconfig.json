@@ -1,6 +1,11 @@
 {
   "extends": "@adonisjs/tsconfig/tsconfig.app.json",
   "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "rootDir": "./",
     "outDir": "./build",
     "baseUrl": "./",
@@ -11,11 +16,8 @@
       "#utils/*": [
         "./app/utils/*"
       ],
-      "#if/*": [
+      "#interfaces/*": [
         "./app/interfaces/*"
-      ],
-      "#iii/*": [
-        "./app/iii/*"
       ]
     },
     "typeRoots": [
@@ -23,17 +25,6 @@
       "./types"
     ]
   },
-  "include": [
-    "start/**/*.ts",
-    "app/type/**/*.ts",
-    "contracts/**/*.ts",
-    "app/**/*.ts",
-    "database/**/*.ts",
-    "resources/**/*.ts",
-    "ace/**/*.ts",
-    "adonis-typings/**/*.ts",
-    "app/utils/unzip.cjs"
-  ],
   "exclude": [
     "node_modules",
     "build",
@@ -42,8 +33,6 @@
     "public",
     "resources",
     "docs",
-    "start",
-    "ace",
     "adonis-typings",
     "**/*.spec.ts",
   ]

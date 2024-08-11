@@ -1,9 +1,10 @@
 enum TaskPriority {
-  delete = 1,
-  scan = 2,
-  compress = 3,
-  default = 10,
-  scan_manga = 100,
+  delete = 100000,
+  deleteManga = 110000,
+  scan = 200000,
+  scanManga = 210000,
+  compress = 300000,
+  default = 900000,
 }
 
 export { TaskPriority }

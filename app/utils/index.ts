@@ -1,27 +1,28 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 14:13:00
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-09 10:59:09
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-11 12:08:05
  * @FilePath: \smanga-adonis\app\utils\index.ts
  */
 import * as os from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
+// import { SortOrder } from
 const platform = os.platform()
 // 获取当前运行路径作为根目录
 const rootDir = process.cwd()
 
-function get_os() {
-  const platform = os.platform()
-  if (platform === 'win32') {
-    return 'Windows'
-  } else if (platform === 'linux') {
-    return 'Linux'
-  } else {
-    return 'Other'
-  }
-}
+// function get_os() {
+//   const platform = os.platform()
+//   if (platform === 'win32') {
+//     return 'Windows'
+//   } else if (platform === 'linux') {
+//     return 'Linux'
+//   } else {
+//     return 'Other'
+//   }
+// }
 /**
  * 判断图片是否为图片格式
  * @param {string} file 文件路径
@@ -45,6 +46,22 @@ export function path_poster() {
   }
 }
 
+export function bookmark_path() {
+  if (platform === 'win32') {
+    return path.join(rootDir, 'bookmark')
+  } else {
+    return ''
+  }
+}
+
+export function path_cache() {
+  if (platform === 'win32') {
+    return path.join(rootDir, 'cache')
+  } else {
+    return ''
+  }
+}
+
 export function path_compress() {
   if (platform === 'win32') {
     return path.join(rootDir, 'compress')
@@ -59,7 +76,7 @@ export function get_config() {
   return config
 }
 
-export function order_params(order: string = 'asc', model: string = 'chapter') {
+export function order_params(order: string = 'asc', model: string = 'chapter'): object {
   const sort = /desc/i.test(order) ? 'desc' : 'asc'
 
   if (/id/.test(order)) {
@@ -118,5 +135,13 @@ export function sql_stringify_json(jsonVal: object) {
     return JSON.stringify(jsonVal)
   } else {
     return jsonVal
+  }
+}
+
+export function s_delete(file: string) {
+  try {
+    fs.rmSync(file, { force: true, recursive: true })
+  } catch (err) {
+    console.error(err.message)
   }
 }

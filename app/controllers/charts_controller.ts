@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
 import { SResponse } from '../interfaces/response.js'
 
@@ -112,10 +111,9 @@ export default class ChartsController {
     )
   }
 
-  public async frequency({ request, response }: HttpContextWithUserId) {
-    const { slice = 5 } = request.only(['slice'])
-    const userId = request.userId
-    
+  public async frequency({ request, response }: HttpContext) {
+    const { userId } = request as any
+
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - 6) // 从7天前的日期开始
     startDate.setHours(0, 0, 0, 0) // 设置时间为当天开始
@@ -133,7 +131,7 @@ export default class ChartsController {
     })
 
     const days = 7
-    const dateMap = {}
+    const dateMap: any = {}
 
     // 初始化近7天的日期，并将浏览量设置为0
     for (let i = 0; i < days; i++) {
@@ -152,7 +150,9 @@ export default class ChartsController {
     })
 
     // 将结果转换为数组并按日期排序
-    const result = Object.values(dateMap).sort((a, b) => new Date(a.date) - new Date(b.date))
+    const result = Object.values(dateMap).sort(
+      (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    )
 
     return response.json(new SResponse({ code: 0, data: result, message: '' }))
   }

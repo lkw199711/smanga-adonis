@@ -1,3 +1,10 @@
+/*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-08-08 21:29:33
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-10 01:20:31
+ * @FilePath: \smanga-adonis\app\controllers\searches_controller.ts
+ */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse } from '../interfaces/response.js'
@@ -5,7 +12,7 @@ import { order_params } from '../utils/index.js'
 
 export default class SearchesController {
   public async mangas({ request, response }: HttpContext) {
-    const { searchText, page, pageSize, searchType, order } = request.only([
+    const { searchText, page, pageSize, order } = request.only([
       'searchText',
       'searchType',
       'page',

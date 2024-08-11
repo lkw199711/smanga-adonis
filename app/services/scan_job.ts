@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-23 18:34:07
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-09 17:51:29
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-11 03:28:41
  * @FilePath: \smanga-adonis\app\services\scan_job.ts
  */
 import prisma from '#start/prisma'
@@ -10,15 +10,6 @@ import { TaskPriority } from '../type/index.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { sql_stringify_json } from '../utils/index.js'
-import { exit } from 'process'
-
-type scanArgs = {
-  pathId: number
-  pathContent: string
-  directoryFormat: number
-  include: string
-  exclude: string
-}
 
 type mangaItem = {
   mangaPath: string
@@ -33,9 +24,7 @@ let pathInfo: any = null
 let mediaInfo: any = null
 
 export default async function handle({ pathId }: any) {
-  console.log('scan job start', pathId);
-  // exit()
-  pathInfo = await prisma.path.findFirst({
+  pathInfo = await prisma.path.findUnique({
     where: { pathId },
     include: {
       media: true,
@@ -53,13 +42,9 @@ export default async function handle({ pathId }: any) {
     // 存在扫面任务 终止现在扫描
     return
   }
-  console.log('scan job start', pathId)
-  if (!pathId) {
-    console.log('pathId is required');
-    return;
-  }
+
   // 记录最新扫描时间
-  await prisma.path.updateMany({ where: { pathId }, data: { lastScanTime: new Date() } })
+  await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } })
   await prisma.scan.create({
     data: {
       pathId,
@@ -108,7 +93,7 @@ export default async function handle({ pathId }: any) {
         data: {
           taskName: `scan_${pathId}`,
           // 使任务按顺序执行
-          priority: TaskPriority.scan_manga + index,
+          priority: TaskPriority.scanManga + index,
           command: 'taskScanManga',
           args,
         },
@@ -131,42 +116,58 @@ function scan_path(dir: string) {
     return item !== '.' && item !== '..'
   })
 
-  // 根据正则规则过滤出漫画目录
-  folderList = folderList.filter((item) => {
+  mangaList = folderList.map((item: any) => {
     const itemPath = path.join(dir, item)
 
+    let mangaType = 'img'
     // 检查是否为文件夹
     if (!fs.statSync(itemPath).isDirectory()) {
+      // 获取文件扩展名
+      const ext = path.extname(item).toLowerCase()
+      if (['.zip', '.cbz', 'cbr'].includes(ext)) {
+        mangaType = 'zip'
+      } else if (ext === '.rar') {
+        mangaType = 'rar'
+      } else if (ext === '7z') {
+        mangaType = '7z'
+      } else if (ext === 'pdf') {
+        mangaType = 'pdf'
+      } else {
+        mangaType = 'other'
+      }
+    }
+
+    return {
+      mangaPath: itemPath,
+      mangaName: item,
+      mangaType,
+      parentPath: dir,
+    }
+  })
+
+  // 根据正则规则过滤出漫画目录
+  mangaList = mangaList.filter((item) => {
+    // 排除元数据文件夹
+    if (/smanga-info/.test(item.mangaName)) {
       return false
     }
 
-    // 排除元数据文件夹
-    if (/smanga-info/.test(itemPath)) {
+    // 非漫画文件夹
+    if (item.mangaType === 'other') {
       return false
     }
 
     // 包含匹配
     if (pathInfo.include) {
-      return new RegExp(pathInfo.include).test(item)
+      return new RegExp(pathInfo.include).test(item.mangaName)
     }
 
     // 排除匹配
     if (pathInfo.exclude) {
-      return !new RegExp(pathInfo.exclude).test(item)
+      return !new RegExp(pathInfo.exclude).test(item.mangaName)
     }
 
     return true
-  })
-
-  mangaList = folderList.map((item: any) => {
-    const itemPath = path.join(dir, item)
-
-    return {
-      mangaPath: itemPath,
-      mangaName: item,
-      mangaType: 'img',
-      parentPath: dir,
-    }
   })
 
   return mangaList

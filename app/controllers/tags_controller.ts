@@ -1,12 +1,11 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:22:15
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-08 10:15:44
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-10 02:22:54
  * @FilePath: \smanga-adonis\app\controllers\tags_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
-import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 
@@ -67,10 +66,11 @@ export default class TagsController {
     return response.json(showResponse)
   }
 
-  public async create({ request, response }: HttpContextWithUserId) {
+  public async create({ request, response }: HttpContext) {
+    const { userId } = request as any
     const insertData = request.only(['tagName', 'description', 'tagColor'])
     const tag = await prisma.tag.create({
-      data: { ...insertData, userId: request.userId },
+      data: { ...insertData, userId },
     })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: tag })
     return response.json(saveResponse)
@@ -118,9 +118,8 @@ export default class TagsController {
     return response.json(listResponse)
   }
 
-  public async tags_manga({ params, request, response }: HttpContext) {
-    const { tagIds, page, pageSize, order } = request.only(['tagIds', 'page', 'pageSize', 'order'])
-    console.log(tagIds)
+  public async tags_manga({ request, response }: HttpContext) {
+    const { tagIds, page, pageSize } = request.only(['tagIds', 'page', 'pageSize', 'order'])
 
     // const tagArr = tagIds.split(',').map((item: string) => Number(item))
     const mangaTags = await prisma.mangaTag.findMany({
@@ -137,8 +136,8 @@ export default class TagsController {
     })
 
     // 根据 mangaId 进行分组，确保每个 manga 只出现一次
-    const uniqueMangaTags = Object.values(
-      mangaTags.reduce((acc, curr) => {
+    Object.values(
+      mangaTags.reduce((acc: any, curr) => {
         // 如果 mangaId 不存在于分组对象中，添加它
         if (!acc[curr.mangaId]) {
           acc[curr.mangaId] = curr

@@ -2,6 +2,8 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
+import { TaskPriority } from '../type/index.js'
+import { sql_stringify_json } from '../utils/index.js'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
@@ -19,7 +21,7 @@ export default class MangaController {
     } else {
       listResponse = await this.no_paginate(mediaId)
     }
-    
+
     return response.json(listResponse)
   }
 
@@ -28,6 +30,7 @@ export default class MangaController {
     const queryParams = {
       where: {
         ...(mediaId && { mediaId }),
+        deleteFlag: 0,
       },
     }
 
@@ -50,6 +53,7 @@ export default class MangaController {
       }),
       where: {
         ...(mediaId && { mediaId }),
+        deleteFlag: 0,
       },
     }
 
@@ -118,8 +122,15 @@ export default class MangaController {
 
   public async destroy({ params, response }: HttpContext) {
     let { mangaId } = params
-    mangaId = Number(mangaId)
-    const manga = await prisma.manga.delete({ where: { mangaId } })
+    const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
+    await prisma.task.create({
+      data: {
+        taskName: `delete_manga_${manga.mangaId}`,
+        command: 'deleteManga',
+        priority: TaskPriority.deleteManga,
+        args: sql_stringify_json({ mangaId: manga.mangaId }) as string,
+      },
+    })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: manga })
     return response.json(destroyResponse)
   }

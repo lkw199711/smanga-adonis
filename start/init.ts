@@ -2,16 +2,19 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-03 15:58:58
+ * @LastEditTime: 2024-08-11 14:46:13
  * @FilePath: \smanga-adonis\start\init.ts
  */
-import { join } from 'path'
-import { promises as fs } from 'fs'
+import { join } from 'node:path'
+import { promises as fs } from 'node:fs'
+import * as fs1 from 'fs'
+import prisma from './prisma.js'
+// import * as path from 'path'
 
 // 默认配置
 const defaultConfig = {
   sql: {
-    client: 'mysql',
+    client: 'sqlite',
     host: '127.0.0.1',
     port: 3306,
     username: 'smanga',
@@ -47,7 +50,7 @@ export default async function boot() {
   const rootDir = process.cwd()
 
   // 需要检查的文件夹
-  const folders = ['compress', 'config', 'db', 'logs', 'poster', 'bookmark']
+  const folders = ['compress', 'config', 'db', 'logs', 'poster', 'bookmark', 'cache']
 
   // 检查并创建文件夹
   for (const folder of folders) {
@@ -68,5 +71,24 @@ export default async function boot() {
   } catch (error) {
     await fs.writeFile(configFile, JSON.stringify(defaultConfig, null, 2))
     console.log(`Created config file: ${configFile}`)
+  }
+
+  // 删除缓存文件
+  const cachePath = join(rootDir, 'cache')
+  if (fs1.existsSync(cachePath)) {
+    fs1.readdirSync(cachePath).forEach((file: any) => {
+      const filePath = join(cachePath, file)
+      if (fs1.statSync(filePath).isFile()) {
+        fs1.unlinkSync(filePath)
+      }
+    })
+  }
+
+  // 清理已删除数据
+  try {
+    await prisma.media.deleteMany({ where: { deleteFlag: 1 } })
+    await prisma.path.deleteMany({ where: { deleteFlag: 1 } })
+  } catch (e) {
+    console.log(e)
   }
 }

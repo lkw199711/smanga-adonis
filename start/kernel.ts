@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-06 23:21:38
+ * @LastEditTime: 2024-08-10 01:30:33
  * @FilePath: \smanga-adonis\start\kernel.ts
  */
 /*
@@ -47,14 +47,6 @@ router.use([
   () => import('#middleware/params_middleware'),
   () => import('#middleware/auth_middleware'),
 ])
-
-/**
- * Named middleware collection must be explicitly assigned to
- * the routes or the routes group.
- */
-export const middleware = router.named({
-  auth: () => import('#middleware/auth_middleware'),
-})
 
 /*
 |--------------------------------------------------------------------------

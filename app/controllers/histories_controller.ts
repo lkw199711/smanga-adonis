@@ -2,19 +2,18 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-07 01:04:12
+ * @LastEditTime: 2024-08-10 02:20:54
  * @FilePath: \smanga-adonis\app\controllers\histories_controller.ts
  */
 
 import type { HttpContext } from '@adonisjs/core/http'
-import type { HttpContextWithUserId } from '#type/http.js'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
 
 export default class HistoriesController {
-  public async index({ request, response }: HttpContextWithUserId) {
+  public async index({ request, response }: HttpContext) {
+    const { userId } = request as any
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
-    const userId = request.userId
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -48,7 +47,7 @@ export default class HistoriesController {
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list: list.map((item) => {
+      list: list.map((item: any) => {
         return {
           ...item,
           ...item.manga,
@@ -61,7 +60,8 @@ export default class HistoriesController {
     return response.json(listResponse)
   }
 
-  public async create({ request, response }: HttpContextWithUserId) {
+  public async create({ request, response }: HttpContext) {
+    const {userId} = request as any
     const { mediaId, mangaId, chapterId, chapterName, mangaName } = request.only([
       'mediaId',
       'mangaId',
@@ -69,9 +69,7 @@ export default class HistoriesController {
       'chapterName',
       'mangaName',
     ])
-
-    const userId = request.userId
-
+    
     const history = await prisma.history.create({
       data: {
         manga: {

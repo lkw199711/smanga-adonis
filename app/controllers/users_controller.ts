@@ -1,15 +1,14 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 20:33:01
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-09 16:16:13
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-10 02:23:34
  * @FilePath: \smanga-adonis\app\controllers\users_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
-import { HttpContextWithUserId } from '#type/http.js'
 import { sql_parse_json } from '../utils/index.js'
 
 export default class UsersController {
@@ -82,9 +81,9 @@ export default class UsersController {
     return response.json(destroyResponse)
   }
 
-  public async config({ request, response }: HttpContextWithUserId) {
+  public async config({ request, response }: HttpContext) {
     // const { userConfig } = request.only(['userId', 'userConfig'])
-    const userId = request.userId
+    const { userId } = request as any
     const user = await prisma.user.findFirst({ where: { userId } })
 
     if (!user) {

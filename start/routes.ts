@@ -1,11 +1,4 @@
 /*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-06-20 19:41:31
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-08 10:07:31
- * @FilePath: \smanga-adonis\start\routes.ts
- */
-/*
 |--------------------------------------------------------------------------
 | Routes file
 |--------------------------------------------------------------------------
@@ -19,7 +12,6 @@ const UsersController = () => import('#controllers/users_controller')
 const CollectsController = () => import('#controllers/collects_controller')
 const CompressesController = () => import('#controllers/compresses_controller')
 const HistoriesController = () => import('#controllers/histories_controller')
-const LastreadsController = () => import('#controllers/lastreads_controller')
 const LatestsController = () => import('#controllers/latests_controller')
 const LogsController = () => import('#controllers/logs_controller')
 const LoginController = () => import('#controllers/login_controller')
@@ -36,8 +28,6 @@ const ChartsController = () => import('#controllers/charts_controller')
 const SearchesController = () => import('#controllers/searches_controller')
 const ConfigsController = () => import('#controllers/configs_controller')
 
-import prisma from '#start/prisma'
-
 router.get('/', async () => {
   return {
     hello: 'world',
@@ -45,14 +35,7 @@ router.get('/', async () => {
 })
 
 router.get('/test', async ({ request }) => {
-  const headers = request.headers()
-  const pathInfo = await prisma.path.findMany({
-    where: { pathId: 1 },
-    include: {
-      media: true,
-    },
-  })
-  return headers
+  request
 })
 
 router.any('/image', [ImagesController, 'index'])
@@ -90,13 +73,6 @@ router.get('/history/:historyId', [HistoriesController, 'show'])
 router.post('/history', [HistoriesController, 'create'])
 router.put('/history/:historyId', [HistoriesController, 'update'])
 router.delete('/history/:historyId', [HistoriesController, 'destroy'])
-
-// 最后阅读记录 lastread
-router.get('/lastread', [LastreadsController, 'index'])
-router.get('/lastread/:lastReadId', [LastreadsController, 'show'])
-router.post('/lastread', [LastreadsController, 'create'])
-router.put('/lastread/:lastReadId', [LastreadsController, 'update'])
-router.delete('/lastread/:lastReadId', [LastreadsController, 'destroy'])
 
 // 最后阅读记录 latest
 router.get('/latest', [LatestsController, 'index'])

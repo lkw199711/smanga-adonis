@@ -2,13 +2,13 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:42:14
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-07 00:32:25
+ * @LastEditTime: 2024-08-10 01:30:49
  * @FilePath: \smanga-adonis\app\middleware\auth_middleware.ts
  */
 import prisma from '#start/prisma'
 import type { NextFn } from '@adonisjs/core/types/http'
 import { SResponse } from '../interfaces/response.js'
-import type { HttpContextWithUserId } from '#type/http.js'
+import type { HttpContextWithUserId } from '../type/http.js'
 
 /**
  * Auth middleware is used authenticate HTTP requests and deny

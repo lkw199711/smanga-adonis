@@ -1,21 +1,18 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-29 15:44:04
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-09 17:54:35
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-11 03:19:40
  * @FilePath: \smanga-adonis\app\services\scan_manga_job.ts
  */
 import * as fs from 'fs'
 import * as path from 'path'
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
-// @ts-ignore
-import { path_poster, is_img, get_config } from '../utils/index.js'
-// @ts-ignore
-import { S } from '../utils/convertText.cjs'
-// @ts-ignore
-import compressImageToSize from '../utils/sharp.js'
-import { exit } from 'process'
+import { path_poster, path_cache, is_img, get_config } from '../utils/index.js'
+import { S } from '../utils/convertText.js'
+import { compressImageToSize } from '../utils/sharp.js'
+import { extractFirstImageSyncOrder } from '../utils/unzip.js'
 
 export default async function handle({
   pathId,
@@ -23,22 +20,19 @@ export default async function handle({
   mediaInfo,
   mangaPath,
   mangaName,
-  mangaType,
   parentPath,
   mangaCount,
   mangaIndex,
 }: any) {
-  let mangaId: number | null = null
-  let chapterId: number | null = null
   let mangaRecord: any = null
   let chapterRecord: any = null
   let nonNumericChapterCounter: number | null = null
-  console.log('scan manga job start', pathId);
-  
+  const cachePath = path_cache()
+
   // 更新路径扫描时间
-  await prisma.path.updateMany({ where: { pathId }, data: { lastScanTime: new Date() } })
+  await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } })
   // 更新扫描记录-进行中
-  await prisma.scan.updateMany({
+  await prisma.scan.update({
     where: { pathId },
     data: {
       scanStatus: 'scaning',
@@ -95,7 +89,11 @@ export default async function handle({
     mangaRecord = await prisma.manga.create({ data: mangaInsert })
 
     // 扫描元数据
-    meta_scan()
+    await meta_scan()
+
+    if (!mangaRecord.mangaCover) {
+      await manga_poster(mangaPath)
+    }
 
     const chapterInsert: Prisma.chapterCreateInput = {
       manga: {
@@ -117,6 +115,15 @@ export default async function handle({
     }
 
     chapterRecord = await prisma.chapter.create({ data: chapterInsert })
+    if (!chapterRecord) {
+      console.log('章节插入失败', mangaName)
+      return
+    }
+
+    // 获取封面图
+    if (!chapterRecord.chapterCover) {
+      await chapter_poster(mangaPath)
+    }
   } else {
     /**
      * 当漫画类型为连载漫画
@@ -136,7 +143,7 @@ export default async function handle({
       mangaInsert.chapterCount = chapterList.length
       mangaRecord = await prisma.manga.create({ data: mangaInsert })
       // 扫描元数据
-      meta_scan()
+      await meta_scan()
     }
 
     if (!mangaRecord.mangaCover) {
@@ -181,6 +188,10 @@ export default async function handle({
         }
 
         chapterRecord = await prisma.chapter.create({ data: chapterInsert })
+        if (!chapterRecord) {
+          console.log('章节插入失败', item.chapterName)
+          return
+        }
 
         // 获取封面图
         if (!chapterRecord.chapterCover) {
@@ -201,11 +212,17 @@ export default async function handle({
     }
   }
 
-  // 其他元数据操作
+  // 删除缓存文件
+  fs.readdirSync(cachePath).forEach((file) => {
+    const filePath = path.join(cachePath, file)
+    if (fs.statSync(filePath).isFile()) {
+      fs.unlinkSync(filePath)
+    }
+  })
 
   // 更新扫描记录-扫描结束
   if (mangaIndex >= mangaCount - 1) {
-    prisma.scan.updateMany({
+    prisma.scan.update({
       where: { pathId },
       data: {
         scanStatus: 'completed',
@@ -322,8 +339,6 @@ export default async function handle({
               },
             })
             .catch((e) => {
-              console.log(mangaRecord.mangaId, tagRecord.tagId)
-
               console.log('标签插入失败', e)
             })
         }
@@ -447,17 +462,21 @@ export default async function handle({
     }
 
     // 都没有找到返回空
-    if (!sourcePoster && mangaType === 'img') {
+    if (!sourcePoster && chapterRecord.chapterType === 'img') {
       sourcePoster = first_image(dir)
     }
 
-    if (!sourcePoster && ['zip', 'rar', '7z'].includes(mangaType)) {
+    if (!sourcePoster && ['zip', 'rar', '7z'].includes(chapterRecord.chapterType)) {
       // 解压缩获取封面
+      const cachePoster = `${cachePath}/smanga_cache_${chapterRecord.chapterId}.jpg`
+      const hasPosterInZip = await extractFirstImageSyncOrder(dir, cachePoster)
+      if (hasPosterInZip) {
+        sourcePoster = cachePoster
+      }
     }
 
     if (sourcePoster) {
-      // 压缩图片至指定大小
-      await compressImageToSize(sourcePoster, posterName, maxSizeKB)
+      // 写入漫画与章节封面
       await prisma.chapter.update({
         where: { chapterId: chapterRecord.chapterId },
         data: { chapterCover: posterName },
@@ -468,6 +487,8 @@ export default async function handle({
           data: { mangaCover: posterName },
         })
       }
+      // 压缩图片至指定大小
+      await compressImageToSize(sourcePoster, posterName, maxSizeKB)
       return posterName
     } else {
       return ''

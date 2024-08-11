@@ -2,13 +2,14 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-04 01:23:38
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-04 01:23:50
+ * @LastEditTime: 2024-08-10 12:20:06
  * @FilePath: \smanga-adonis\app\utils\un7z.cjs
  */
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
 const { extractFull } = require('node-7z')
-const path = require('path')
 
-function extract7z(filePath, outputDir) {
+function extract7z(filePath: string, outputDir: string) {
   const myStream = extractFull(filePath, outputDir)
 
   myStream.on('end', () => console.log('Extraction complete'))
@@ -17,4 +18,4 @@ function extract7z(filePath, outputDir) {
 
 // extract7z('path/to/file.7z', 'output/directory')
 
-module.exports = {extract7z}
+export { extract7z }

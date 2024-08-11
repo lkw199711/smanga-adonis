@@ -1,4 +1,11 @@
 /*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-08-03 05:28:15
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-10 00:55:53
+ * @FilePath: \smanga-adonis\start\env.ts
+ */
+/*
 |--------------------------------------------------------------------------
 | Environment variables service
 |--------------------------------------------------------------------------
@@ -27,5 +34,5 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_PORT: Env.schema.number(),
   DB_USER: Env.schema.string(),
   DB_PASSWORD: Env.schema.string.optional(),
-  DB_DATABASE: Env.schema.string()
+  DB_DATABASE: Env.schema.string(),
 })

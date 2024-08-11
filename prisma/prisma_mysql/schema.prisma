@@ -43,6 +43,7 @@ model chapter {
   chapterType   String     @default("image") @db.VarChar(191)
   chapterCover  String?    @db.VarChar(191)
   chapterNumber String?    @db.VarChar(191)
+  deleteFlag    Int        @default(0)
   bookmarks     bookmark[]
   compress      compress[]
   history       history[]
@@ -175,6 +176,7 @@ model manga {
   author       String?    @db.VarChar(191)
   describe     String?    @db.VarChar(191)
   publishDate  DateTime?  @db.Date
+  deleteFlag   Int        @default(0)
   createTime   DateTime   @default(now()) @db.DateTime(6)
   updateTime   DateTime   @default(now()) @db.DateTime(6)
   latests      latest[]
@@ -214,6 +216,7 @@ model media {
   browseType      String           @default("flow") @db.VarChar(191)
   direction       Int              @default(1) @db.UnsignedInt
   removeFirst     Int              @default(0) @db.UnsignedInt
+  deleteFlag      Int              @default(0)
   createTime      DateTime         @default(now()) @db.DateTime(6)
   updateTime      DateTime         @default(now()) @db.DateTime(6)
   paths           path[]
@@ -259,6 +262,7 @@ model path {
   include      String?   @db.VarChar(191)
   exclude      String?   @db.VarChar(191)
   lastScanTime DateTime? @db.DateTime(0)
+  deleteFlag   Int       @default(0)
   createTime   DateTime  @default(now()) @db.DateTime(6)
   updateTime   DateTime  @default(now()) @db.DateTime(6)
   pathContent  String    @db.VarChar(191)

@@ -2,17 +2,16 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-08 21:49:39
+ * @LastEditTime: 2024-08-10 02:22:11
  * @FilePath: \smanga-adonis\app\controllers\latests_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
-import type { HttpContextWithUserId } from '#type/http.js'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 
 export default class LatestsController {
-  public async index({ request, response }: HttpContextWithUserId) {
-    const userId = request.userId
+  public async index({ request, response }: HttpContext) {
+    const {userId} = request as any
     const list = await prisma.latest.findMany({
       where: { userId },
       include: { manga: true },
@@ -41,14 +40,14 @@ export default class LatestsController {
     return response.json(showResponse)
   }
 
-  public async create({ request, response }: HttpContextWithUserId) {
+  public async create({ request, response }: HttpContext) {
+    const {userId} = request as any
     const { page, chapterId, mangaId, finish } = request.only([
       'page',
       'chapterId',
       'mangaId',
       'finish',
     ])
-    const userId = request.userId
     const latest = await prisma.latest.upsert({
       where: {
         mangaId_userId: {

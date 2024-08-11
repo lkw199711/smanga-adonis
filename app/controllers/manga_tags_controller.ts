@@ -1,7 +1,13 @@
+/*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-08-03 05:28:15
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-08-10 01:14:57
+ * @FilePath: \smanga-adonis\app\controllers\manga_tags_controller.ts
+ */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
-import { Prisma } from '@prisma/client'
 
 export default class MangaTagsController {
   public async index({ response }: HttpContext) {

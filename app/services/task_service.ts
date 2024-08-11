@@ -2,7 +2,13 @@ import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import scan_job from './scan_job.js'
 import scan_manga_job from './scan_manga_job.js'
+import delete_chapter_job from './delete_chapter_job.js'
+import delete_manga_job from './delete_manga_job.js'
+import delete_path_job from './delete_path_job.js'
+import delete_media_job from './delete_media_job.js'
 import { sql_parse_json } from '../utils/index.js'
+import { Mutex } from 'async-mutex'
+const mutex = new Mutex()
 
 type TaskType = Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput
 
@@ -31,11 +37,14 @@ export default class TaskProcess {
       return
     }
 
+    const release = await mutex.acquire()
+
     // 上锁
     this.sqlLock = true
 
     const inTaskCount = await prisma.task.count({ where: { status: 'in-progress' } })
     if (inTaskCount >= this.maxConcurrentTasks) {
+      release()
       this.sqlLock = false
       return
     }
@@ -47,6 +56,7 @@ export default class TaskProcess {
     })
 
     if (!task) {
+      release()
       this.sqlLock = false
       return
     }
@@ -60,10 +70,13 @@ export default class TaskProcess {
       },
     })
 
-    await this.process(task as TaskType)
-
-    // 下锁
-    this.sqlLock = false
+    try {
+      await this.process(task as TaskType)
+    } finally {
+      release()
+      // 下锁
+      this.sqlLock = false
+    }
   }
 
   /**
@@ -73,15 +86,8 @@ export default class TaskProcess {
    */
   public async process(task: Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput) {
     try {
-      // console.log('执行任务', task.taskName, task)
-
-      if (!task.args) { return false; } else {
-        console.log('args', task.args);
-      }
-
       const argsVal = sql_parse_json(task.args as string)
-      // console.log('argsVal', argsVal);
-      
+
       switch (task.command) {
         case 'taskScan':
           //扫描任务调用
@@ -93,6 +99,26 @@ export default class TaskProcess {
           //扫描漫画任务调用
           await scan_manga_job(argsVal)
           break
+        case 'deleteMedia':
+          //删除媒体库
+          console.log('删除媒体库')
+          await delete_media_job(argsVal)
+          break
+        case 'deletePath':
+          //删除路径
+          console.log('删除路径')
+          await delete_path_job(argsVal)
+          break
+        case 'deleteManga':
+          //删除漫画
+          console.log('删除漫画')
+          await delete_manga_job(argsVal)
+          break
+        case 'deleteChapter':
+          //删除章节
+          console.log('删除章节')
+          await delete_chapter_job(argsVal)
+          break
         default:
           break
       }
@@ -100,7 +126,7 @@ export default class TaskProcess {
       // 更新任务状态 完成
       task.status = 'completed'
 
-      const { taskName, status, command, args, startTime, endTime, error } = task
+      const { taskName, status, command, args, startTime, endTime } = task
       const successTask = {
         taskName,
         status,
