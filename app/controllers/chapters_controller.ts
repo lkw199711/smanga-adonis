@@ -1,8 +1,8 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 21:02:58
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-12 19:15:08
  * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
 import { unzipFile } from '../utils/unzip.js'
+import { extractRar } from '../utils/unrar.js'
 import { path_compress, order_params } from '../utils/index.js'
 import { TaskPriority } from '#type/index'
 export default class ChaptersController {
@@ -164,7 +165,17 @@ export default class ChaptersController {
     })
 
     // 执行解压缩任务
-    await unzipFile(chapter.chapterPath, compressPath)
+    switch (chapter.chapterType) {
+      case 'zip':
+        await unzipFile(chapter.chapterPath, compressPath)
+        break
+      case 'rar':
+        await extractRar(chapter.chapterPath, compressPath)
+        break
+      case '7z':
+        break
+      default:
+    }
 
     // 更新解压缩任务状态
     compress = await prisma.compress.update({

@@ -36,3 +36,5 @@ poster
 smanga.config
 
 smanga.db
+sqlite.db
+sqlite.db-journal

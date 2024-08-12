@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-29 15:44:04
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 03:19:40
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-12 15:34:11
  * @FilePath: \smanga-adonis\app\services\scan_manga_job.ts
  */
 import * as fs from 'fs'
@@ -11,8 +11,9 @@ import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import { path_poster, path_cache, is_img, get_config } from '../utils/index.js'
 import { S } from '../utils/convertText.js'
-import { compressImageToSize } from '../utils/sharp.js'
-import { extractFirstImageSyncOrder } from '../utils/unzip.js'
+import { compressImageToSize } from '#utils/sharp'
+import { extractFirstImageSyncOrder } from '#utils/unzip'
+import { extractFirstImageFromRAROrder } from '#utils/unrar'
 
 export default async function handle({
   pathId,
@@ -469,7 +470,15 @@ export default async function handle({
     if (!sourcePoster && ['zip', 'rar', '7z'].includes(chapterRecord.chapterType)) {
       // 解压缩获取封面
       const cachePoster = `${cachePath}/smanga_cache_${chapterRecord.chapterId}.jpg`
-      const hasPosterInZip = await extractFirstImageSyncOrder(dir, cachePoster)
+      let hasPosterInZip = false
+      if (chapterRecord.chapterType === 'zip') {
+        hasPosterInZip = await extractFirstImageSyncOrder(dir, cachePoster)
+      } else if (chapterRecord.chapterType === 'rar') {
+        hasPosterInZip = await extractFirstImageFromRAROrder(dir, cachePoster)
+      } else if (chapterRecord.chapterType === '7z') {
+        // 7z
+      }
+
       if (hasPosterInZip) {
         sourcePoster = cachePoster
       }
