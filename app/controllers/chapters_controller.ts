@@ -15,6 +15,7 @@ import { unzipFile } from '../utils/unzip.js'
 import { extractRar } from '../utils/unrar.js'
 import { path_compress, order_params } from '../utils/index.js'
 import { TaskPriority } from '#type/index'
+import { extract7z } from '#utils/un7z'
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
     const { mangaId, page, pageSize, order } = request.only([
@@ -173,6 +174,7 @@ export default class ChaptersController {
         await extractRar(chapter.chapterPath, compressPath)
         break
       case '7z':
+        await extract7z(chapter.chapterPath, compressPath)
         break
       default:
     }

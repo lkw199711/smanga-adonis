@@ -42,6 +42,8 @@ router.get('/test1', [TestsController, 'index'])
 router.get('/test/unrar', [TestsController, 'unrar2'])
 router.get('/test/7z', [TestsController, 'un7z'])
 router.get('/test/7z1', [TestsController, 'zzz'])
+router.get('/test/7z2', [TestsController, 'zzz'])
+router.get('/test/log', [TestsController, 'log'])
 
 router.any('/image', [ImagesController, 'index'])
 

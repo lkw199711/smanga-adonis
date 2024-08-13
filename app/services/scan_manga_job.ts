@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-29 15:44:04
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-12 15:34:11
+ * @LastEditTime: 2024-08-13 19:04:38
  * @FilePath: \smanga-adonis\app\services\scan_manga_job.ts
  */
 import * as fs from 'fs'
@@ -13,7 +13,8 @@ import { path_poster, path_cache, is_img, get_config } from '../utils/index.js'
 import { S } from '../utils/convertText.js'
 import { compressImageToSize } from '#utils/sharp'
 import { extractFirstImageSyncOrder } from '#utils/unzip'
-import { extractFirstImageFromRAROrder } from '#utils/unrar'
+import { Unrar } from '#utils/unrar'
+import { Un7z } from '#utils/un7z'
 
 export default async function handle({
   pathId,
@@ -473,14 +474,22 @@ export default async function handle({
       let hasPosterInZip = false
       if (chapterRecord.chapterType === 'zip') {
         hasPosterInZip = await extractFirstImageSyncOrder(dir, cachePoster)
+        if (hasPosterInZip) {
+          sourcePoster = cachePoster
+        }
       } else if (chapterRecord.chapterType === 'rar') {
-        hasPosterInZip = await extractFirstImageFromRAROrder(dir, cachePoster)
+        const unrar = new Unrar(dir, cachePoster)
+        hasPosterInZip = await unrar.extract_first_image_order(dir, cachePoster)
+        if (hasPosterInZip) {
+          sourcePoster = cachePoster
+        }
       } else if (chapterRecord.chapterType === '7z') {
+        const un7z = new Un7z(dir, cachePoster)
+        const image = await un7z.first_image_7z(dir, cachePath)
+        if (image) {
+          sourcePoster = `${cachePath}/${image}`
+        }
         // 7z
-      }
-
-      if (hasPosterInZip) {
-        sourcePoster = cachePoster
       }
     }
 

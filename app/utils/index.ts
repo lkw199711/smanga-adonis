@@ -1,8 +1,8 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 14:13:00
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 12:08:05
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-13 16:39:29
  * @FilePath: \smanga-adonis\app\utils\index.ts
  */
 import * as os from 'os'
@@ -143,5 +143,17 @@ export function s_delete(file: string) {
     fs.rmSync(file, { force: true, recursive: true })
   } catch (err) {
     console.error(err.message)
+  }
+}
+
+export function write_log(logMessage: string) {
+  const logFile = path.join(rootDir, 'logs', 'smanga.log')
+
+  // 将日志内容同步写入文件，使用 '\n' 换行符
+  try {
+    fs.appendFileSync(logFile, logMessage + '\n')
+    console.log('日志已成功写入')
+  } catch (err) {
+    console.error('写入日志时发生错误:', err)
   }
 }

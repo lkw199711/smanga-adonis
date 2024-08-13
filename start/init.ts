@@ -1,14 +1,15 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 14:46:13
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-13 18:10:27
  * @FilePath: \smanga-adonis\start\init.ts
  */
 import { join } from 'node:path'
 import { promises as fs } from 'node:fs'
 import * as fs1 from 'fs'
 import prisma from './prisma.js'
+import { s_delete } from '#utils/index'
 // import * as path from 'path'
 
 // 默认配置
@@ -78,16 +79,14 @@ export default async function boot() {
   if (fs1.existsSync(cachePath)) {
     fs1.readdirSync(cachePath).forEach((file: any) => {
       const filePath = join(cachePath, file)
-      if (fs1.statSync(filePath).isFile()) {
-        fs1.unlinkSync(filePath)
-      }
+      s_delete(filePath)
     })
   }
 
   // 清理已删除数据
   try {
-    await prisma.media.deleteMany({ where: { deleteFlag: 1 } })
     await prisma.path.deleteMany({ where: { deleteFlag: 1 } })
+    await prisma.media.deleteMany({ where: { deleteFlag: 1 } })  
   } catch (e) {
     console.log(e)
   }

@@ -72,6 +72,9 @@ export default class TaskProcess {
 
     try {
       await this.process(task as TaskType)
+    } catch (err) {
+      console.log(err.message)
+      release()
     } finally {
       release()
       // 下锁

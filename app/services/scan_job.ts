@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-23 18:34:07
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 03:28:41
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-13 19:26:11
  * @FilePath: \smanga-adonis\app\services\scan_job.ts
  */
 import prisma from '#start/prisma'
@@ -24,7 +24,7 @@ let pathInfo: any = null
 let mediaInfo: any = null
 
 export default async function handle({ pathId }: any) {
-  pathInfo = await prisma.path.findUnique({
+  pathInfo = await prisma.path.findFirst({
     where: { pathId },
     include: {
       media: true,
@@ -66,7 +66,7 @@ export default async function handle({ pathId }: any) {
     // 扫描目录下的所有文件
     mangaList = await scan_path(pathInfo.pathContent)
   }
-
+  
   if (!mangaList.length) {
     // 漫画目录为空 无需扫描
     return
@@ -128,9 +128,9 @@ function scan_path(dir: string) {
         mangaType = 'zip'
       } else if (ext === '.rar') {
         mangaType = 'rar'
-      } else if (ext === '7z') {
+      } else if (ext === '.7z') {
         mangaType = '7z'
-      } else if (ext === 'pdf') {
+      } else if (ext === '.pdf') {
         mangaType = 'pdf'
       } else {
         mangaType = 'other'

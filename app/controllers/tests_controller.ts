@@ -7,8 +7,8 @@ const require = createRequire(import.meta.url)
 import * as path from 'path'
 import * as fs from 'fs'
 const unrar = require('node-unrar-js')
-import { is_img } from '#utils/index'
-import { extract7z,z_list } from '#utils/un7z'
+import { is_img, write_log } from '#utils/index'
+import { extract7z, Un7z } from '#utils/un7z'
 
 export default class TestsController {
   public async index({ response }: HttpContext) {
@@ -19,12 +19,12 @@ export default class TestsController {
 
   public async unrar({ response }: HttpContext) {
     const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.rar'
-    const outputDir = 'C:\\program-user\\10temp\\04mangas\\rar-test'
+    //const outputDir = 'C:\\program-user\\10temp\\04mangas\\rar-test'
     const buf = Uint8Array.from(fs.readFileSync(rarFilePath)).buffer
     const extractor = await unrar.createExtractorFromData({ data: buf })
     const list = extractor.getFileList()
 
-    const listArcHeader = list.arcHeader // archive header
+    //const listArcHeader = list.arcHeader // archive header
     const fileHeaders = [...list.fileHeaders] // load the file headers
     // const data = fs.readFileSync(rarFilePath)
     const extractored: any = extractor.extract({
@@ -60,7 +60,7 @@ export default class TestsController {
 
     response.status(200).send({ list, aa })
   }
-  
+
   /**
    * 测试解压RAR文件
    * 解压文件将会覆盖既有文件
@@ -71,13 +71,13 @@ export default class TestsController {
   public async unrar2({ response }: HttpContext) {
     const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.rar'
     const outputDir = 'C:\\program-user\\10temp\\04mangas\\rar-test'
-    const outputFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.jpg'
+    // const outputFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.jpg'
 
     const extractor = await unrar.createExtractorFromFile({
       filepath: rarFilePath,
       targetPath: outputDir,
       filenameTransform: (filename: string) => {
-        return '112.jpg'
+        return path.basename(filename)
       },
     })
 
@@ -97,7 +97,7 @@ export default class TestsController {
         }
 
         return false
-      }
+      },
     })
 
     // const files = extractored.files
@@ -125,7 +125,7 @@ export default class TestsController {
     const aa = [...extractored.files]
     // const aa = await extractored.files[0]
 
-    response.status(200).send({ extractored })
+    response.status(200).send({ extractored, aa })
 
     // Extract the files
     // [...extractor.extract().files];
@@ -135,18 +135,26 @@ export default class TestsController {
     const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.7z'
     // const outputDir = 'C:\\program-user\\10temp\\04mangas\\rar-test'
     const outputDir = 'C:\\program-user\\10temp\\04mangas\\這是一段繁體字'
-    const outputFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.jpg'
+    // const outputFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.jpg'
 
     const abc = await extract7z(rarFilePath, outputDir)
 
     response.status(200).send({ abc })
   }
 
-  public async zzz({ response }: HttpContext) { 
-    const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.7z'
-    const list = await z_list(rarFilePath)
+  public async zzz({ response }: HttpContext) {
+    const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\7z-test\\112.7z'
+    const outputDir = 'C:\\program-user\\10temp\\04mangas\\這是一段繁體字'
+    const un7z = new Un7z(rarFilePath, outputDir)
 
-    response.status(200).send({ list })
+    const res = await un7z.first_image_7z(rarFilePath, outputDir)
+
+    response.status(200).send(res)
   }
-  
+
+  public async log({ response }: HttpContext) {
+    write_log('test log')
+
+    response.status(200).send({ a: '111' })
+  }
 }
