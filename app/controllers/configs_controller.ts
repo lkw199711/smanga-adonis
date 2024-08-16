@@ -20,6 +20,10 @@ export default class ConfigsController {
   }
 
   public async set({ request }: HttpContext) {
+    const user = (request as any).user
+    if (user.role !== 'admin') {
+      return new SResponse({ code: 1, message: '无权限', status: 'error' })
+    }
     const { key, value } = request.only(['key', 'value'])
     let config = get_config()
 

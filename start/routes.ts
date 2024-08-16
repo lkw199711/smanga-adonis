@@ -28,6 +28,7 @@ const ChartsController = () => import('#controllers/charts_controller')
 const SearchesController = () => import('#controllers/searches_controller')
 const ConfigsController = () => import('#controllers/configs_controller')
 const TestsController = () => import('#controllers/tests_controller')
+const DeploysController = () => import('#controllers/deploys_controller')
 
 router.get('/', async () => {
   return {
@@ -45,7 +46,13 @@ router.get('/test/7z1', [TestsController, 'zzz'])
 router.get('/test/7z2', [TestsController, 'zzz'])
 router.get('/test/log', [TestsController, 'log'])
 
+
 router.any('/image', [ImagesController, 'index'])
+
+// 部署
+router.get('/deploy/database-get', [DeploysController, 'database_get'])
+router.get('/deploy/database-test', [DeploysController, 'database_test'])
+router.get('/deploy/database-check', [DeploysController, 'database_check'])
 
 // 收藏模块 collect
 router.get('/collect', [CollectsController, 'index'])

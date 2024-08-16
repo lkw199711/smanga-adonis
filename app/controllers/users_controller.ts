@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 20:33:01
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-10 02:23:34
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-15 20:04:05
  * @FilePath: \smanga-adonis\app\controllers\users_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -21,6 +21,14 @@ export default class UsersController {
         take: pageSize,
       }),
       where: {},
+      include: {
+        mediaPermissons: {
+          select: {
+            mediaId: true,
+            userId: true,
+          },
+        },
+      },
     }
 
     const [list, count] = await Promise.all([
@@ -31,7 +39,10 @@ export default class UsersController {
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list,
+      list: list.map((item: any) => {
+        item.mediaPermissons = item.mediaPermissons.map((item: any) => item.mediaId)
+        return item
+      }),
       count,
     })
     return response.json(listResponse)
@@ -46,7 +57,7 @@ export default class UsersController {
   }
 
   public async create({ request, response }: HttpContext) {
-    const { userName, passWord } = request.only(['userName', 'passWord'])
+    const { userName, passWord, mediaLimit } = request.only(['userName', 'passWord', 'mediaLimit'])
 
     if (!userName) {
       return response.json(new SResponse({ code: 1, message: '用户名不能为空' }))
@@ -55,13 +66,33 @@ export default class UsersController {
     const user = await prisma.user.create({
       data: { userName, passWord: md5(passWord) },
     })
+
+    // 新增失败报错
+    if (!user) {
+      return response.json(new SResponse({ code: 1, message: '新增失败' }))
+    }
+
+    // 新增用户权限
+    mediaLimit.forEach(async (item: any) => {
+      if (item.permit) {
+        await prisma.mediaPermisson.create({
+          data: { userId: user.userId, mediaId: item.mediaId },
+        })
+      }
+    })
+
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: user })
     return response.json(saveResponse)
   }
 
   public async update({ params, request, response }: HttpContext) {
     let { userId } = params
-    const { userName, passWord, userConfig } = request.only(['userName', 'passWord', 'userConfig'])
+    const { userName, passWord, userConfig, mediaLimit } = request.only([
+      'userName',
+      'passWord',
+      'userConfig',
+      'mediaLimit',
+    ])
     const user = await prisma.user.update({
       where: { userId },
       data: {
@@ -70,6 +101,32 @@ export default class UsersController {
         userConfig: sql_parse_json(userConfig),
       },
     })
+
+    // 更新失败报错
+    if (!user) {
+      return response.json(new SResponse({ code: 1, message: '更新失败' }))
+    }
+
+    // 更新用户权限
+    mediaLimit.forEach(async (item: any) => {
+      const permisson = await prisma.mediaPermisson.findFirst({
+        where: { userId, mediaId: item.mediaId },
+      })
+
+      // 如果权限配置为true，则插入数据
+      if (item.permit && !permisson) {
+        await prisma.mediaPermisson.create({
+          data: { userId, mediaId: item.mediaId },
+        })
+      }
+      // 如果权限配置为false，则删除数据
+      if (!item.permit && permisson) {
+        await prisma.mediaPermisson.delete({
+          where: { mediaPermissonId: permisson.mediaPermissonId },
+        })
+      }
+    })
+
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
     return response.json(updateResponse)
   }

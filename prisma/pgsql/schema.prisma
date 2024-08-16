@@ -3,13 +3,13 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("SQLITE_URL")
+  provider = "postgresql"
+  url      = "postgresql://postgres:q@127.0.0.1:5432/smanga"
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model bookmark {
-  bookmarkId Int      @id @default(autoincrement())
+  bookmarkId Int      @id @default(autoincrement()) 
   mediaId    Int      
   manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int      
@@ -43,12 +43,13 @@ model chapter {
   chapterType   String     @default("image") 
   chapterCover  String?    
   chapterNumber String?    
+  deleteFlag    Int        @default(0)
   bookmarks     bookmark[]
   compress      compress[]
   history       history[]
   collects      collect[]
 
-  @@unique([mangaId, chapterName], map: "oname")
+  @@unique([mangaId, chapterName], map: "unique-name")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -129,11 +130,11 @@ model log {
   module      String?  
   queue       String?  
   message     String   
-  exception   String?  
-  version     String   
-  environment String   
-  context     String?
-  device      String?
+  exception   String?  @db.Text
+  version     String   @db.Text
+  environment String   @db.Text
+  context     Json?
+  device      Json?
   createTime  DateTime @default(now()) 
   updateTime  DateTime @default(now()) 
   userId      Int?     
@@ -148,7 +149,7 @@ model login {
   nickName   String?  
   request    Int      
   ip         String   
-  userAgent  String?
+  userAgent  Json?
   createTime DateTime @default(now()) 
   updateTime DateTime @default(now()) 
   token      String?  
@@ -174,7 +175,8 @@ model manga {
   subTitle     String?    
   author       String?    
   describe     String?    
-  publishDate  DateTime?  
+  publishDate  DateTime?  @db.Date
+  deleteFlag   Int        @default(0)
   createTime   DateTime   @default(now()) 
   updateTime   DateTime   @default(now()) 
   latests      latest[]
@@ -186,7 +188,7 @@ model manga {
   metas        meta[]
   mangaTags    mangaTag[]
 
-  @@unique([mediaId, mangaPath], map: "unique-name")
+  @@unique([mediaId, mangaPath], map: "oname")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -199,8 +201,7 @@ model mangaTag {
   createTime DateTime @default(now()) 
   updateTime DateTime @default(now()) 
 
-  @@unique([mangaId, tagId], map: "uniqueMangaTag")
-  @@map("mangaTag")
+  @@unique([mangaId, tagId], map: "unique-mangaTag")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -214,6 +215,7 @@ model media {
   browseType      String           @default("flow") 
   direction       Int              @default(1) 
   removeFirst     Int              @default(0) 
+  deleteFlag      Int              @default(0)
   createTime      DateTime         @default(now()) 
   updateTime      DateTime         @default(now()) 
   paths           path[]
@@ -259,6 +261,7 @@ model path {
   include      String?   
   exclude      String?   
   lastScanTime DateTime? 
+  deleteFlag   Int       @default(0)
   createTime   DateTime  @default(now()) 
   updateTime   DateTime  @default(now()) 
   pathContent  String    
@@ -269,7 +272,7 @@ model path {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model scan {
-  scanId      Int      @id @default(autoincrement()) 
+  scanId      Int      @default(autoincrement()) 
   scanStatus  String   
   targetPath  String?  
   pathId      Int      @unique(map: "uniquePath") 
@@ -278,6 +281,8 @@ model scan {
   createTime  DateTime @default(now()) 
   updateTime  DateTime @default(now()) 
   pathContent String   
+
+  @@id([scanId, pathId])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -296,14 +301,14 @@ model tag {
 model task {
   taskId     Int       @id @default(autoincrement()) 
   taskName   String    @default("") 
-  command    String    
+  command    String    @db.Text
   createTime DateTime  @default(now()) 
   updateTime DateTime  @default(now()) 
   status     String    @default("pending") 
-  args       String?
-  startTime  DateTime? 
-  endTime    DateTime? 
-  error      String?   
+  args       Json?
+  startTime  DateTime? @db.Timestamp(0)
+  endTime    DateTime? @db.Timestamp(0)
+  error      String?   @db.Text
   priority   Int       @default(10)
 }
 
@@ -312,11 +317,11 @@ model taskFailed {
   taskId     Int       @id @default(autoincrement()) 
   taskName   String    @default("") 
   status     String    
-  command    String    
-  args       String?
-  startTime  DateTime? 
-  endTime    DateTime? 
-  error      String?   
+  command    String    @db.Text
+  args       Json?
+  startTime  DateTime? @db.Timestamp(0)
+  endTime    DateTime? @db.Timestamp(0)
+  error      String?   @db.Text
   createTime DateTime  @default(now()) 
   updateTime DateTime  @default(now()) 
 
@@ -328,10 +333,10 @@ model taskSuccess {
   taskId     Int       @id @default(autoincrement()) 
   taskName   String    @default("") 
   status     String    
-  command    String    
-  args       String?
-  startTime  DateTime? 
-  endTime    DateTime? 
+  command    String    @db.Text
+  args       Json?
+  startTime  DateTime? @db.Timestamp(0)
+  endTime    DateTime? @db.Timestamp(0)
   createTime DateTime  @default(now()) 
   updateTime DateTime  @default(now()) 
 
@@ -353,14 +358,14 @@ model token {
 model user {
   userId          Int              @id @default(autoincrement()) 
   userName        String           @unique(map: "uniqueUsername") 
-  passWord        String           
+  passWord        String           @db.Char(32)
   nickName        String?          
   header          String?          
   role            String?          
   mediaPermit     String?          
   createTime      DateTime         @default(now()) 
   updateTime      DateTime         @default(now()) 
-  userConfig      String?
+  userConfig      Json?
   logins          login[]
   tokens          token[]
   userPermissons  userPermisson[]

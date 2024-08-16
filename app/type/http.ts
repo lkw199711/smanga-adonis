@@ -10,5 +10,5 @@ import type { Request } from '@adonisjs/core/http'
 
 // 定义一个新的类型，继承 HttpContextContract
 export interface HttpContextWithUserId extends HttpContext {
-  request: Request & { userId: number }
+  request: Request & { userId: number; user: any }
 }

@@ -1,8 +1,8 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 14:19:54
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-16 09:32:40
  * @FilePath: \smanga-adonis\app\controllers\media_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -13,13 +13,30 @@ import { sql_stringify_json } from '../utils/index.js'
 
 export default class MediaController {
   public async index({ request, response }: HttpContext) {
+    const userId = (request as any).userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+    }
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons =
+      (await prisma.mediaPermisson.findMany({
+        where: { userId },
+        select: { mediaId: true },
+      })) || []
+
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      where: { deleteFlag: 0 },
+      where: {
+        deleteFlag: 0,
+        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item) => item.mediaId) } }),
+      },
     }
 
     const [list, count] = await Promise.all([
@@ -36,8 +53,29 @@ export default class MediaController {
     return response.json(listResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ request, params, response }: HttpContext) {
+    const userId = (request as any).userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+    }
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons =
+      (await prisma.mediaPermisson.findMany({
+        where: { userId },
+        select: { mediaId: true },
+      })) || []
+
     let { mediaId } = params
+
+    // 判断是否有权限查看该媒体库
+    if (!isAdmin && !mediaPermissons.some((item) => item.mediaId === mediaId)) { 
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '无权限查看', status: 'token error' }))
+    }
     const media = await prisma.media.findUnique({ where: { mediaId } })
     const showResponse = new SResponse({ code: 0, message: '', data: media })
     return response.json(showResponse)

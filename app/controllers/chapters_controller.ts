@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-12 19:15:08
+ * @LastEditTime: 2024-08-16 09:52:37
  * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -25,9 +25,30 @@ export default class ChaptersController {
       'order',
     ])
 
+    const userId = (request as any).userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+    }
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons =
+      (await prisma.mediaPermisson.findMany({
+        where: { userId },
+        select: { mediaId: true },
+      })) || []
+
     let listResponse = null
     if (page) {
-      listResponse = await this.paginate({ mangaId, page, pageSize, order })
+      listResponse = await this.paginate({
+        mangaId,
+        page,
+        pageSize,
+        order,
+        isAdmin,
+        mediaPermissons,
+      })
     } else {
       listResponse = await this.no_paginate({ mangaId, order })
     }
@@ -58,7 +79,7 @@ export default class ChaptersController {
   }
 
   // 分页
-  private async paginate({ mangaId, page, pageSize, order }: any) {
+  private async paginate({ mangaId, page, pageSize, order, isAdmin, mediaPermissons }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -69,6 +90,7 @@ export default class ChaptersController {
           mangaId: mangaId,
         }),
         deleteFlag: 0,
+        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
       orderBy: { ...(order && order_params(order)) },
     }

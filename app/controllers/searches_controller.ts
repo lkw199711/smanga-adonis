@@ -1,13 +1,13 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-08 21:29:33
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-10 01:20:31
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-16 16:08:55
  * @FilePath: \smanga-adonis\app\controllers\searches_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse } from '../interfaces/response.js'
+import { ListResponse, SResponse } from '../interfaces/response.js'
 import { order_params } from '../utils/index.js'
 
 export default class SearchesController {
@@ -19,11 +19,27 @@ export default class SearchesController {
       'pageSize',
       'order',
     ])
+
+    const userId = (request as any).userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+    }
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons =
+      (await prisma.mediaPermisson.findMany({
+        where: { userId },
+        select: { mediaId: true },
+      })) || []
+
     const quertParams = {
       where: {
         subTitle: {
           contains: searchText,
         },
+        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item) => item.mediaId) } }),
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -52,11 +68,26 @@ export default class SearchesController {
       'order',
     ])
 
+    const userId = (request as any).userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+    }
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons =
+      (await prisma.mediaPermisson.findMany({
+        where: { userId },
+        select: { mediaId: true },
+      })) || []
+
     const quertParams = {
       where: {
         subTitle: {
           contains: searchText,
         },
+        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item) => item.mediaId) } }),
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -74,7 +105,7 @@ export default class SearchesController {
       list,
       count,
     })
-      
+
     return response.json(listResponse)
   }
 }

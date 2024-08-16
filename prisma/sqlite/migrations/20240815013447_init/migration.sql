@@ -30,6 +30,7 @@ CREATE TABLE "chapter" (
     "chapterType" TEXT NOT NULL DEFAULT 'image',
     "chapterCover" TEXT,
     "chapterNumber" TEXT,
+    "deleteFlag" INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT "chapter_mangaId_fkey" FOREIGN KEY ("mangaId") REFERENCES "manga" ("mangaId") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "chapter_mediaId_fkey" FOREIGN KEY ("mediaId") REFERENCES "media" ("mediaId") ON DELETE RESTRICT ON UPDATE CASCADE
 );
@@ -152,6 +153,7 @@ CREATE TABLE "manga" (
     "author" TEXT,
     "describe" TEXT,
     "publishDate" DATETIME,
+    "deleteFlag" INTEGER NOT NULL DEFAULT 0,
     "createTime" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updateTime" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "manga_mediaId_fkey" FOREIGN KEY ("mediaId") REFERENCES "media" ("mediaId") ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -180,6 +182,7 @@ CREATE TABLE "media" (
     "browseType" TEXT NOT NULL DEFAULT 'flow',
     "direction" INTEGER NOT NULL DEFAULT 1,
     "removeFirst" INTEGER NOT NULL DEFAULT 0,
+    "deleteFlag" INTEGER NOT NULL DEFAULT 0,
     "createTime" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updateTime" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -217,6 +220,7 @@ CREATE TABLE "path" (
     "include" TEXT,
     "exclude" TEXT,
     "lastScanTime" DATETIME,
+    "deleteFlag" INTEGER NOT NULL DEFAULT 0,
     "createTime" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updateTime" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "pathContent" TEXT NOT NULL,

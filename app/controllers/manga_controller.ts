@@ -15,22 +15,37 @@ export default class MangaController {
       'order',
     ])
 
+    const userId = (request as any).userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+    }
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons =
+      (await prisma.mediaPermisson.findMany({
+        where: { userId },
+        select: { mediaId: true },
+      })) || []
+
     let listResponse = null
     if (page) {
-      listResponse = await this.paginate(mediaId, page, pageSize)
+      listResponse = await this.paginate({ mediaId, page, pageSize, isAdmin, mediaPermissons })
     } else {
-      listResponse = await this.no_paginate(mediaId)
+      listResponse = await this.no_paginate({ mediaId, isAdmin, mediaPermissons })
     }
 
     return response.json(listResponse)
   }
 
   // 不分页
-  private async no_paginate(mediaId: number) {
+  private async no_paginate({ mediaId, isAdmin, mediaPermissons }: any) {
     const queryParams = {
       where: {
         ...(mediaId && { mediaId }),
         deleteFlag: 0,
+        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.media) } }),
       },
     }
 
@@ -45,7 +60,7 @@ export default class MangaController {
   }
 
   // 分页
-  private async paginate(mediaId: number, page: number, pageSize: number) {
+  private async paginate({ mediaId, page, pageSize, isAdmin, mediaPermissons }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -54,6 +69,7 @@ export default class MangaController {
       where: {
         ...(mediaId && { mediaId }),
         deleteFlag: 0,
+        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.media) } }),
       },
     }
 

@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-10 01:30:33
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-15 16:22:05
  * @FilePath: \smanga-adonis\start\kernel.ts
  */
 /*
@@ -17,8 +17,7 @@
 
 import router from '@adonisjs/core/services/router'
 import server from '@adonisjs/core/services/server'
-import TaskProcess from '#services/task_service'
-import clear_scan from '#services/clear_scan_service'
+import database_check from '../app/services/database_check_service.js'
 import init from './init.js'
 
 /**
@@ -58,18 +57,7 @@ router.use([
 */
 
 // 初始化方法 检查根目录以及配置文件
-init()
+// init()
 
-// 启动任务队列处理器
-let period = 0
-const taskProcess = new TaskProcess()
-
-setInterval(() => {
-  // 每个周期执行
-  taskProcess.handleTaskQueue()
-  // 每十个周期执行
-  if (period % 10) {
-    clear_scan()
-  }
-  period ++
-}, 1000)
+// 初始化数据库
+database_check()

@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:42:14
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-10 01:30:49
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-16 19:42:28
  * @FilePath: \smanga-adonis\app\middleware\auth_middleware.ts
  */
 import prisma from '#start/prisma'
@@ -42,6 +42,9 @@ export default class AuthMiddleware {
       return
     }
 
+    // 动态引入 Prisma，只在需要的时候才加载它
+    // const { default: prisma } = await import('#start/prisma')
+
     const token = await prisma.token.findFirst({ where: { token: userToken } })
 
     if (!token) {
@@ -49,8 +52,26 @@ export default class AuthMiddleware {
         .status(401)
         .json(new SResponse({ code: 1, message: '用户信息失效', status: 'token error' }))
     }
+    const user: any = await prisma.user.findUnique({
+      where: { userId: token.userId },
+      include: { mediaPermissons: true, userPermissons: true },
+    })
 
+    const permissonRoutes = ['/user', '/media', '/collect', '/compress', '/history', '/latest', '/log', '/task', '/path', '/bookmark', '/tag', '/manga', '/chapter', '/image', '/manga-tag', '/chart', '/search', '/config']
+
+    // 用户信息模块
+    if (request.url().startsWith('/user')) {
+      if (user.role !== 'admin') {
+        return response
+          .status(401)
+          .json(new SResponse({ code: 1, message: '无权限操作', status: 'permisson error' }))
+      }
+    }
+
+    user.mediaLimit = user.mediaPermissons.map((item: any) => item.mediaId)
+    user.moduleLimit = user.userPermissons.map((item: any) => item.module)
     request.userId = token.userId
+    request.user = user
 
     await next()
     return next()

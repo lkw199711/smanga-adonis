@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:22:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-10 02:22:54
+ * @LastEditors: 梁楷文 lkw199711@163.com
+ * @LastEditTime: 2024-08-16 16:09:28
  * @FilePath: \smanga-adonis\app\controllers\tags_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -121,6 +121,20 @@ export default class TagsController {
   public async tags_manga({ request, response }: HttpContext) {
     const { tagIds, page, pageSize } = request.only(['tagIds', 'page', 'pageSize', 'order'])
 
+    const userId = (request as any).userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+    }
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons =
+      (await prisma.mediaPermisson.findMany({
+        where: { userId },
+        select: { mediaId: true },
+      })) || []
+
     // const tagArr = tagIds.split(',').map((item: string) => Number(item))
     const mangaTags = await prisma.mangaTag.findMany({
       skip: (page - 1) * pageSize,
@@ -128,6 +142,10 @@ export default class TagsController {
       where: {
         tagId: {
           in: tagIds.map((item: string) => Number(item)),
+        },
+        manga: {
+          deleteFlag: 0,
+          ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
         },
       },
       include: {

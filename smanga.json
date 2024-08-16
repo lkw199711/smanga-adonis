@@ -3,9 +3,10 @@
     "client": "sqlite",
     "host": "127.0.0.1",
     "port": 3306,
-    "username": "smanga",
-    "password": "smanga",
-    "database": "smanga2"
+    "username": "root",
+    "password": "123qwe",
+    "database": "smanga",
+    "file": "./smanga.sqlite"
   },
   "imagick": {
     "memory": "1gb",

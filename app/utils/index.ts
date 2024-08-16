@@ -157,3 +157,7 @@ export function write_log(logMessage: string) {
     console.error('写入日志时发生错误:', err)
   }
 }
+
+export function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}

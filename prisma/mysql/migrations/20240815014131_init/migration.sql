@@ -31,6 +31,7 @@ CREATE TABLE `chapter` (
     `chapterType` VARCHAR(191) NOT NULL DEFAULT 'image',
     `chapterCover` VARCHAR(191) NULL,
     `chapterNumber` VARCHAR(191) NULL,
+    `deleteFlag` INTEGER NOT NULL DEFAULT 0,
 
     UNIQUE INDEX `oname`(`mangaId`, `chapterName`),
     PRIMARY KEY (`chapterId`)
@@ -49,8 +50,7 @@ CREATE TABLE `collect` (
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    UNIQUE INDEX `uChapter`(`userId`, `collectType`, `chapterId`),
-    UNIQUE INDEX `uManga`(`userId`, `collectType`, `mangaId`),
+    UNIQUE INDEX `uniqueMangaChapter`(`userId`, `collectType`, `mangaId`, `chapterId`),
     PRIMARY KEY (`collectId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -161,6 +161,7 @@ CREATE TABLE `manga` (
     `author` VARCHAR(191) NULL,
     `describe` VARCHAR(191) NULL,
     `publishDate` DATE NULL,
+    `deleteFlag` INTEGER NOT NULL DEFAULT 0,
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
@@ -191,6 +192,7 @@ CREATE TABLE `media` (
     `browseType` VARCHAR(191) NOT NULL DEFAULT 'flow',
     `direction` INTEGER UNSIGNED NOT NULL DEFAULT 1,
     `removeFirst` INTEGER UNSIGNED NOT NULL DEFAULT 0,
+    `deleteFlag` INTEGER NOT NULL DEFAULT 0,
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
@@ -233,6 +235,7 @@ CREATE TABLE `path` (
     `include` VARCHAR(191) NULL,
     `exclude` VARCHAR(191) NULL,
     `lastScanTime` DATETIME(0) NULL,
+    `deleteFlag` INTEGER NOT NULL DEFAULT 0,
     `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `pathContent` VARCHAR(191) NOT NULL,

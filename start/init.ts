@@ -2,14 +2,15 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-13 18:10:27
+ * @LastEditTime: 2024-08-15 10:44:48
  * @FilePath: \smanga-adonis\start\init.ts
  */
 import { join } from 'node:path'
 import { promises as fs } from 'node:fs'
 import * as fs1 from 'fs'
-import prisma from './prisma.js'
+// import prisma from './prisma.js'
 import { s_delete } from '#utils/index'
+
 // import * as path from 'path'
 
 // 默认配置
@@ -74,6 +75,7 @@ export default async function boot() {
     console.log(`Created config file: ${configFile}`)
   }
 
+/*
   // 删除缓存文件
   const cachePath = join(rootDir, 'cache')
   if (fs1.existsSync(cachePath)) {
@@ -90,4 +92,6 @@ export default async function boot() {
   } catch (e) {
     console.log(e)
   }
+  
+  */
 }
