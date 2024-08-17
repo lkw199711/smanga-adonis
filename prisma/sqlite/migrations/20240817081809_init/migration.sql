@@ -311,8 +311,8 @@ CREATE TABLE "user" (
     "passWord" TEXT NOT NULL,
     "nickName" TEXT,
     "header" TEXT,
-    "role" TEXT,
-    "mediaPermit" TEXT,
+    "role" TEXT DEFAULT 'user',
+    "mediaPermit" TEXT DEFAULT 'limit',
     "createTime" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updateTime" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "userConfig" TEXT

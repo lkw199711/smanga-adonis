@@ -33,9 +33,14 @@ export default class LoginController {
 
   public async create({ request, response }: HttpContext) {
     const { userName, passWord } = request.only(['userName', 'passWord'])
-    const user = await prisma.user.findUnique({ where: { userName } })
+    const user = await prisma.user.findUnique({
+      where: { userName },
+      include: {
+        userPermissons: true,
+      },
+    })
 
-    let login = null;
+    let login = null
     if (!user) {
       login = await prisma.login.create({
         data: {
@@ -79,7 +84,11 @@ export default class LoginController {
         userAgent: request.header('user-agent'),
       },
     })
-    const saveResponse = new SResponse({ code: 0, message: '登录成功', data: login })
+    const saveResponse = new SResponse({
+      code: 0, message: '登录成功', data: {
+        ...login,
+        userRole: user.role
+    } })
     return response.json(saveResponse)
   }
 

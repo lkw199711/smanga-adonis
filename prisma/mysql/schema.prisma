@@ -362,8 +362,8 @@ model user {
   passWord        String           @db.Char(32)
   nickName        String?          @db.VarChar(191)
   header          String?          @db.VarChar(191)
-  role            String?          @db.VarChar(191)
-  mediaPermit     String?          @db.VarChar(191)
+  role            String?          @default("user") @db.VarChar(191)
+  mediaPermit     String?          @default("limit") @db.VarChar(191)
   createTime      DateTime         @default(now()) @db.DateTime(6)
   updateTime      DateTime         @default(now()) @db.DateTime(6)
   userConfig      Json?

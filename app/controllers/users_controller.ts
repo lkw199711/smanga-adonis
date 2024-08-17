@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 20:33:01
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-15 20:04:05
+ * @LastEditTime: 2024-08-17 14:43:16
  * @FilePath: \smanga-adonis\app\controllers\users_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -57,14 +57,20 @@ export default class UsersController {
   }
 
   public async create({ request, response }: HttpContext) {
-    const { userName, passWord, mediaLimit } = request.only(['userName', 'passWord', 'mediaLimit'])
+    const { userName, passWord, mediaLimit, role, mediaPermit } = request.only([
+      'userName',
+      'passWord',
+      'role',
+      'mediaPermit',
+      'mediaLimit',
+    ])
 
     if (!userName) {
       return response.json(new SResponse({ code: 1, message: '用户名不能为空' }))
     }
 
     const user = await prisma.user.create({
-      data: { userName, passWord: md5(passWord) },
+      data: { userName, passWord: md5(passWord), role, mediaPermit },
     })
 
     // 新增失败报错
@@ -73,8 +79,8 @@ export default class UsersController {
     }
 
     // 新增用户权限
-    mediaLimit.forEach(async (item: any) => {
-      if (item.permit) {
+    mediaLimit?.forEach(async (item: any) => {
+      if (item?.permit) {
         await prisma.mediaPermisson.create({
           data: { userId: user.userId, mediaId: item.mediaId },
         })
@@ -87,11 +93,13 @@ export default class UsersController {
 
   public async update({ params, request, response }: HttpContext) {
     let { userId } = params
-    const { userName, passWord, userConfig, mediaLimit } = request.only([
+    const { userName, passWord, userConfig, mediaLimit, role, mediaPermit } = request.only([
       'userName',
       'passWord',
       'userConfig',
       'mediaLimit',
+      'role',
+      'mediaPermit',
     ])
     const user = await prisma.user.update({
       where: { userId },
@@ -99,6 +107,8 @@ export default class UsersController {
         userName,
         ...(passWord && { passWord: md5(passWord) }),
         userConfig: sql_parse_json(userConfig),
+        role,
+        mediaPermit,
       },
     })
 

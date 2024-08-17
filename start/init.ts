@@ -2,13 +2,12 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-15 10:44:48
+ * @LastEditTime: 2024-08-17 16:34:36
  * @FilePath: \smanga-adonis\start\init.ts
  */
-import { join } from 'node:path'
-import { promises as fs } from 'node:fs'
-import * as fs1 from 'fs'
-// import prisma from './prisma.js'
+import { join } from 'path'
+import * as fs from 'fs'
+import prisma from './prisma.js'
 import { s_delete } from '#utils/index'
 
 // import * as path from 'path'
@@ -58,9 +57,9 @@ export default async function boot() {
   for (const folder of folders) {
     const folderPath = join(rootDir, folder)
     try {
-      await fs.access(folderPath)
+      await fs.promises.access(folderPath)
     } catch (error) {
-      await fs.mkdir(folderPath, { recursive: true })
+      await fs.promises.mkdir(folderPath, { recursive: true })
       console.log(`Created folder: ${folderPath}`)
     }
   }
@@ -69,22 +68,34 @@ export default async function boot() {
   const configFile = join(rootDir, 'smanga.json')
 
   try {
-    await fs.access(configFile)
+    await fs.promises.access(configFile)
   } catch (error) {
-    await fs.writeFile(configFile, JSON.stringify(defaultConfig, null, 2))
+    await fs.promises.writeFile(configFile, JSON.stringify(defaultConfig, null, 2))
     console.log(`Created config file: ${configFile}`)
   }
 
-/*
-  // 删除缓存文件
-  const cachePath = join(rootDir, 'cache')
-  if (fs1.existsSync(cachePath)) {
-    fs1.readdirSync(cachePath).forEach((file: any) => {
-      const filePath = join(cachePath, file)
-      s_delete(filePath)
+  // 创建系统默认用户
+  const users = await prisma.user.findMany()
+  if (!users?.length) {
+    await prisma.user.create({
+      data: {
+        userName: 'smanga',
+        passWord: 'f7f1fe7186209906a97756ff912bb644',
+        role: 'admin',
+        mediaPermit: 'all',
+      },
     })
+    console.log('Created default admin user')
   }
 
+  // 删除缓存文件
+  const cachePath = join(rootDir, 'cache')
+  fs.readdirSync(cachePath).forEach((file: any) => {
+    const filePath = join(cachePath, file)
+    s_delete(filePath)
+  })
+
+  /*
   // 清理已删除数据
   try {
     await prisma.path.deleteMany({ where: { deleteFlag: 1 } })

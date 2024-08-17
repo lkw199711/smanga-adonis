@@ -1,12 +1,13 @@
 {
   "sql": {
-    "client": "sqlite",
+    "client": "pgsql",
     "host": "127.0.0.1",
     "port": 3306,
     "username": "root",
     "password": "123qwe",
     "database": "smanga",
-    "file": "./smanga.sqlite"
+    "file": "./smanga.sqlite",
+    "deploy": true
   },
   "imagick": {
     "memory": "1gb",

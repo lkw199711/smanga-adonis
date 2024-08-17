@@ -1,11 +1,18 @@
 import * as path from 'path'
+import * as fs from 'fs'
 import { runNpxCommand } from '#utils/npxShell'
-import { get_config } from '#utils/index'
+// 获取当前运行路径作为根目录
 const rootDir = process.cwd()
-const config = get_config()
-const { client } = config.sql
+// 检查并创建配置文件
+const configFile = path.join(rootDir, 'smanga.json')
+const rawData = fs.readFileSync(configFile, 'utf-8')
+const config = JSON.parse(rawData)
+const { client, deploy } = config.sql
 
-export default function hanle() {
+export default async function hanle() {
+  if (deploy) {
+    return
+  }
   // 检查并创建数据库文件
   if (client === 'sqlite') {
     const schemaPath = path.join(rootDir, 'prisma', 'sqlite', 'schema.prisma')
@@ -21,4 +28,8 @@ export default function hanle() {
   } else {
     // 报错 数据库不支持
   }
+
+  config.sql.deploy = true
+
+  await fs.promises.writeFile(configFile, JSON.stringify(config, null, 2))
 }

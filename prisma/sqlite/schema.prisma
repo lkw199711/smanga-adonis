@@ -360,8 +360,8 @@ model user {
   passWord        String
   nickName        String?
   header          String?
-  role            String?
-  mediaPermit     String?
+  role            String?          @default("user")
+  mediaPermit     String?          @default("limit")
   createTime      DateTime         @default(now())
   updateTime      DateTime         @default(now())
   userConfig      String?
