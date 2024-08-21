@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:42:14
  * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-16 19:42:28
+ * @LastEditTime: 2024-08-21 11:48:50
  * @FilePath: \smanga-adonis\app\middleware\auth_middleware.ts
  */
 import prisma from '#start/prisma'
@@ -57,7 +57,7 @@ export default class AuthMiddleware {
       include: { mediaPermissons: true, userPermissons: true },
     })
 
-    const permissonRoutes = ['/user', '/media', '/collect', '/compress', '/history', '/latest', '/log', '/task', '/path', '/bookmark', '/tag', '/manga', '/chapter', '/image', '/manga-tag', '/chart', '/search', '/config']
+    // const permissonRoutes = ['/user', '/media', '/collect', '/compress', '/history', '/latest', '/log', '/task', '/path', '/bookmark', '/tag', '/manga', '/chapter', '/image', '/manga-tag', '/chart', '/search', '/config']
 
     // 用户信息模块
     if (request.url().startsWith('/user')) {

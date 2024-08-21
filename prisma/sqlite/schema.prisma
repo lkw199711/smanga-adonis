@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:../smanga.db"
+  url      = "file:../../smanga.db"
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
