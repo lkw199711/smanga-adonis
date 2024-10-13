@@ -56,9 +56,6 @@ router.use([
 |
 */
 
-// 初始化方法 检查根目录以及配置文件
-// init()
-
 // 初始化数据库
 database_check()
 

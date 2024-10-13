@@ -1,8 +1,8 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 14:13:00
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-13 16:39:29
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-10-13 19:32:52
  * @FilePath: \smanga-adonis\app\utils\index.ts
  */
 import * as os from 'os'
@@ -41,37 +41,52 @@ export function get_env() {
 export function path_poster() {
   if (platform === 'win32') {
     return path.join(rootDir, 'poster')
+  } else if (platform === 'linux') {
+    return '/data/poster'
   } else {
-    return ''
+    return '/data/poster'
   }
 }
 
 export function bookmark_path() {
   if (platform === 'win32') {
     return path.join(rootDir, 'bookmark')
+  } else if (platform === 'linux') {
+    return '/data/bookmark'
   } else {
-    return ''
+    return '/data/bookmark'
   }
 }
 
 export function path_cache() {
   if (platform === 'win32') {
     return path.join(rootDir, 'cache')
+  } else if (platform === 'linux') {
+    return '/data/cache'
   } else {
-    return ''
+    return '/data/cache'
   }
 }
 
 export function path_compress() {
   if (platform === 'win32') {
     return path.join(rootDir, 'compress')
+  } else if (platform === 'linux') {
+    return '/data/compress'
   } else {
-    return ''
+    return '/data/compress'
   }
 }
 
 export function get_config() {
-  const rawData = fs.readFileSync(path.join(rootDir, 'smanga.json'), 'utf-8')
+  let rawData = ''
+  if (platform === 'win32') {
+    rawData = fs.readFileSync(path.join(rootDir, 'smanga.json'), 'utf-8')
+  } else if (platform === 'linux') {
+    rawData = fs.readFileSync('/data/config/smanga.json', 'utf-8')
+  } else {
+    rawData = fs.readFileSync('/data/config/smanga.json', 'utf-8')
+  }
   const config = JSON.parse(rawData)
   return config
 }

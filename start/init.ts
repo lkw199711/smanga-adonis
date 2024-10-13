@@ -1,14 +1,15 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-17 16:34:36
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-10-11 10:29:14
  * @FilePath: \smanga-adonis\start\init.ts
  */
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
 import { s_delete } from '#utils/index'
+import { startTimer } from '#services/timer_service'
 
 // import * as path from 'path'
 
@@ -94,8 +95,7 @@ export default async function boot() {
     const filePath = join(cachePath, file)
     s_delete(filePath)
   })
-
-  /*
+/*
   // 清理已删除数据
   try {
     await prisma.path.deleteMany({ where: { deleteFlag: 1 } })
@@ -103,6 +103,6 @@ export default async function boot() {
   } catch (e) {
     console.log(e)
   }
-  
-  */
+*/
+  startTimer()
 }

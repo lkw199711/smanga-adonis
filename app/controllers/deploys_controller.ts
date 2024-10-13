@@ -1,3 +1,10 @@
+/*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-10-08 15:36:23
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-10-12 17:50:51
+ * @FilePath: \smanga-adonis\app\controllers\deploys_controller.ts
+ */
 import type { HttpContext } from '@adonisjs/core/http'
 import { get_config, delay } from '#utils/index'
 import { SResponse } from '#interfaces/response'
