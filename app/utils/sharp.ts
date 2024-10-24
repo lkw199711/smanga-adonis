@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 17:20:05
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 03:14:45
+ * @LastEditTime: 2024-10-23 00:11:57
  * @FilePath: \smanga-adonis\app\utils\sharp.ts
  */
 import sharp from 'sharp'
@@ -64,7 +64,7 @@ export async function compressImageToSize(
       const stats1 = fs.statSync(outputPath)
       fileSize = stats1.size
 
-      console.log(`Current quality: ${quality}, File size: ${fileSize / 1024} KB`)
+      // console.log(`Current quality: ${quality}, File size: ${fileSize / 1024} KB`)
 
       // 每次递减质量
       quality -= 10
@@ -77,10 +77,10 @@ export async function compressImageToSize(
     unlink_file(inputPath)
 
     if (fileSize <= maxSizeKB * 1024) {
-      console.log(`Image successfully compressed to ${fileSize / 1024} KB`)
+      // console.log(`Image successfully compressed to ${fileSize / 1024} KB`)
       return true
     } else {
-      console.log(`Could not compress image to the desired size within quality limits.`)
+      // console.log(`Could not compress image to the desired size within quality limits.`)
       return false
     }
   } catch (error) {
