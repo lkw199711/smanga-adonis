@@ -13,16 +13,16 @@ const platform = os.platform()
 // 获取当前运行路径作为根目录
 const rootDir = process.cwd()
 
-// function get_os() {
-//   const platform = os.platform()
-//   if (platform === 'win32') {
-//     return 'Windows'
-//   } else if (platform === 'linux') {
-//     return 'Linux'
-//   } else {
-//     return 'Other'
-//   }
-// }
+export function get_os() {
+  const platform = os.platform()
+  if (platform === 'win32') {
+    return 'Windows'
+  } else if (platform === 'linux') {
+    return 'Linux'
+  } else {
+    return 'Other'
+  }
+}
 /**
  * 判断图片是否为图片格式
  * @param {string} file 文件路径
@@ -48,7 +48,7 @@ export function path_poster() {
   }
 }
 
-export function bookmark_path() {
+export function path_bookmark() {
   if (platform === 'win32') {
     return path.join(rootDir, 'bookmark')
   } else if (platform === 'linux') {

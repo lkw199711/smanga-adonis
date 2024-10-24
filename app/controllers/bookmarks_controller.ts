@@ -9,7 +9,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { compressImageToSize } from '../utils/sharp.js'
-import { bookmark_path, get_config, s_delete } from '../utils/index.js'
+import { path_bookmark, get_config, s_delete } from '../utils/index.js'
 export default class BookmarksController {
   public async index({ request, response }: HttpContext) {
     const { chapterId, page, pageSize } = request.only(['page', 'pageSize', 'chapterId', 'order'])
@@ -105,7 +105,7 @@ export default class BookmarksController {
     // 复制书签图片
     let outputFile = ''
     if (pageImage) {
-      const bookmarkPath = bookmark_path()
+      const bookmarkPath = path_bookmark()
       const config = get_config()
       outputFile = `${bookmarkPath}/smanga_bookmark_${chapterId}.jpg`
       await compressImageToSize(pageImage, outputFile, config.compress.bookmark)

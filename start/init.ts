@@ -8,7 +8,7 @@
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
-import { s_delete } from '#utils/index'
+import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os } from '#utils/index'
 import { startTimer } from '#services/timer_service'
 
 // import * as path from 'path'
@@ -51,6 +51,60 @@ export default async function boot() {
   // 获取当前运行路径作为根目录
   const rootDir = process.cwd()
 
+  const os = get_os()
+
+  if (os === 'Windows') {
+    create_dir_win()
+  } else {
+    create_dir_linux()
+  }
+
+  // 创建系统默认用户
+  const users = await prisma.user.findMany()
+  if (!users?.length) {
+    await prisma.user.create({
+      data: {
+        userName: 'smanga',
+        passWord: 'f7f1fe7186209906a97756ff912bb644',
+        role: 'admin',
+        mediaPermit: 'all',
+      },
+    })
+    console.log('Created default admin user')
+  }
+
+  // 删除缓存文件
+  const cachePath = join(rootDir, 'cache')
+  fs.readdirSync(cachePath).forEach((file: any) => {
+    const filePath = join(cachePath, file)
+    s_delete(filePath)
+  })
+
+  // 将中断的任务重置
+  await prisma.task.updateMany({
+    where: {
+      status: 'in-progress'
+    },
+    data: {
+      status: 'pending'
+    }
+  })
+  /*
+    // 清理已删除数据
+    try {
+      await prisma.path.deleteMany({ where: { deleteFlag: 1 } })
+      await prisma.media.deleteMany({ where: { deleteFlag: 1 } })  
+    } catch (e) {
+      console.log(e)
+    }
+  */
+  startTimer()
+}
+
+async function create_dir_win() {
+  // 获取当前运行路径作为根目录
+  const rootDir = process.cwd()
+
   // 需要检查的文件夹
   const folders = ['compress', 'config', 'db', 'logs', 'poster', 'bookmark', 'cache']
 
@@ -74,35 +128,37 @@ export default async function boot() {
     await fs.promises.writeFile(configFile, JSON.stringify(defaultConfig, null, 2))
     console.log(`Created config file: ${configFile}`)
   }
+}
 
-  // 创建系统默认用户
-  const users = await prisma.user.findMany()
-  if (!users?.length) {
-    await prisma.user.create({
-      data: {
-        userName: 'smanga',
-        passWord: 'f7f1fe7186209906a97756ff912bb644',
-        role: 'admin',
-        mediaPermit: 'all',
-      },
-    })
-    console.log('Created default admin user')
+async function create_dir_linux() {
+  // 需要检查的文件夹
+  const folders = [
+    path_compress(),
+    '/data/config',
+    '/data/db',
+    '/data/logs',
+    path_poster(),
+    path_bookmark(),
+    path_cache(),
+  ]
+
+  // 检查并创建文件夹
+  for (const folder of folders) {
+    try {
+      await fs.promises.access(folder)
+    } catch (error) {
+      await fs.promises.mkdir(folder, { recursive: true })
+      console.log(`Created folder: ${folder}`)
+    }
   }
 
-  // 删除缓存文件
-  const cachePath = join(rootDir, 'cache')
-  fs.readdirSync(cachePath).forEach((file: any) => {
-    const filePath = join(cachePath, file)
-    s_delete(filePath)
-  })
-/*
-  // 清理已删除数据
+  // 检查并创建配置文件
+  const configFile = join('/', 'data', 'config', 'smanga.json')
+
   try {
-    await prisma.path.deleteMany({ where: { deleteFlag: 1 } })
-    await prisma.media.deleteMany({ where: { deleteFlag: 1 } })  
-  } catch (e) {
-    console.log(e)
+    await fs.promises.access(configFile)
+  } catch (error) {
+    await fs.promises.writeFile(configFile, JSON.stringify(defaultConfig, null, 2))
+    console.log(`Created config file: ${configFile}`)
   }
-*/
-  startTimer()
 }

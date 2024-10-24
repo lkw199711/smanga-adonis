@@ -249,13 +249,22 @@ export default async function handle({
     }
 
     const infoFile = path.join(dirMeta, 'info.json')
+    const metaFile = path.join(dirMeta, 'meta.json')
+    // 为兼容老的元数据文件 允许文件名为info
+    let targetMetaFile = '';
     if (fs.existsSync(infoFile)) {
-      const rawData = fs.readFileSync(infoFile, 'utf-8')
+      targetMetaFile = infoFile
+    } else if (fs.existsSync(metaFile)) {
+      targetMetaFile = metaFile
+    }
+
+    if (fs.existsSync(targetMetaFile)) {
+      const rawData = fs.readFileSync(targetMetaFile, 'utf-8')
       const info = JSON.parse(rawData)
 
       // 一般性元数据
       Object.keys(info).forEach(async (key) => {
-        const value = info[key]
+        const value = String(info[key])
         if (['string', 'number', 'boolean'].includes(typeof value)) {
           await prisma.meta.create({
             data: {
@@ -309,16 +318,17 @@ export default async function handle({
       // 插入标签
       const tagColor = '#a0d911'
       const tags: string[] = info?.tags || []
-      tags.forEach(async (tag: string) => {
+      tags.forEach(async (tag: any) => {
         // 系统标签保持唯一性,用户标签不做唯一性限制
         // 扫描时确认没有同名系统标签,没有则创建
+        const tagName = typeof tag === 'object' ? tag.name : tag
         let tagRecord = await prisma.tag.findFirst({
-          where: { tagName: tag, userId: 0 },
+          where: { tagName: tagName, userId: 0 },
         })
         if (!tagRecord) {
           tagRecord = await prisma.tag.create({
             data: {
-              tagName: tag,
+              tagName: tagName,
               tagColor,
               userId: 0,
             },
