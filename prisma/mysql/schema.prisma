@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url      = "mysql://root:123qwe@127.0.0.1:3306/smanga"
+  url      = "mysql://smanga:smanga@192.168.2.36:3306/smanga-18"
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

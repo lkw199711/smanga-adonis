@@ -189,9 +189,12 @@ export default async function handle({
           chapterNumber: chapter_number(item.chapterName),
         }
 
-        chapterRecord = await prisma.chapter.create({ data: chapterInsert })
-        if (!chapterRecord) {
+        try {
+          chapterRecord = await prisma.chapter.create({ data: chapterInsert })
+        } catch (e) {
           console.log('章节插入失败', item.chapterName)
+          console.log(e);
+          
           return
         }
 
@@ -264,19 +267,23 @@ export default async function handle({
 
       // 一般性元数据
       Object.keys(info).forEach(async (key) => {
-        const value = String(info[key])
-        if (['string', 'number', 'boolean'].includes(typeof value)) {
-          await prisma.meta.create({
-            data: {
-              manga: {
-                connect: {
-                  mangaId: mangaRecord.mangaId,
+        const value = info[key]
+        if (['title', 'author', 'star', 'describe', 'publishDate', 'classify', 'finished', 'updateDate'].includes(key)) {
+          try {
+            await prisma.meta.create({
+              data: {
+                manga: {
+                  connect: {
+                    mangaId: mangaRecord.mangaId,
+                  },
                 },
+                metaName: key,
+                metaContent: String(value),
               },
-              metaName: key,
-              metaContent: value,
-            },
-          })
+            })
+          } catch (e) {
+            console.log(e);
+          }
         }
       })
 

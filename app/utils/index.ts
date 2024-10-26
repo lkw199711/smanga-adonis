@@ -78,6 +78,16 @@ export function path_compress() {
   }
 }
 
+export function path_config() {
+  if (platform === 'win32') {
+    return path.join(rootDir, 'config')
+  } else if (platform === 'linux') {
+    return path.join('/', 'data', 'config', 'smanga.json')
+  } else {
+    return path.join('/', 'data', 'config', 'smanga.json')
+  }
+}
+
 export function get_config() {
   let rawData = ''
   if (platform === 'win32') {
@@ -131,7 +141,7 @@ export function order_params(order: string = 'asc', model: string = 'chapter'): 
  * @param jsonVal 目标json值
  * @returns
  */
-export function sql_parse_json(jsonVal: string | object) {
+export function sql_parse_json(jsonVal: string | object | number | true) {
   if (typeof jsonVal === 'string') {
     return JSON.parse(jsonVal)
   } else {

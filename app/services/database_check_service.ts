@@ -1,10 +1,11 @@
 import * as path from 'path'
 import * as fs from 'fs'
 import { runNpxCommand } from '#utils/npxShell'
+import { path_config } from '#utils/index'
 // 获取当前运行路径作为根目录
 const rootDir = process.cwd()
 // 检查并创建配置文件
-const configFile = path.join(rootDir, 'smanga.json')
+const configFile = path_config()
 const rawData = fs.readFileSync(configFile, 'utf-8')
 const config = JSON.parse(rawData)
 const { client, deploy } = config.sql

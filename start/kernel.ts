@@ -57,7 +57,7 @@ router.use([
 */
 
 // 初始化数据库
-database_check()
+await database_check()
 
 // 项目启动初始化
-init()
+await init()
