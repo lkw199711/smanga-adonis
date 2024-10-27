@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-11 10:29:14
+ * @LastEditTime: 2024-10-26 16:38:25
  * @FilePath: \smanga-adonis\start\init.ts
  */
 import { join } from 'path'
@@ -48,9 +48,6 @@ const defaultConfig = {
 }
 
 export default async function boot() {
-  // 获取当前运行路径作为根目录
-  const rootDir = process.cwd()
-
   const os = get_os()
 
   if (os === 'Windows') {
@@ -74,7 +71,7 @@ export default async function boot() {
   }
 
   // 删除缓存文件
-  const cachePath = join(rootDir, 'cache')
+  const cachePath = path_cache()
   fs.readdirSync(cachePath).forEach((file: any) => {
     const filePath = join(cachePath, file)
     s_delete(filePath)

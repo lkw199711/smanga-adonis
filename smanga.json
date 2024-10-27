@@ -6,7 +6,6 @@
     "username": "root",
     "password": "123qwe",
     "database": "smanga",
-    "file": "./smanga.sqlite",
     "deploy": true
   },
   "imagick": {
