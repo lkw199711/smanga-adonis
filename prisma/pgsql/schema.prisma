@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://postgres:q@127.0.0.1:5432/smanga"
+  url      = env("DB_URL_POSTGRESQL)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

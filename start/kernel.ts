@@ -57,7 +57,8 @@ router.use([
 */
 
 // 初始化数据库
-await database_check()
+// 此步骤暂时在外部脚本中进行
+// await database_check()
 
 // 项目启动初始化
 await init()
