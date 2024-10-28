@@ -1,0 +1,35 @@
+{
+  "sql": {
+    "client": "sqlite",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "username": "smanga",
+    "password": "smanga",
+    "database": "smanga",
+    "file": "./data/smanga.db",
+    "deploy": true
+  },
+  "imagick": {
+    "memory": "1gb",
+    "map": "1gb",
+    "density": 300,
+    "quality": 100
+  },
+  "scan": {
+    "auto": 0,
+    "interval": 60
+  },
+  "debug": {
+    "dispatchSync": 0
+  },
+  "ssl": {
+    "pem": "",
+    "key": ""
+  },
+  "compress": {
+    "auto": 0,
+    "saveDuration": 100,
+    "poster": 300,
+    "bookmark": 300
+  }
+}

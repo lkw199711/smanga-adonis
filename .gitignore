@@ -25,16 +25,3 @@ yarn-error.log
 .DS_Store
 
 prisma/migration
-
-config
-db
-logs
-compress
-cache
-bookmark
-poster
-smanga.config
-
-smanga.db
-sqlite.db
-sqlite.db-journal

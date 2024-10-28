@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 14:13:00
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-13 19:32:52
+ * @LastEditTime: 2024-10-28 12:02:10
  * @FilePath: \smanga-adonis\app\utils\index.ts
  */
 import * as os from 'os'
@@ -40,7 +40,7 @@ export function get_env() {
 
 export function path_poster() {
   if (platform === 'win32') {
-    return path.join(rootDir, 'poster')
+    return path.join(rootDir, 'data', 'poster')
   } else if (platform === 'linux') {
     return '/data/poster'
   } else {
@@ -50,7 +50,7 @@ export function path_poster() {
 
 export function path_bookmark() {
   if (platform === 'win32') {
-    return path.join(rootDir, 'bookmark')
+    return path.join(rootDir, 'data', 'bookmark')
   } else if (platform === 'linux') {
     return '/data/bookmark'
   } else {
@@ -60,7 +60,7 @@ export function path_bookmark() {
 
 export function path_cache() {
   if (platform === 'win32') {
-    return path.join(rootDir, 'cache')
+    return path.join(rootDir, 'data', 'cache')
   } else if (platform === 'linux') {
     return '/data/cache'
   } else {
@@ -70,7 +70,7 @@ export function path_cache() {
 
 export function path_compress() {
   if (platform === 'win32') {
-    return path.join(rootDir, 'compress')
+    return path.join(rootDir, 'data', 'compress')
   } else if (platform === 'linux') {
     return '/data/compress'
   } else {
@@ -80,18 +80,18 @@ export function path_compress() {
 
 export function path_config() {
   if (platform === 'win32') {
-    return path.join(rootDir, 'config')
+    return path.join(rootDir, 'data', 'config')
   } else if (platform === 'linux') {
-    return path.join('/', 'data', 'config', 'smanga.json')
+    return path.join('/', 'data', 'config')
   } else {
-    return path.join('/', 'data', 'config', 'smanga.json')
+    return path.join('/', 'data', 'config')
   }
 }
 
 export function get_config() {
   let rawData = ''
   if (platform === 'win32') {
-    rawData = fs.readFileSync(path.join(rootDir, 'smanga.json'), 'utf-8')
+    rawData = fs.readFileSync('./data/config/smanga.json', 'utf-8')
   } else if (platform === 'linux') {
     rawData = fs.readFileSync('/data/config/smanga.json', 'utf-8')
   } else {
@@ -172,7 +172,7 @@ export function s_delete(file: string) {
 }
 
 export function write_log(logMessage: string) {
-  const logFile = path.join(rootDir, 'logs', 'smanga.log')
+  const logFile = path.join(rootDir, 'data', 'logs', 'smanga.log')
 
   // 将日志内容同步写入文件，使用 '\n' 换行符
   try {
