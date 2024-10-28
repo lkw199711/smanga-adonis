@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-10-08 15:36:23
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-28 12:03:26
+ * @LastEditTime: 2024-10-28 12:28:15
  * @FilePath: \smanga-adonis\app\services\database_check_service.ts
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -15,7 +15,7 @@ const rootDir = process.cwd()
 const configFile = './data/config/smanga.json'
 const rawData = fs.readFileSync(configFile, 'utf-8')
 const config = JSON.parse(rawData)
-const { client, deploy, host, port, username, password, database, file } = config.sql
+const { client, deploy, host, port, username, password, database } = config.sql
 
 export default async function hanle() {
   if (deploy) {
