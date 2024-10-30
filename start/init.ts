@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-26 16:38:25
+ * @LastEditTime: 2024-10-27 21:46:49
  * @FilePath: \smanga-adonis\start\init.ts
  */
 import { join } from 'path'
@@ -103,21 +103,28 @@ async function create_dir_win() {
   const rootDir = process.cwd()
 
   // 需要检查的文件夹
-  const folders = ['compress', 'config', 'db', 'logs', 'poster', 'bookmark', 'cache']
+  const folders = [
+    path_compress(),
+    './data/config',
+    './data/db',
+    './data/logs',
+    path_poster(),
+    path_bookmark(),
+    path_cache(),
+  ]
 
   // 检查并创建文件夹
   for (const folder of folders) {
-    const folderPath = join(rootDir, folder)
     try {
-      await fs.promises.access(folderPath)
+      await fs.promises.access(folder)
     } catch (error) {
-      await fs.promises.mkdir(folderPath, { recursive: true })
-      console.log(`Created folder: ${folderPath}`)
+      await fs.promises.mkdir(folder, { recursive: true })
+      console.log(`Created folder: ${folder}`)
     }
   }
 
   // 检查并创建配置文件
-  const configFile = join(rootDir, 'smanga.json')
+  const configFile = join(rootDir, 'data', 'config', 'smanga.json')
 
   try {
     await fs.promises.access(configFile)

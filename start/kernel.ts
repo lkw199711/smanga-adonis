@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-06-20 19:41:31
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-15 16:22:05
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2024-10-28 11:19:33
  * @FilePath: \smanga-adonis\start\kernel.ts
  */
 /*
@@ -19,6 +19,7 @@ import router from '@adonisjs/core/services/router'
 import server from '@adonisjs/core/services/server'
 import database_check from '../app/services/database_check_service.js'
 import init from './init.js'
+import { get_os } from '#utils/index'
 
 /**
  * The error handler is used to convert an exception
@@ -57,8 +58,12 @@ router.use([
 */
 
 // 初始化数据库
-// 此步骤暂时在外部脚本中进行
-// await database_check()
+// linux中此步骤暂时在外部脚本中进行
+const os = get_os()
+if (os === 'Windows') {
+  await database_check()
+}
+
 
 // 项目启动初始化
 await init()
