@@ -6,6 +6,7 @@ import delete_chapter_job from './delete_chapter_job.js'
 import delete_manga_job from './delete_manga_job.js'
 import delete_path_job from './delete_path_job.js'
 import delete_media_job from './delete_media_job.js'
+import copy_poster_job from './copy_poster_job.js'
 import { sql_parse_json } from '../utils/index.js'
 import { Mutex } from 'async-mutex'
 const mutex = new Mutex()
@@ -122,6 +123,8 @@ export default class TaskProcess {
           console.log('删除章节')
           await delete_chapter_job(argsVal)
           break
+        case 'copyPoster':
+          await copy_poster_job(argsVal);
         default:
           break
       }

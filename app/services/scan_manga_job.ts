@@ -11,10 +11,11 @@ import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import { path_poster, path_cache, is_img, get_config } from '../utils/index.js'
 import { S } from '../utils/convertText.js'
-import { compressImageToSize } from '#utils/sharp'
 import { extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
+import { TaskPriority } from '../type/index.js'
+import { sql_stringify_json } from '../utils/index.js'
 
 export default async function handle({
   pathId,
@@ -194,7 +195,7 @@ export default async function handle({
         } catch (e) {
           console.log('章节插入失败', item.chapterName)
           console.log(e);
-          
+
           return
         }
 
@@ -522,8 +523,25 @@ export default async function handle({
           data: { mangaCover: posterName },
         })
       }
-      // 压缩图片至指定大小
-      await compressImageToSize(sourcePoster, posterName, maxSizeKB)
+
+      // 复制封面到poster目录 使用单独任务队列
+      const args = sql_stringify_json({
+        inputPath: sourcePoster,
+        outputPath: posterName,
+        maxSizeKB,
+        chapterRecord
+      }) as string
+
+      await prisma.task.create({
+        data: {
+          taskName: `scan_${pathId}`,
+          // 使任务按顺序执行
+          priority: TaskPriority.copyPoster,
+          command: 'copyPoster',
+          args,
+        },
+      })
+
       return posterName
     } else {
       return ''
@@ -562,8 +580,24 @@ export default async function handle({
     }
 
     if (sourcePoster) {
-      // 压缩图片至指定大小
-      await compressImageToSize(sourcePoster, posterName, maxSizeKB)
+      // 复制封面到poster目录 使用单独任务队列
+      const args = sql_stringify_json({
+        inputPath: sourcePoster,
+        outputPath: posterName,
+        maxSizeKB,
+        mangaRecord
+      }) as string
+
+      await prisma.task.create({
+        data: {
+          taskName: `scan_${pathId}`,
+          // 使任务按顺序执行
+          priority: TaskPriority.copyPoster,
+          command: 'copyPoster',
+          args,
+        },
+      })
+
       mangaRecord = await prisma.manga.update({
         where: { mangaId: mangaRecord.mangaId },
         data: { mangaCover: posterName },
