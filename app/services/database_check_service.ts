@@ -9,6 +9,7 @@
 import * as path from 'path'
 import * as fs from 'fs'
 import { runNpxCommand } from '#utils/npxShell'
+import { get_os } from '#utils/index'
 // 获取当前运行路径作为根目录
 const rootDir = process.cwd()
 // 检查并创建配置文件
@@ -25,7 +26,13 @@ export default async function hanle() {
   let dbUrl, varName, schemaPath;
   // 检查并创建数据库文件
   if (client === 'sqlite') {
-    dbUrl = 'file:./data/db.sqlite';
+    const os = get_os()
+    if (os === 'Windows') {
+      dbUrl = 'file:./data/db.sqlite';
+    } else {
+      dbUrl = 'file:/data/db.sqlite';
+    }
+
     varName = 'DB_URL_SQLITE';
     schemaPath = path.join(rootDir, 'prisma', 'sqlite', 'schema.prisma')
   } else if (client === 'mysql') {
