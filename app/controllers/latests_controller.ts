@@ -1,8 +1,8 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-13 19:06:32
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2025-01-17 14:11:09
  * @FilePath: \smanga-adonis\app\controllers\latests_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
