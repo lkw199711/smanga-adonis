@@ -149,20 +149,6 @@ export function sql_parse_json(jsonVal: string | object | number | true) {
   }
 }
 
-/**
- * 将数据转化为sql可以存储的json
- * @param jsonVal 目标json值
- * @returns 返回数据库能够存储的值
- */
-export function sql_stringify_json(jsonVal: object) {
-  const config = get_config()
-  if (config.sql.client === 'sqlite') {
-    return JSON.stringify(jsonVal)
-  } else {
-    return jsonVal
-  }
-}
-
 export function s_delete(file: string) {
   try {
     fs.rmSync(file, { force: true, recursive: true })

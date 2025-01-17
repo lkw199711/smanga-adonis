@@ -1,15 +1,15 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-23 18:34:07
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-13 19:26:11
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2025-01-17 22:39:19
  * @FilePath: \smanga-adonis\app\services\scan_job.ts
  */
 import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
 import * as fs from 'fs'
 import * as path from 'path'
-import { sql_stringify_json } from '../utils/index.js'
+import { scanQueue } from './queue_service.js'
 
 type mangaItem = {
   mangaPath: string
@@ -35,24 +35,7 @@ export default async function handle({ pathId }: any) {
 
   // 不存在路径 结束扫面任务
   if (!pathInfo || !mediaInfo) return
-
-  const scanRecord = await prisma.scan.findFirst({ where: { pathId } })
-
-  if (scanRecord) {
-    // 存在扫面任务 终止现在扫描
-    return
-  }
-
-  // 记录最新扫描时间
-  await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } })
-  await prisma.scan.create({
-    data: {
-      pathId,
-      scanStatus: 'start',
-      pathContent: pathInfo.pathContent,
-    },
-  })
-
+  
   // 目录中的漫画
   let mangaList: mangaItem[] = []
   // 数据库中的漫画
@@ -80,24 +63,24 @@ export default async function handle({ pathId }: any) {
     // 现存漫画多于库中漫画, 说明新增了文件. 进行新增 dev_log
     mangaList.forEach(async (item: mangaItem, index: number) => {
       // 生成参数
-      const args = sql_stringify_json({
+      const args = {
         pathId,
         pathInfo,
         mediaInfo,
         mangaCount: mangaList.length,
         mangaIndex: index,
         ...item,
-      }) as string
+      }
 
-      await prisma.task.create({
-        data: {
-          taskName: `scan_${pathId}`,
-          // 使任务按顺序执行
-          priority: TaskPriority.scanManga + index,
-          command: 'taskScanManga',
-          args,
-        },
+      scanQueue.add({
+        taskName: `scan_${pathId}`,
+        command: 'taskScanManga',
+        args
+      }, {
+        priority: TaskPriority.scanManga,
+        timeout: 1000 * 60 * 1,
       })
+
     })
   }
 }

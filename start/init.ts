@@ -2,16 +2,13 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-27 21:46:49
+ * @LastEditTime: 2025-01-17 23:45:04
  * @FilePath: \smanga-adonis\start\init.ts
  */
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
 import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os } from '#utils/index'
-import { startTimer } from '#services/timer_service'
-
-// import * as path from 'path'
 
 // 默认配置
 const defaultConfig = {
@@ -95,7 +92,8 @@ export default async function boot() {
       console.log(e)
     }
   */
-  startTimer()
+ // 任务队列通过bull实现 弃用定时器
+  // startTimer()
 }
 
 async function create_dir_win() {

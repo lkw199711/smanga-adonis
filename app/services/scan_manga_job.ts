@@ -1,8 +1,8 @@
 /*
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-29 15:44:04
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-13 19:04:38
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2025-01-17 23:24:41
  * @FilePath: \smanga-adonis\app\services\scan_manga_job.ts
  */
 import * as fs from 'fs'
@@ -15,7 +15,7 @@ import { extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
 import { TaskPriority } from '../type/index.js'
-import { sql_stringify_json } from '../utils/index.js'
+import { scanQueue } from '#services/queue_service'
 
 export default async function handle({
   pathId,
@@ -23,9 +23,7 @@ export default async function handle({
   mediaInfo,
   mangaPath,
   mangaName,
-  parentPath,
-  mangaCount,
-  mangaIndex,
+  parentPath
 }: any) {
   let mangaRecord: any = null
   let chapterRecord: any = null
@@ -34,14 +32,6 @@ export default async function handle({
 
   // 更新路径扫描时间
   await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } })
-  // 更新扫描记录-进行中
-  await prisma.scan.update({
-    where: { pathId },
-    data: {
-      scanStatus: 'scaning',
-      pathContent: mangaPath,
-    },
-  })
 
   let mangaInsert: Prisma.mangaCreateInput
 
@@ -225,16 +215,6 @@ export default async function handle({
       fs.unlinkSync(filePath)
     }
   })
-
-  // 更新扫描记录-扫描结束
-  if (mangaIndex >= mangaCount - 1) {
-    prisma.scan.update({
-      where: { pathId },
-      data: {
-        scanStatus: 'completed',
-      },
-    })
-  }
 
   async function meta_scan(recasn: boolean = false) {
     const dirOutExt = mangaRecord.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
@@ -513,10 +493,15 @@ export default async function handle({
 
     if (sourcePoster) {
       // 写入漫画与章节封面
-      await prisma.chapter.update({
-        where: { chapterId: chapterRecord.chapterId },
-        data: { chapterCover: posterName },
-      })
+      try {
+        await prisma.chapter.update({
+          where: { chapterId: chapterRecord.chapterId },
+          data: { chapterCover: posterName },
+        })
+      } catch (e) { 
+        console.log('章节封面插入失败', e)
+      }
+      
       if (!mangaRecord.mangaCover) {
         chapterRecord = await prisma.manga.update({
           where: { mangaId: mangaRecord.mangaId },
@@ -525,21 +510,20 @@ export default async function handle({
       }
 
       // 复制封面到poster目录 使用单独任务队列
-      const args = sql_stringify_json({
+      const args = {
         inputPath: sourcePoster,
         outputPath: posterName,
         maxSizeKB,
         chapterRecord
-      }) as string
+      }
 
-      await prisma.task.create({
-        data: {
-          taskName: `scan_${pathId}`,
-          // 使任务按顺序执行
-          priority: TaskPriority.copyPoster,
-          command: 'copyPoster',
-          args,
-        },
+      scanQueue.add({
+        taskName: `scan_${pathId}`,
+        command: 'copyPoster',
+        args
+      }, {
+        priority: TaskPriority.copyPoster,
+        timeout: 1000 * 6,
       })
 
       return posterName
@@ -581,21 +565,20 @@ export default async function handle({
 
     if (sourcePoster) {
       // 复制封面到poster目录 使用单独任务队列
-      const args = sql_stringify_json({
+      const args = {
         inputPath: sourcePoster,
         outputPath: posterName,
         maxSizeKB,
         mangaRecord
-      }) as string
+      }
 
-      await prisma.task.create({
-        data: {
-          taskName: `scan_${pathId}`,
-          // 使任务按顺序执行
-          priority: TaskPriority.copyPoster,
-          command: 'copyPoster',
-          args,
-        },
+      scanQueue.add({
+        taskName: `scan_${pathId}`,
+        command: 'copyPoster',
+        args
+      }, {
+        priority: TaskPriority.copyPoster,
+        timeout: 1000 * 6,
       })
 
       mangaRecord = await prisma.manga.update({
