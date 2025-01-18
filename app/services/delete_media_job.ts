@@ -6,8 +6,8 @@
  * @FilePath: \smanga-adonis\app\services\delete_media_job.ts
  */
 import prisma from '#start/prisma'
-import { sql_stringify_json } from '../utils/index.js'
 import { TaskPriority } from '../type/index.js'
+import { scanQueue } from '#services/queue_service'
 
 export default async function handle({ mediaId }: any) {
   if (!mediaId) return
@@ -18,13 +18,12 @@ export default async function handle({ mediaId }: any) {
   // 删除漫画
   const paths = await prisma.path.findMany({ where: { mediaId } })
   paths.forEach(async (path) => {
-    await prisma.task.create({
-      data: {
-        taskName: `delete_path_${path.pathId}`,
-        command: 'deletePath',
-        priority: TaskPriority.delete,
-        args: sql_stringify_json({ pathId: path.pathId }) as string,
-      },
+    scanQueue.add({
+      taskName: `delete_path_${path.pathId}`,
+      command: 'deletePath',
+      args: { pathId: path.pathId }
+    }, {
+      priority: TaskPriority.delete
     })
   })
 }

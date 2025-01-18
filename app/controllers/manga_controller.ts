@@ -3,7 +3,7 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import { TaskPriority } from '../type/index.js'
-import { sql_stringify_json } from '../utils/index.js'
+import { scanQueue } from '#services/queue_service'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
@@ -139,14 +139,18 @@ export default class MangaController {
   public async destroy({ params, response }: HttpContext) {
     let { mangaId } = params
     const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
-    await prisma.task.create({
-      data: {
-        taskName: `delete_manga_${manga.mangaId}`,
-        command: 'deleteManga',
-        priority: TaskPriority.deleteManga,
-        args: sql_stringify_json({ mangaId: manga.mangaId }) as string,
-      },
+
+    // await delete_manga_job({ mangaId: manga.mangaId })
+
+    scanQueue.add({
+      taskName: `delete_manga_${manga.mangaId}`,
+      command: 'deleteManga',
+      args: { mangaId: manga.mangaId }
+    }, {
+      priority: TaskPriority.deleteManga,
+      timeout: 1000 * 60 * 1,
     })
+
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: manga })
     return response.json(destroyResponse)
   }

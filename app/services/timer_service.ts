@@ -1,6 +1,12 @@
+/*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-10-08 15:36:23
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2025-01-17 22:09:06
+ * @FilePath: \smanga-adonis\app\services\timer_service.ts
+ */
 // timer.js
 import TaskProcess from '#services/task_service'
-import clear_scan from '#services/clear_scan_service'
 
 let timerId: any = null
 
@@ -13,10 +19,6 @@ function startTimer(interval = 1000) {
     timerId = setInterval(() => {
       // 每个周期执行
       taskProcess.handleTaskQueue()
-      // 每十个周期执行
-      if (period % 10) {
-        clear_scan()
-      }
       period++
     }, interval)
     console.log(`定时器已启动，ID: ${timerId}`)

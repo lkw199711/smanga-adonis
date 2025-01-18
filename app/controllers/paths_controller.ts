@@ -2,14 +2,14 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:21:48
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 14:24:42
+ * @LastEditTime: 2025-01-17 23:46:54
  * @FilePath: \smanga-adonis\app\controllers\paths_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { TaskPriority } from '../type/index.js'
-import { sql_stringify_json } from '../utils/index.js'
+import { scanQueue } from '#services/queue_service'
 
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
@@ -53,15 +53,12 @@ export default class PathsController {
       data: insertData,
     })
 
-    // 新增扫描任务
-    await prisma.task.create({
-      data: {
-        taskName: `scan_${path.pathId}`,
-        priority: TaskPriority.scan,
-        command: 'taskScan',
-        args: sql_stringify_json({ pathId: path.pathId }) as string,
-        status: 'pending',
-      },
+    scanQueue.add({
+      taskName: `scan_${path.pathId}`,
+      command: 'taskScan',
+      args: { pathId: path.pathId }
+    }, {
+      priority: TaskPriority.scan
     })
 
     const saveResponse = new SResponse({ code: 0, message: '新增成功,扫描任务已提交', data: path })
@@ -84,32 +81,31 @@ export default class PathsController {
   public async destroy({ params, response }: HttpContext) {
     let { pathId } = params
     const path = await prisma.path.update({ where: { pathId }, data: { deleteFlag: 1 } })
-    await prisma.task.create({
-      data: {
-        taskName: `delete_path_${path.pathId}`,
-        command: 'deletePath',
-        priority: TaskPriority.delete,
-        args: sql_stringify_json({ pathId: path.pathId }) as string,
-        status: 'pending',
-      },
+
+    scanQueue.add({
+      taskName: `delete_path_${path.pathId}`,
+      command: 'deletePath',
+      args: { pathId: path.pathId }
+    }, {
+      priority: TaskPriority.delete
     })
+
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: path })
     return response.json(destroyResponse)
   }
 
   public async scan({ params, response }: HttpContext) {
     let { pathId } = params
-    const task = await prisma.task.create({
-      data: {
-        taskName: `scan_${pathId}`,
-        priority: TaskPriority.scan,
-        command: 'taskScan',
-        args: sql_stringify_json({ pathId }) as string,
-        status: 'pending',
-      },
+
+    scanQueue.add({
+      taskName: `scan_${pathId}`,
+      command: 'taskScan',
+      args: { pathId }
+    }, {
+      priority: TaskPriority.scan
     })
 
-    const scanResponse = new SResponse({ code: 0, message: '扫描任务已提交', data: task })
+    const scanResponse = new SResponse({ code: 0, message: '扫描任务已提交', data: { pathId } })
     return response.json(scanResponse)
   }
 
@@ -118,28 +114,25 @@ export default class PathsController {
     const mangas = await prisma.manga.findMany({ where: { pathId } })
     // 添加删除任务
     mangas.forEach(async (manga) => { 
-      await prisma.task.create({
-        data: {
-          taskName: `delete_manga_${manga.mangaId}`,
-          command: 'deleteManga',
-          priority: TaskPriority.deleteManga,
-          args: sql_stringify_json({ mangaId: manga.mangaId }) as string,
-          status: 'pending',
-        },
+      scanQueue.add({
+        taskName: `delete_manga_${manga.mangaId}`,
+        command: 'deleteManga',
+        args: { mangaId: manga.mangaId }
+      }, {
+        priority: TaskPriority.deleteManga
       })
-    })
-    // 添加扫描任务
-    const task = await prisma.task.create({
-      data: {
-        taskName: `re_scan_${pathId}`,
-        priority: TaskPriority.scan,
-        command: 'taskScan',
-        args: sql_stringify_json({ pathId }) as string,
-        status: 'pending',
-      },
+
     })
 
-    const scanResponse = new SResponse({ code: 0, message: '重新扫描任务已提交', data: task })
+    scanQueue.add({
+      taskName: `re_scan_${pathId}`,
+      command: 'taskScan',
+      args: { pathId }
+    }, {
+      priority: TaskPriority.scan
+    })
+
+    const scanResponse = new SResponse({ code: 0, message: '重新扫描任务已提交', data: pathId })
     return response.json(scanResponse)
   }
 }

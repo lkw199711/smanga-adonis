@@ -2,14 +2,14 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-11 10:49:45
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 14:41:51
+ * @LastEditTime: 2025-01-17 23:47:08
  * @FilePath: \smanga-adonis\app\services\delete_manga_job.ts
  */
 import prisma from '#start/prisma'
 import { s_delete } from '../utils/index.js'
 export default async function handle({ mangaId }: any) {
   if (!mangaId) return
-
+  
   // 标记为删除
   const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
 

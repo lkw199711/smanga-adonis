@@ -1,15 +1,15 @@
 /*
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-16 09:32:40
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2025-01-17 19:01:55
  * @FilePath: \smanga-adonis\app\controllers\media_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { TaskPriority } from '../type/index.js'
-import { sql_stringify_json } from '../utils/index.js'
+import { scanQueue } from '#services/queue_service'
 
 export default class MediaController {
   public async index({ request, response }: HttpContext) {
@@ -118,14 +118,15 @@ export default class MediaController {
   public async destroy({ params, response }: HttpContext) {
     let { mediaId } = params
     const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
-    await prisma.task.create({
-      data: {
-        taskName: `delete_media_${media.mediaId}`,
-        command: 'deleteMedia',
-        priority: TaskPriority.deleteManga,
-        args: sql_stringify_json({ mediaId: media.mediaId }) as string,
-      },
+    
+    scanQueue.add({
+      taskName: `delete_media_${media.mediaId}`,
+      command: 'deleteMedia',
+      args: { mediaId: media.mediaId }
+    }, {
+      priority: TaskPriority.deleteManga
     })
+
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: media })
     return response.json(destroyResponse)
   }
