@@ -188,12 +188,13 @@ export default class CollectsController {
     return response.json(updateResponse)
   }
 
-  public async is_collect({ params, response }: HttpContext) {
+  public async is_collect({ request, params, response }: HttpContext) {
+    const { userId } = request as any
     const { mangaId, chapterId } = params
 
     if (mangaId) {
       const collect = await prisma.collect.findFirst({
-        where: { mangaId: Number(mangaId), userId: 1 },
+        where: { mangaId: Number(mangaId), userId },
       })
 
       return response.json(new SResponse({ code: 0, message: '', data: !!collect }))
@@ -201,7 +202,7 @@ export default class CollectsController {
 
     if (chapterId) {
       const collect = await prisma.collect.findFirst({
-        where: { chapterId: Number(chapterId), userId: 1 },
+        where: { chapterId: Number(chapterId), userId },
       })
 
       return response.json(new SResponse({ code: 0, message: '', data: !!collect }))
