@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-11 10:49:45
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 14:03:06
+ * @LastEditTime: 2025-02-10 19:11:16
  * @FilePath: \smanga-adonis\app\services\delete_chapter_job.ts
  */
 import prisma from '#start/prisma'
@@ -15,11 +15,13 @@ export default async function handle({ chapterId }: any) {
 
   // 删除书签
   const bookmarks = await prisma.bookmark.findMany({ where: { chapterId } })
-  bookmarks.forEach(async (bookmark) => {
+  for (let index = 0; index < bookmarks.length; index++) {
+    const bookmark = bookmarks[index];
     if (bookmark.pageImage && /smanga_bookmark/.test(bookmark.pageImage)) {
       s_delete(bookmark.pageImage)
     }
-  })
+  }
+
   await prisma.bookmark.deleteMany({ where: { chapterId } })
   // 删除收藏
   await prisma.collect.deleteMany({ where: { chapterId } })

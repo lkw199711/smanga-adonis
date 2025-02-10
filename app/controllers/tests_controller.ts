@@ -9,6 +9,7 @@ import * as fs from 'fs'
 const unrar = require('node-unrar-js')
 import { is_img, write_log } from '#utils/index'
 import { extract7z, Un7z } from '#utils/un7z'
+import { unzipFile, extractFirstImageSyncOrder } from '#utils/unzip'
 
 export default class TestsController {
   public async index({ response }: HttpContext) {
@@ -152,9 +153,24 @@ export default class TestsController {
     response.status(200).send(res)
   }
 
+  public async zip({ response }: HttpContext) { 
+    const rarFilePath = 'A:\\05temp\\09test\\压缩包\\001 梦想.zip'
+    const outputDir = 'A:\\05temp\\09test\\解压后\\111.jpg'
+    extractFirstImageSyncOrder(rarFilePath, outputDir)
+
+    response.status(200).send(true)
+    /*
+    const un7z = new Un7z(rarFilePath, outputDir)
+
+    const res = await un7z.first_image_7z(rarFilePath, outputDir)
+
+    response.status(200).send(res)
+    */
+  }
+
   public async log({ response }: HttpContext) {
     write_log('test log')
-
+    unzipFile
     response.status(200).send({ a: '111' })
   }
 }
