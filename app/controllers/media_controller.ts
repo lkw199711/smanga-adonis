@@ -2,14 +2,20 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-01-17 19:01:55
+ * @LastEditTime: 2025-02-10 19:20:02
  * @FilePath: \smanga-adonis\app\controllers\media_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
-import { TaskPriority } from '../type/index.js'
+import { ListResponse, SResponse } from '#interfaces/response'
+import { TaskPriority } from '#type/index'
 import { scanQueue } from '#services/queue_service'
+import { get_config } from '#utils/index'
+import delete_media_job from '#services/delete_media_job'
+
+// 才用同步还是异步的方式执行扫描任务
+const config = get_config()
+const dispatchSync = config.debug.dispatchSync == 1
 
 export default class MediaController {
   public async index({ request, response }: HttpContext) {
@@ -71,7 +77,7 @@ export default class MediaController {
     let { mediaId } = params
 
     // 判断是否有权限查看该媒体库
-    if (!isAdmin && !mediaPermissons.some((item) => item.mediaId === mediaId)) { 
+    if (!isAdmin && !mediaPermissons.some((item) => item.mediaId === mediaId)) {
       return response
         .status(401)
         .json(new SResponse({ code: 401, message: '无权限查看', status: 'token error' }))
@@ -118,14 +124,18 @@ export default class MediaController {
   public async destroy({ params, response }: HttpContext) {
     let { mediaId } = params
     const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
-    
-    scanQueue.add({
-      taskName: `delete_media_${media.mediaId}`,
-      command: 'deleteMedia',
-      args: { mediaId: media.mediaId }
-    }, {
-      priority: TaskPriority.deleteManga
-    })
+
+    if (dispatchSync) {
+      delete_media_job(media.mediaId)
+    } else {
+      scanQueue.add({
+        taskName: `delete_media_${media.mediaId}`,
+        command: 'deleteMedia',
+        args: { mediaId: media.mediaId }
+      }, {
+        priority: TaskPriority.deleteManga
+      })
+    }
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: media })
     return response.json(destroyResponse)

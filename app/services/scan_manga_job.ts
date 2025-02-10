@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-29 15:44:04
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-01-17 23:24:41
+ * @LastEditTime: 2025-02-10 17:06:44
  * @FilePath: \smanga-adonis\app\services\scan_manga_job.ts
  */
 import * as fs from 'fs'
@@ -16,6 +16,8 @@ import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
 import { TaskPriority } from '../type/index.js'
 import { scanQueue } from '#services/queue_service'
+import { compressImageToSize } from '#utils/sharp'
+import { s_delete } from '#utils/index'
 
 export default async function handle({
   pathId,
@@ -153,8 +155,8 @@ export default async function handle({
       const newChapterList = chapterList.filter((item: any) => {
         return !chapterListSql.some((sqlItem: any) => sqlItem.chapterName === item.chapterName)
       })
-
-      newChapterList.forEach(async (item: any) => {
+      for (let index = 0; index < newChapterList.length; index++) {
+        const item = newChapterList[index];
         // 将标题繁简体转换后写入副标题,用于检索
         const sName = S.t2s(item.chapterName)
         const tName = S.s2t(item.chapterName)
@@ -193,7 +195,8 @@ export default async function handle({
         if (!chapterRecord.chapterCover) {
           await chapter_poster(item.chapterPath)
         }
-      })
+      }
+
     } else if (chapterList.length === chapterListSql.length) {
       // 无变更
     } else {
@@ -202,18 +205,17 @@ export default async function handle({
         return !chapterList.some((sqlItem: any) => sqlItem.chapterPath === item.chapterPath)
       })
 
-      delChapterList.forEach(async (item: any) => {
-        await prisma.chapter.delete({ where: { chapterId: item.chapterId } })
-      })
+      for (let index = 0; index < delChapterList.length; index++) {
+        const element = delChapterList[index];
+        await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
+      }
     }
   }
 
   // 删除缓存文件
   fs.readdirSync(cachePath).forEach((file) => {
     const filePath = path.join(cachePath, file)
-    if (fs.statSync(filePath).isFile()) {
-      fs.unlinkSync(filePath)
-    }
+    s_delete(filePath)
   })
 
   async function meta_scan(recasn: boolean = false) {
@@ -247,7 +249,9 @@ export default async function handle({
       const info = JSON.parse(rawData)
 
       // 一般性元数据
-      Object.keys(info).forEach(async (key) => {
+      const keys = Object.keys(info)
+      for (let index = 0; index < keys.length; index++) {
+        const key = keys[index];
         const value = info[key]
         if (['title', 'author', 'star', 'describe', 'publishDate', 'classify', 'finished', 'updateDate'].includes(key)) {
           try {
@@ -266,12 +270,13 @@ export default async function handle({
             console.log(e);
           }
         }
-      })
+      }
 
       // banner,thumbnail,character
       const metaFiles = fs.readdirSync(dirMeta)
       const cahracterPics: string[] = []
-      metaFiles.forEach(async (file: string) => {
+      for (let index = 0; index < metaFiles.length; index++) {
+        const file = metaFiles[index];
         const filePath = path.join(dirMeta, file)
         if (!is_img(file)) return
         if (/banner/i.test(file)) {
@@ -301,12 +306,14 @@ export default async function handle({
         } else {
           cahracterPics.push(filePath)
         }
-      })
+      }
 
       // 插入标签
       const tagColor = '#a0d911'
       const tags: string[] = info?.tags || []
-      tags.forEach(async (tag: any) => {
+
+      for (let index = 0; index < tags.length; index++) {
+        const tag: any = tags[index];
         // 系统标签保持唯一性,用户标签不做唯一性限制
         // 扫描时确认没有同名系统标签,没有则创建
         const tagName = typeof tag === 'object' ? tag.name : tag
@@ -342,11 +349,12 @@ export default async function handle({
               console.log('标签插入失败', e)
             })
         }
-      })
+      }
 
       // 插入角色
       const characters = info?.character || []
-      characters.forEach(async (char: any) => {
+      for (let index = 0; index < characters.length; index++) {
+        const char = characters[index];
         // 同漫画内角色名唯一
         let charRecord = await prisma.meta.findFirst({
           where: { metaContent: char.name, mangaId: mangaRecord.mangaId },
@@ -368,7 +376,7 @@ export default async function handle({
             },
           })
         }
-      })
+      }
     }
   }
 
@@ -494,21 +502,29 @@ export default async function handle({
     if (sourcePoster) {
       // 写入漫画与章节封面
       try {
+
         await prisma.chapter.update({
           where: { chapterId: chapterRecord.chapterId },
           data: { chapterCover: posterName },
         })
-      } catch (e) { 
+        chapterRecord.chapterCover = posterName
+      } catch (e) {
         console.log('章节封面插入失败', e)
       }
-      
+
       if (!mangaRecord.mangaCover) {
-        chapterRecord = await prisma.manga.update({
+        // 直接使用update的返回值会丢失id 才用补充赋值的形式补全数据
+        await prisma.manga.update({
           where: { mangaId: mangaRecord.mangaId },
           data: { mangaCover: posterName },
         })
+
+        mangaRecord.mangaCover = posterName
       }
 
+      // 压缩图片
+      await compressImageToSize(sourcePoster, posterName, maxSizeKB)
+/*      
       // 复制封面到poster目录 使用单独任务队列
       const args = {
         inputPath: sourcePoster,
@@ -516,6 +532,8 @@ export default async function handle({
         maxSizeKB,
         chapterRecord
       }
+
+      
 
       scanQueue.add({
         taskName: `scan_${pathId}`,
@@ -525,7 +543,7 @@ export default async function handle({
         priority: TaskPriority.copyPoster,
         timeout: 1000 * 6,
       })
-
+*/
       return posterName
     } else {
       return ''
@@ -581,10 +599,12 @@ export default async function handle({
         timeout: 1000 * 6,
       })
 
-      mangaRecord = await prisma.manga.update({
+      await prisma.manga.update({
         where: { mangaId: mangaRecord.mangaId },
         data: { mangaCover: posterName },
       })
+      mangaRecord.mangaCover = posterName
+
       return posterName
     } else {
       return ''
