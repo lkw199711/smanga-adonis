@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-23 18:34:07
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-10 12:59:30
+ * @LastEditTime: 2025-02-14 18:16:33
  * @FilePath: \smanga-adonis\app\services\scan_job.ts
  */
 import prisma from '#start/prisma'
@@ -37,7 +37,7 @@ export default async function handle({ pathId }: any) {
 
   // 不存在路径 结束扫面任务
   if (!pathInfo || !mediaInfo) return
-  
+
   // 目录中的漫画
   let mangaList: mangaItem[] = []
   // 数据库中的漫画
@@ -51,7 +51,7 @@ export default async function handle({ pathId }: any) {
     // 扫描目录下的所有文件
     mangaList = await scan_path(pathInfo.pathContent)
   }
-  
+
   if (!mangaList.length) {
     // 漫画目录为空 无需扫描
     return
@@ -67,7 +67,8 @@ export default async function handle({ pathId }: any) {
     // 现存漫画少于库中漫画, 说明删除了文件. 不进行新增,只删除库中的记录
   } else {
     // 现存漫画多于库中漫画, 说明新增了文件. 进行新增 dev_log
-    mangaList.forEach(async (item: mangaItem, index: number) => {
+    for (let index = 0; index < mangaList.length; index++) {
+      const item = mangaList[index];
       // 生成参数
       const args = {
         pathId,
@@ -92,7 +93,7 @@ export default async function handle({ pathId }: any) {
           timeout: 1000 * 60 * 1,
         })
       }
-    })
+    }
   }
 }
 

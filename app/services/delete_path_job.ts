@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-10-08 15:36:23
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-01-17 18:39:24
+ * @LastEditTime: 2025-02-15 02:49:08
  * @FilePath: \smanga-adonis\app\services\delete_path_job.ts
  */
 import prisma from '#start/prisma'
@@ -17,7 +17,8 @@ export default async function handle({ pathId }: any) {
 
   // 删除漫画
   const mangas = await prisma.manga.findMany({ where: { pathId } })
-  mangas.forEach(async (manga) => {
+  for (let index = 0; index < mangas.length; index++) {
+    const manga = mangas[index];
     scanQueue.add({
       taskName: `delete_manga_${manga.mangaId}`,
       command: 'deleteManga',
@@ -26,5 +27,5 @@ export default async function handle({ pathId }: any) {
       priority: TaskPriority.deleteManga,
       timeout: 1000 * 60 * 1,
     })
-  })
+  }
 }

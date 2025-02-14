@@ -2,7 +2,7 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-29 15:44:04
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-10 17:06:44
+ * @LastEditTime: 2025-02-15 03:42:59
  * @FilePath: \smanga-adonis\app\services\scan_manga_job.ts
  */
 import * as fs from 'fs'
@@ -18,6 +18,7 @@ import { TaskPriority } from '../type/index.js'
 import { scanQueue } from '#services/queue_service'
 import { compressImageToSize } from '#utils/sharp'
 import { s_delete } from '#utils/index'
+import create_media_poster_job from '#services/create_media_poster_job'
 
 export default async function handle({
   pathId,
@@ -209,6 +210,16 @@ export default async function handle({
         const element = delChapterList[index];
         await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
       }
+    }
+
+    const wattingJobs = await scanQueue.getWaiting()
+    const activeJobs = await scanQueue.getActive()
+    const jobs = wattingJobs.concat(activeJobs)
+    const thisPathJobs = jobs.filter((job: any) => job.data.taskName === `scan_${pathId}`)
+
+    // 当扫描未进行到最后一步时,不再重复提交生成媒体库封面任务
+    if (thisPathJobs.length <= 1) {
+      await create_media_poster_job({ mediaId: pathInfo.mediaId })
     }
   }
 
@@ -524,26 +535,26 @@ export default async function handle({
 
       // 压缩图片
       await compressImageToSize(sourcePoster, posterName, maxSizeKB)
-/*      
-      // 复制封面到poster目录 使用单独任务队列
-      const args = {
-        inputPath: sourcePoster,
-        outputPath: posterName,
-        maxSizeKB,
-        chapterRecord
-      }
-
+      /*      
+            // 复制封面到poster目录 使用单独任务队列
+            const args = {
+              inputPath: sourcePoster,
+              outputPath: posterName,
+              maxSizeKB,
+              chapterRecord
+            }
       
-
-      scanQueue.add({
-        taskName: `scan_${pathId}`,
-        command: 'copyPoster',
-        args
-      }, {
-        priority: TaskPriority.copyPoster,
-        timeout: 1000 * 6,
-      })
-*/
+            
+      
+            scanQueue.add({
+              taskName: `scan_${pathId}`,
+              command: 'copyPoster',
+              args
+            }, {
+              priority: TaskPriority.copyPoster,
+              timeout: 1000 * 6,
+            })
+      */
       return posterName
     } else {
       return ''

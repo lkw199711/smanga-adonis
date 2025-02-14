@@ -46,6 +46,7 @@ router.get('/test/7z1', [TestsController, 'zzz'])
 router.get('/test/7z2', [TestsController, 'zzz'])
 router.get('/test/log', [TestsController, 'log'])
 router.get('/test/zip', [TestsController, 'zip'])
+router.get('/test/m', [TestsController, 'test'])
 
 
 router.any('/image', [ImagesController, 'index'])
@@ -123,6 +124,7 @@ router.get('/media/:mediaId', [MediaController, 'show'])
 router.post('/media', [MediaController, 'create'])
 router.put('/media/:mediaId', [MediaController, 'update'])
 router.delete('/media/:mediaId', [MediaController, 'destroy'])
+router.put('/media-cover/:mediaId', [MediaController, 'poster'])
 
 // 路径
 router.get('/path', [PathsController, 'index'])

@@ -4,6 +4,7 @@ enum TaskPriority {
   scan = 200000,
   scanManga = 210000,
   copyPoster = 220000,
+  createMediaPoster = 230000,
   compress = 300000,
   default = 900000,
 }

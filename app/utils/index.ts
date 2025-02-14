@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 14:13:00
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-28 12:02:10
+ * @LastEditTime: 2025-02-14 18:02:05
  * @FilePath: \smanga-adonis\app\utils\index.ts
  */
 import * as os from 'os'
@@ -38,7 +38,7 @@ export function get_env() {
   return process.env.NODE_ENV
 }
 
-export function path_poster() {
+export function path_poster():string {
   if (platform === 'win32') {
     return path.join(rootDir, 'data', 'poster')
   } else if (platform === 'linux') {

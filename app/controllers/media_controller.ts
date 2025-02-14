@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-10 19:20:02
+ * @LastEditTime: 2025-02-14 18:45:39
  * @FilePath: \smanga-adonis\app\controllers\media_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -12,6 +12,7 @@ import { TaskPriority } from '#type/index'
 import { scanQueue } from '#services/queue_service'
 import { get_config } from '#utils/index'
 import delete_media_job from '#services/delete_media_job'
+import create_media_poster_job from '#services/create_media_poster_job'
 
 // 才用同步还是异步的方式执行扫描任务
 const config = get_config()
@@ -139,5 +140,12 @@ export default class MediaController {
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: media })
     return response.json(destroyResponse)
+  }
+
+  public async poster({ params, response }: HttpContext) {
+    const { mediaId } = params
+    const posterFile = await create_media_poster_job({ mediaId: Number(mediaId) })
+    const posterResponse = new SResponse({ code: 0, message: '', data: posterFile })
+    return response.json(posterResponse)
   }
 }

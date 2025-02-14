@@ -10,6 +10,7 @@ const unrar = require('node-unrar-js')
 import { is_img, write_log } from '#utils/index'
 import { extract7z, Un7z } from '#utils/un7z'
 import { unzipFile, extractFirstImageSyncOrder } from '#utils/unzip'
+import { createCanvas, loadImage } from 'canvas'
 
 export default class TestsController {
   public async index({ response }: HttpContext) {
@@ -153,7 +154,7 @@ export default class TestsController {
     response.status(200).send(res)
   }
 
-  public async zip({ response }: HttpContext) { 
+  public async zip({ response }: HttpContext) {
     const rarFilePath = 'A:\\05temp\\09test\\压缩包\\001 梦想.zip'
     const outputDir = 'A:\\05temp\\09test\\解压后\\111.jpg'
     extractFirstImageSyncOrder(rarFilePath, outputDir)
@@ -173,4 +174,56 @@ export default class TestsController {
     unzipFile
     response.status(200).send({ a: '111' })
   }
+
+  public async test({ response }: HttpContext) {
+    response
+    // 使用示例
+    const imagesToMerge = [
+      path.join('A:\\05temp\\09test', 'en', 'cover0.jpg'),
+      path.join('A:\\05temp\\09test', 'en', 'cover1.jpg'),
+      path.join('A:\\05temp\\09test', 'en', 'cover2.jpg'),
+      path.join('A:\\05temp\\09test', 'en', 'cover3.jpg'),
+      // 'A:\\05temp\\09test\\解压后\\002.jpg',
+      // 'A:\\05temp\\09test\\解压后\\003.jpg',
+      // 'A:\\05temp\\09test\\解压后\\004.jpg',
+      // 'A:\\05temp\\09test\\解压后\\005.jpg',
+    ]; // 替换为你的图片路径
+    const outputImage = 'A:\\05temp\\09test\\解压后\\cover-merged.jpg';
+    mergeImages(imagesToMerge, outputImage, 60, 90);
+
+    return '123124'
+  }
+
+
+}
+
+async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number) {
+  const gap = 2;
+  // 加载图片
+  const images = await Promise.all(imagePaths.map(path => loadImage(path)));
+
+  // 计算合并后的画布宽度和最大高度
+  const totalWidth = images.length * targetWidth + (images.length - 1) * gap; // 每张图片使用目标宽度
+  const maxHeight = targetHeight; // 使用目标高度
+
+  // 创建画布
+  const canvas = createCanvas(totalWidth, maxHeight);
+  const ctx = canvas.getContext('2d');
+
+  // 填充黑色背景
+  ctx.fillStyle = 'black'; // 设置填充颜色为黑色
+  ctx.fillRect(0, 0, totalWidth, maxHeight); // 填充整个画布
+
+  // 绘制图片
+  let xOffset = 0;
+  images.forEach(image => {
+    // 绘制缩放后的图片
+    ctx.drawImage(image, xOffset, 0, targetWidth, targetHeight); // 水平合并
+    xOffset += (targetWidth + gap); // 更新横坐标偏移量
+  });
+
+  // 保存合并后的图片
+  const buffer: any = canvas.toBuffer('image/png');
+  fs.writeFileSync(outputPath, buffer);
+  console.log('合并完成，保存至', outputPath);
 }

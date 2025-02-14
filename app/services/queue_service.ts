@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2025-01-17 15:45:01
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-01-17 22:17:42
+ * @LastEditTime: 2025-02-15 02:59:27
  * @FilePath: \smanga-adonis\start\queue.ts
  */
 import scan_job from './scan_job.js'
@@ -12,6 +12,7 @@ import delete_manga_job from './delete_manga_job.js'
 import delete_path_job from './delete_path_job.js'
 import delete_media_job from './delete_media_job.js'
 import copy_poster_job from './copy_poster_job.js'
+import create_media_poster_job from './create_media_poster_job.js'
 
 import Bull from 'bull'
 const scanQueue = new Bull('smanga', {
@@ -29,7 +30,7 @@ scanQueue.on('failed', (job, err) => {
     console.error(`Job failed: ${job.id} with error: ${err.message}`);
 });
 
-scanQueue.process(3, async (job: any) => {
+scanQueue.process(2, async (job: any) => {
     const { command, args } = job.data;
 
     switch (command) {
@@ -65,6 +66,17 @@ scanQueue.process(3, async (job: any) => {
             break
         case 'copyPoster':
             await copy_poster_job(args);
+            break
+        case 'compressChapter':
+            //压缩章节
+            console.log('压缩章节')
+            // await compress_chapter_job(args)
+            break
+        case 'createMediaPoster':
+            //生成媒体库封面
+            console.log('生成媒体库封面')
+            await create_media_poster_job(args)
+            break
         default:
             break
     }
