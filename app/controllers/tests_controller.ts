@@ -10,7 +10,8 @@ const unrar = require('node-unrar-js')
 import { is_img, write_log } from '#utils/index'
 import { extract7z, Un7z } from '#utils/un7z'
 import { unzipFile, extractFirstImageSyncOrder } from '#utils/unzip'
-import { createCanvas, loadImage } from 'canvas'
+// import { createCanvas, loadImage } from 'canvas'
+import sharp from 'sharp';
 
 export default class TestsController {
   public async index({ response }: HttpContext) {
@@ -196,7 +197,7 @@ export default class TestsController {
 
 
 }
-
+/*
 async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number) {
   const gap = 2;
   // 加载图片
@@ -226,4 +227,33 @@ async function mergeImages(imagePaths: string[], outputPath: string, targetWidth
   const buffer: any = canvas.toBuffer('image/png');
   fs.writeFileSync(outputPath, buffer);
   console.log('合并完成，保存至', outputPath);
+}
+  */
+
+async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number, gap: number = 2) {
+  const images = imagePaths.map(imagePath => sharp(imagePath).resize(targetWidth, targetHeight).toBuffer());
+
+  try {
+    const buffers = await Promise.all(images);
+
+    // 创建合并后的图像
+    const composite = await sharp({
+      create: {
+        width: (targetWidth + gap) * images.length - gap, // 总宽度，减去最后一个间隙
+        height: targetHeight, // 高度
+        channels: 4, // RGBA
+        background: { r: 0, g: 0, b: 0, alpha: 1 } // 黑色背景
+      }
+    })
+      .composite(buffers.map((buffer, index) => ({
+        input: buffer,
+        top: 0,
+        left: index * (targetWidth + gap) // 水平排列，考虑间隙
+      })))
+      .toFile(outputPath); // 保存合并后的图像
+
+    console.log('合并完成，保存至', outputPath);
+  } catch (error) {
+    console.error('合并图片时出错:', error);
+  }
 }

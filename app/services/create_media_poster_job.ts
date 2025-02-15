@@ -2,13 +2,12 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2025-02-14 15:49:08
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-15 03:47:06
+ * @LastEditTime: 2025-02-15 14:24:42
  * @FilePath: \smanga-adonis\app\services\create_media_poster_job.ts
  */
 import prisma from '#start/prisma';
-import { createCanvas, loadImage } from 'canvas'
 import { path_poster } from '#utils/index';
-import * as fs from 'fs'
+import sharp from 'sharp';
 import * as path from 'path'
 
 export default async function handle({ mediaId }: any) {
@@ -35,29 +34,30 @@ export default async function handle({ mediaId }: any) {
     return outputPath;
 }
 
-async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number) {
-    const gap = 2;
-    // 加载图片
-    const images = await Promise.all(imagePaths.map(path => loadImage(path)));
+async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number, gap: number = 2) {
+  const images = imagePaths.map(imagePath => sharp(imagePath).resize(targetWidth, targetHeight).toBuffer());
 
-    // 计算合并后的画布宽度和最大高度
-    const totalWidth = images.length * targetWidth + (images.length - 1) * gap; // 每张图片使用目标宽度
-    const maxHeight = targetHeight; // 使用目标高度
+  try {
+    const buffers = await Promise.all(images);
 
-    // 创建画布
-    const canvas = createCanvas(totalWidth, maxHeight);
-    const ctx = canvas.getContext('2d');
+    // 创建合并后的图像
+    const composite = await sharp({
+      create: {
+        width: (targetWidth + gap) * images.length - gap, // 总宽度，减去最后一个间隙
+        height: targetHeight, // 高度
+        channels: 4, // RGBA
+        background: { r: 0, g: 0, b: 0, alpha: 1 } // 黑色背景
+      }
+    })
+      .composite(buffers.map((buffer, index) => ({
+        input: buffer,
+        top: 0,
+        left: index * (targetWidth + gap) // 水平排列，考虑间隙
+      })))
+      .toFile(outputPath); // 保存合并后的图像
 
-    // 绘制图片
-    let xOffset = 0;
-    images.forEach(image => {
-        // 绘制缩放后的图片
-        ctx.drawImage(image, xOffset, 0, targetWidth, targetHeight); // 水平合并
-        xOffset += (targetWidth + gap); // 更新横坐标偏移量
-    });
-
-    // 保存合并后的图片
-    const buffer: any = canvas.toBuffer('image/png');
-    fs.writeFileSync(outputPath, buffer);
     console.log('合并完成，保存至', outputPath);
+  } catch (error) {
+    console.error('合并图片时出错:', error);
+  }
 }
