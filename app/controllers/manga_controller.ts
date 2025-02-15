@@ -50,7 +50,7 @@ export default class MangaController {
       where: {
         ...(mediaId && { mediaId }),
         deleteFlag: 0,
-        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.media) } }),
+        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
     }
 
@@ -74,7 +74,7 @@ export default class MangaController {
       where: {
         ...(mediaId && { mediaId }),
         deleteFlag: 0,
-        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.media) } }),
+        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
     }
 
