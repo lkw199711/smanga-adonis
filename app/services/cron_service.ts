@@ -16,18 +16,23 @@ function create_scan_cron() {
     const config = get_config()
     const scanInterval = config.scan.interval
     // 定时扫描任务
-    scanCron = cron.schedule(scanInterval, async () => {
-        const paths = await prisma.path.findMany()
-        const autoScanPaths = paths.filter((path: any) => path.autoScan == 1)     
-        autoScanPaths.forEach((path: any) => {
-            addTask({
-                taskName: `scan_path_${path.pathId}`,
-                command: 'taskScanPath',
-                args: { pathId: path.pathId },
-                priority: TaskPriority.scan,
+    try {
+        scanCron = cron.schedule(scanInterval, async () => {
+            const paths = await prisma.path.findMany()
+            const autoScanPaths = paths.filter((path: any) => path.autoScan == 1)
+            autoScanPaths.forEach((path: any) => {
+                addTask({
+                    taskName: `scan_path_${path.pathId}`,
+                    command: 'taskScanPath',
+                    args: { pathId: path.pathId },
+                    priority: TaskPriority.scan,
+                })
             })
-        })
-    });
+        });
+    } catch (e) { 
+        console.error('部署corn扫描任务失败', e)
+    }
+    
 }
 
 /*
