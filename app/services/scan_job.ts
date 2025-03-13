@@ -2,14 +2,14 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-23 18:34:07
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-14 18:16:33
+ * @LastEditTime: 2025-03-13 19:06:19
  * @FilePath: \smanga-adonis\app\services\scan_job.ts
  */
 import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
 import * as fs from 'fs'
 import * as path from 'path'
-import { scanQueue } from './queue_service.js'
+import { addTask, scanQueue } from './queue_service.js'
 import { get_config } from '#utils/index'
 import scan_manga_job from '#services/scan_manga_job'
 
@@ -59,10 +59,6 @@ export default async function handle({ pathId }: any) {
 
   mangaListSql = await prisma.manga.findMany({ where: { pathId } })
 
-  // 才用同步还是异步的方式执行扫描任务
-  const config = get_config()
-  const dispatchSync = config.debug.dispatchSync == 1
-
   if (mangaList.length < mangaListSql.length) {
     // 现存漫画少于库中漫画, 说明删除了文件. 不进行新增,只删除库中的记录
   } else {
@@ -79,20 +75,13 @@ export default async function handle({ pathId }: any) {
         ...item,
       }
 
-      if (dispatchSync) {
-        // 同步执行
-        await scan_manga_job(args)
-      } else {
-        // 异步执行
-        scanQueue.add({
-          taskName: `scan_${pathId}`,
-          command: 'taskScanManga',
-          args
-        }, {
-          priority: TaskPriority.scanManga,
-          timeout: 1000 * 60 * 1,
-        })
-      }
+      addTask({
+        taskName: `scan_path_${pathId}`,
+        command: 'taskScanManga',
+        args,
+        priority: TaskPriority.scanManga,
+        timeout: 1000 * 60 * 5,
+      })
     }
   }
 }

@@ -3,13 +3,8 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '#interfaces/response'
 import { Prisma } from '@prisma/client'
 import { TaskPriority } from '#type/index'
-import { scanQueue } from '#services/queue_service'
-import { get_config } from '#utils/index'
-import delete_manga_job from '#services/delete_manga_job'
+import { addTask, scanQueue } from '#services/queue_service'
 
-// 才用同步还是异步的方式执行扫描任务
-const config = get_config()
-const dispatchSync = config.debug.dispatchSync == 1
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
     const { mediaId, page, pageSize } = request.only([
@@ -145,18 +140,13 @@ export default class MangaController {
     let { mangaId } = params
     const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
 
-    if (dispatchSync) {
-      await delete_manga_job({ mangaId: manga.mangaId })
-    } else {
-      scanQueue.add({
-        taskName: `delete_manga_${manga.mangaId}`,
-        command: 'deleteManga',
-        args: { mangaId: manga.mangaId }
-      }, {
-        priority: TaskPriority.deleteManga,
-        timeout: 1000 * 60 * 1,
-      })
-    }
+    addTask({
+      taskName: `delete_manga_${manga.mangaId}`,
+      command: 'deleteManga',
+      args: { mangaId: manga.mangaId },
+      priority: TaskPriority.deleteManga,
+      timeout: 1000 * 60 * 10,
+    })
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: manga })
     return response.json(destroyResponse)

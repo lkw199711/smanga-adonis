@@ -93,7 +93,7 @@ export default class TaskProcess {
       const argsVal = sql_parse_json(task.args as string)
 
       switch (task.command) {
-        case 'taskScan':
+        case 'taskScanPath':
           //扫描任务调用
           console.log('执行扫描任务')
           await scan_job(argsVal)

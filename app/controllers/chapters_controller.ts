@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-10 19:06:42
+ * @LastEditTime: 2025-03-13 19:10:44
  * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -16,7 +16,7 @@ import { extractRar } from '../utils/unrar.js'
 import { path_compress, order_params, get_config } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { extract7z } from '#utils/un7z'
-import { scanQueue } from '#services/queue_service'
+import { addTask, scanQueue } from '#services/queue_service'
 import delete_chapter_job from '#services/delete_chapter_job'
 
 // 才用同步还是异步的方式执行扫描任务
@@ -251,18 +251,13 @@ export default class ChaptersController {
     let { chapterId } = params
     const chapter = await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 1 } })
 
-    if (dispatchSync) { 
-      delete_chapter_job({ chapterId })
-    } else {
-      scanQueue.add({
-        taskName: `delete_chapter_${chapter.chapterId}`,
-        command: 'deleteChapter',
-        args: { chapterId: chapter.chapterId }
-      }, {
-        priority: TaskPriority.deleteManga
-      })
-    }
-
+    addTask({
+      taskName: `delete_chapter_${chapter.chapterId}`,
+      command: 'deleteChapter',
+      args: { chapterId: chapter.chapterId },
+      priority: TaskPriority.deleteManga
+    })
+    
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapter })
     return response.json(destroyResponse)
   }

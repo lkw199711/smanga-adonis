@@ -2,22 +2,16 @@
  * @Author: 梁楷文 lkw199711@163.com
  * @Date: 2024-07-15 19:21:48
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-10 21:36:55
+ * @LastEditTime: 2025-03-13 19:18:37
  * @FilePath: \smanga-adonis\app\controllers\paths_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
-import { scanQueue } from '#services/queue_service'
-import { get_config } from '#utils/index'
-import scan_job from '#services/scan_job'
-import delete_path_job from '#services/delete_path_job'
-import delete_manga_job from '#services/delete_manga_job'
+import { addTask } from '#services/queue_service'
+import { create_scan_cron } from '#services/cron_service'
 
-// 才用同步还是异步的方式执行扫描任务
-const config = get_config()
-const dispatchSync = config.debug.dispatchSync == 1
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
     const { mediaId, page, pageSize } = request.only(['mediaId', 'page', 'pageSize'])
@@ -78,18 +72,19 @@ export default class PathsController {
       return response.json(saveResponse)
     }
 
-    if (dispatchSync) {
-      scan_job({ pathId: path.pathId })
-    } else {
-      scanQueue.add({
-        taskName: `scan_${path.pathId}`,
-        command: 'taskScan',
-        args: { pathId: path.pathId }
-      }, {
-        priority: TaskPriority.scan
-      })
+    // 添加自动扫描任务
+    if (path.autoScan == 1) {
+      create_scan_cron()
     }
 
+    // 扫描路径
+    addTask({
+      taskName: `scan_path_${path.pathId}`,
+      command: 'taskScanPath',
+      args: { pathId: path.pathId },
+      priority: TaskPriority.scan
+    })
+    
     const saveResponse = new SResponse({ code: 0, message: '新增成功,扫描任务已提交', data: path })
 
     return response.json(saveResponse)
@@ -98,11 +93,17 @@ export default class PathsController {
   public async update({ params, request, response }: HttpContext) {
     let { pathId } = params
     pathId = Number(pathId)
-    const modifyData = request.body()
+    const modifyData = request.only(['autoScan', 'include', 'exclude'])
     const path = await prisma.path.update({
       where: { pathId },
       data: modifyData,
     })
+
+    // 如果路径被更新为自动扫描,则添加自动扫描任务
+    if (modifyData.autoScan == 1) {
+      create_scan_cron()
+    }
+
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: path })
     return response.json(updateResponse)
   }
@@ -111,17 +112,12 @@ export default class PathsController {
     let { pathId } = params
     const path = await prisma.path.update({ where: { pathId }, data: { deleteFlag: 1 } })
 
-    if (dispatchSync) {
-      delete_path_job(path.pathId)
-    } else {
-      scanQueue.add({
-        taskName: `delete_path_${path.pathId}`,
-        command: 'deletePath',
-        args: { pathId: path.pathId }
-      }, {
-        priority: TaskPriority.delete
-      })
-    }
+    addTask({
+      taskName: `delete_path_${path.pathId}`,
+      command: 'deletePath',
+      args: { pathId: path.pathId },
+      priority: TaskPriority.delete
+    })    
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: path })
     return response.json(destroyResponse)
@@ -130,17 +126,12 @@ export default class PathsController {
   public async scan({ params, response }: HttpContext) {
     let { pathId } = params
 
-    if (dispatchSync) {
-      scan_job({ pathId: pathId })
-    } else {
-      scanQueue.add({
-        taskName: `scan_${pathId}`,
-        command: 'taskScan',
-        args: { pathId }
-      }, {
-        priority: TaskPriority.scan
-      })
-    }
+    addTask({
+      taskName: `scan_path_${pathId}`,
+      command: 'taskScanPath',
+      args: { pathId },
+      priority: TaskPriority.scan
+    })
 
     const scanResponse = new SResponse({ code: 0, message: '扫描任务已提交', data: { pathId } })
     return response.json(scanResponse)
@@ -152,31 +143,22 @@ export default class PathsController {
     // 删除此路径现有漫画
     for (let index = 0; index < mangas.length; index++) {
       const manga = mangas[index];
-      if (dispatchSync) {
-        delete_manga_job(manga.mangaId)
-      } else {
-        scanQueue.add({
-          taskName: `delete_manga_${manga.mangaId}`,
-          command: 'deleteManga',
-          args: { mangaId: manga.mangaId }
-        }, {
-          priority: TaskPriority.deleteManga
-        })
-      }
+
+      addTask({
+        taskName: `delete_manga_${manga.mangaId}`,
+        command: 'deleteManga',
+        args: { mangaId: manga.mangaId },
+        priority: TaskPriority.deleteManga
+      })      
     }
 
     // 再次扫描路径
-    if (dispatchSync) {
-      scan_job({ pathId })
-    } else {
-      scanQueue.add({
-        taskName: `re_scan_${pathId}`,
-        command: 'taskScan',
-        args: { pathId }
-      }, {
-        priority: TaskPriority.scan
-      })
-    }
+    addTask({
+      taskName: `scan_path_${pathId}`,
+      command: 'taskScanPath',
+      args: { pathId },
+      priority: TaskPriority.scan
+    })
 
     const scanResponse = new SResponse({ code: 0, message: '重新扫描任务已提交', data: pathId })
     return response.json(scanResponse)

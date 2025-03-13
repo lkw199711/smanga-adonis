@@ -17,7 +17,7 @@
   },
   "scan": {
     "auto": 0,
-    "interval": "0 0 0,12 * * *"
+    "interval": 60
   },
   "debug": {
     "dispatchSync": 0

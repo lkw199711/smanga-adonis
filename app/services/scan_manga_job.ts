@@ -215,7 +215,7 @@ export default async function handle({
     const wattingJobs = await scanQueue.getWaiting()
     const activeJobs = await scanQueue.getActive()
     const jobs = wattingJobs.concat(activeJobs)
-    const thisPathJobs = jobs.filter((job: any) => job.data.taskName === `scan_${pathId}`)
+    const thisPathJobs = jobs.filter((job: any) => job.data.taskName === `scan_path_${pathId}`)
 
     // 当扫描未进行到最后一步时,不再重复提交生成媒体库封面任务
     if (thisPathJobs.length <= 1) {
@@ -547,7 +547,7 @@ export default async function handle({
             
       
             scanQueue.add({
-              taskName: `scan_${pathId}`,
+              taskName: `scan_path_${pathId}`,
               command: 'copyPoster',
               args
             }, {
@@ -602,7 +602,7 @@ export default async function handle({
       }
 
       scanQueue.add({
-        taskName: `scan_${pathId}`,
+        taskName: `scan_path_${pathId}`,
         command: 'copyPoster',
         args
       }, {

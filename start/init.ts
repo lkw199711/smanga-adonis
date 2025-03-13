@@ -2,13 +2,14 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-01-17 23:45:04
+ * @LastEditTime: 2025-03-13 19:31:19
  * @FilePath: \smanga-adonis\start\init.ts
  */
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
-import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os } from '#utils/index'
+import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os,get_config } from '#utils/index'
+import { create_scan_cron } from '#services/cron_service'
 
 // 默认配置
 const defaultConfig = {
@@ -83,6 +84,10 @@ export default async function boot() {
       status: 'pending'
     }
   })
+
+  // 设置路径自动扫描cron任务
+  create_scan_cron()
+  
   /*
     // 清理已删除数据
     try {

@@ -9,14 +9,8 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
-import { scanQueue } from '#services/queue_service'
-import { get_config } from '#utils/index'
-import delete_media_job from '#services/delete_media_job'
+import { addTask } from '#services/queue_service'
 import create_media_poster_job from '#services/create_media_poster_job'
-
-// 才用同步还是异步的方式执行扫描任务
-const config = get_config()
-const dispatchSync = config.debug.dispatchSync == 1
 
 export default class MediaController {
   public async index({ request, response }: HttpContext) {
@@ -126,18 +120,13 @@ export default class MediaController {
     let { mediaId } = params
     const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
 
-    if (dispatchSync) {
-      delete_media_job(media.mediaId)
-    } else {
-      scanQueue.add({
-        taskName: `delete_media_${media.mediaId}`,
-        command: 'deleteMedia',
-        args: { mediaId: media.mediaId }
-      }, {
-        priority: TaskPriority.deleteManga
-      })
-    }
-
+    addTask({
+      taskName: `delete_media_${media.mediaId}`,
+      command: 'deleteMedia',
+      args: { mediaId: media.mediaId },
+      priority: TaskPriority.deleteManga
+    })
+    
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: media })
     return response.json(destroyResponse)
   }

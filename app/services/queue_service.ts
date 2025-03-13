@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2025-01-17 15:45:01
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-15 02:59:27
+ * @LastEditTime: 2025-03-13 20:16:08
  * @FilePath: \smanga-adonis\start\queue.ts
  */
 import scan_job from './scan_job.js'
@@ -13,6 +13,7 @@ import delete_path_job from './delete_path_job.js'
 import delete_media_job from './delete_media_job.js'
 import copy_poster_job from './copy_poster_job.js'
 import create_media_poster_job from './create_media_poster_job.js'
+import { get_config } from '#utils/index'
 
 import Bull from 'bull'
 const scanQueue = new Bull('smanga', {
@@ -34,7 +35,7 @@ scanQueue.process(2, async (job: any) => {
     const { command, args } = job.data;
 
     switch (command) {
-        case 'taskScan':
+        case 'taskScanPath':
             //扫描任务调用
             console.log('执行扫描任务')
             await scan_job(args)
@@ -98,4 +99,93 @@ const compressQueue = new Bull('smanga', {
     }
 });
 
-export { scanQueue, deleteQueue, compressQueue };
+async function path_scanning(pathId: number) {
+
+    const wattingJobs = await scanQueue.getWaiting()
+    const activeJobs = await scanQueue.getActive()
+    const jobs = wattingJobs.concat(activeJobs)
+    const thisPathJobs = jobs.filter((job: any) => job.data.taskName === `scan_path_${pathId}`)
+    if (thisPathJobs.length > 0) {
+        return true
+    }
+
+    return false
+}
+
+async function path_deleting(pathId: number) {
+
+    const wattingJobs = await scanQueue.getWaiting()
+    const activeJobs = await scanQueue.getActive()
+    const jobs = wattingJobs.concat(activeJobs)
+    const thisPathJobs = jobs.filter((job: any) => job.data.taskName === `delete_path_${pathId}`)
+    if (thisPathJobs.length > 0) {
+        return true
+    }
+
+    return false
+}
+
+async function addTask({ taskName, command, args, priority, timeout }: any) {
+
+    // 才用同步还是异步的方式执行扫描任务
+    const config = get_config()
+    const dispatchSync = config.debug.dispatchSync == 1
+    if (dispatchSync) {
+        switch (command) {
+            case 'taskScanPath':
+                scan_job(args)
+                break
+            case 'taskScanManga':
+                scan_manga_job(args)
+                break
+            case 'deleteMedia':
+                delete_media_job(args)
+                break
+            case 'deletePath':
+                delete_path_job(args)
+                break
+            case 'deleteManga':
+                delete_manga_job(args)
+                break
+            case 'deleteChapter':
+                delete_chapter_job(args)
+                break
+            case 'copyPoster':
+                copy_poster_job(args);
+                break
+            case 'compressChapter':
+                //压缩章节
+                // compress_chapter_job(args)
+                break
+            case 'createMediaPoster':
+                create_media_poster_job(args)
+                break
+            default:
+                break
+        }
+    } else {
+        if (command === 'taskScanPath') {
+            if (await path_scanning(args.pathId)) {
+                console.log(`路径${args.pathId} 正在被扫描,跳过执行`)
+                return false
+            }
+        } else if (command === 'deletePath') { 
+            if (await path_deleting(args.pathId)) {
+                console.log(`路径${args.pathId} 正在被删除,跳过执行`)
+                return false
+            }
+        }
+
+        scanQueue.add({
+            taskName,
+            command,
+            args
+        }, {
+            priority,
+            timeout
+        })
+    }
+
+}
+
+export { scanQueue, deleteQueue, compressQueue, addTask, path_scanning, path_deleting };
