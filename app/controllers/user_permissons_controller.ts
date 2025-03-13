@@ -44,7 +44,7 @@ export default class UserPermissonsController {
   public async update({ params, request, response }: HttpContext) {
     let { userPermissonId } = params
     userPermissonId = Number(userPermissonId)
-    const modifyData = request.body()
+    const modifyData = request.only(['userId', 'permissonId']) as Prisma.userPermissonUpdateInput
     const userPermisson = await prisma.userPermisson.update({
       where: { userPermissonId: userPermissonId },
       data: modifyData,

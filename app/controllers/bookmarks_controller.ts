@@ -130,7 +130,7 @@ export default class BookmarksController {
   public async update({ params, request, response }: HttpContext) {
     let { bookmarkId } = params
     bookmarkId = Number(bookmarkId)
-    const modifyData = request.body()
+    const modifyData = request.only(['chapterId', 'mangaId', 'mediaId', 'browseType', 'page', 'pageImage'])
     const bookmark = await prisma.bookmark.update({
       where: { bookmarkId },
       data: modifyData,

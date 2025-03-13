@@ -52,7 +52,7 @@ export default class TasksController {
   public async update({ params, request, response }: HttpContext) {
     let { taskId } = params
     taskId = Number(taskId)
-    const modifyData = request.body()
+    const modifyData = request.only(['taskName', 'taskStatus', 'taskType', 'taskContent']) as Prisma.taskUpdateInput
     const task = await prisma.task.update({
       where: { taskId },
       data: modifyData,

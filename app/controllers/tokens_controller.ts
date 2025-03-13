@@ -42,7 +42,7 @@ export default class TokensController {
     public async update({ params, request, response }: HttpContext) { 
         let { tokenId } = params
         tokenId = Number(tokenId)
-        const modifyData = request.body()
+        const modifyData = request.only(['tokenName', 'tokenStatus', 'tokenType']) as Prisma.tokenUpdateInput
         const token = await prisma.token.update({
             where: { tokenId },
             data: modifyData,

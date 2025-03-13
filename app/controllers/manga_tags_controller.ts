@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-10 01:14:57
+ * @LastEditTime: 2025-03-13 22:40:36
  * @FilePath: \smanga-adonis\app\controllers\manga_tags_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -41,7 +41,7 @@ export default class MangaTagsController {
   public async update({ params, request, response }: HttpContext) {
     let { mangaTagId } = params
     mangaTagId = Number(mangaTagId)
-    const modifyData = request.body()
+    const modifyData = request.only(['mangaId', 'tagId'])
     const mangaTag = await prisma.mangaTag.update({
       where: { mangaTagId },
       data: modifyData,

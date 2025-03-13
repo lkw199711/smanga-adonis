@@ -42,7 +42,7 @@ export default class MediaPermissonsController {
     public async update({ params, request, response }: HttpContext) {
         let { mediaPermissonId } = params
         mediaPermissonId = Number(mediaPermissonId)
-        const modifyData = request.body()
+        const modifyData = request.only(['mediaId', 'permissonId']) as Prisma.mediaPermissonUpdateInput
         const mediaPermisson = await prisma.mediaPermisson.update({
             where: { mediaPermissonId },
             data: modifyData,

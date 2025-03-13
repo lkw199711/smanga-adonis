@@ -1,3 +1,10 @@
+/*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-10-08 15:36:23
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2025-03-13 22:42:14
+ * @FilePath: \smanga-adonis\app\controllers\scans_controller.ts
+ */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
@@ -39,7 +46,7 @@ export default class ScansController {
     public async update({ params, request, response }: HttpContext) {
         let { scanId } = params
         scanId = Number(scanId)
-        const modifyData = request.body()
+        const modifyData = request.only(['scanName', 'scanStatus', 'scanType']) as Prisma.scanUpdateInput
         const scan = await prisma.scan.updateMany({
             where: { scanId },
             data: modifyData,

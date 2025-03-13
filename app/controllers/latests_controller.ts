@@ -17,6 +17,9 @@ export default class LatestsController {
         userId
       },
       include: { manga: true },
+      orderBy: {
+        updateTime: 'desc'
+      },
       take: 10,
     })
     const listResponse = new ListResponse({
@@ -68,7 +71,7 @@ export default class LatestsController {
   public async update({ params, request, response }: HttpContext) {
     let { latestId } = params
     latestId = Number(latestId)
-    const modifyData = request.body()
+    const modifyData = request.only(['page', 'chapterId', 'finish'])
     const latest = await prisma.latest.update({
       where: { latestId },
       data: modifyData,

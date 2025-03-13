@@ -107,7 +107,7 @@ export default class HistoriesController {
   public async update({ params, request, response }: HttpContext) {
     let { historyId } = params
     historyId = Number(historyId)
-    const modifyData = request.body()
+    const modifyData = request.only(['mediaId', 'mangaId', 'chapterId', 'chapterName', 'mangaName'])
     const history = await prisma.history.update({
       where: { historyId },
       data: modifyData,

@@ -42,7 +42,7 @@ export default class MetasController {
     public async update({ params, request, response }: HttpContext) { 
         let { metaId } = params
         metaId = Number(metaId)
-        const modifyData = request.body()
+        const modifyData = request.only(['metaKey', 'metaValue']) as Prisma.metaUpdateInput
         const meta = await prisma.meta.update({
             where: { metaId },
             data: modifyData,

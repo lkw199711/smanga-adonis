@@ -95,7 +95,7 @@ export default class LoginController {
   public async update({ params, request, response }: HttpContext) {
     let { loginId } = params
     loginId = Number(loginId)
-    const modifyData = request.body()
+    const modifyData = request.only(['userName', 'passWord'])
     const login = await prisma.login.update({
       where: { loginId },
       data: modifyData,

@@ -1,3 +1,11 @@
+/*
+ * @Author: lkw199711 lkw199711@163.com
+ * @Date: 2024-10-08 15:36:23
+ * @LastEditors: lkw199711 lkw199711@163.com
+ * @LastEditTime: 2025-03-13 22:44:45
+ * @FilePath: \smanga-adonis\app\controllers\versions_controller.ts
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
@@ -35,7 +43,7 @@ export default class VersionsController {
     public async update({ params, request, response }: HttpContext) { 
         let { versionId } = params
         versionId = Number(versionId)
-        const modifyData = request.body()
+        const modifyData = request.only(['versionName', 'versionStatus', 'versionType', 'versionContent']) as Prisma.versionUpdateInput
         const version = await prisma.version.update({
             where: { versionId },
             data: modifyData,

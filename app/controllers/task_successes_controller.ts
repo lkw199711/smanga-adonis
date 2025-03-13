@@ -35,7 +35,7 @@ export default class TaskSuccessesController {
     public async update({ params, request, response }: HttpContext) { 
         let { taskSuccessId } = params
         taskSuccessId = Number(taskSuccessId)
-        const modifyData = request.body()
+        const modifyData = request.only(['taskId', 'taskName', 'taskStatus', 'taskType', 'taskTime', 'taskMessage']) as Prisma.taskSuccessUpdateInput
         const taskSuccess = await prisma.taskSuccess.update({
             where: { taskId: taskSuccessId },
             data: modifyData,
