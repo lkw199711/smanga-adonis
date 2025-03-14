@@ -19,7 +19,7 @@ model bookmark {
   browseType String   @default("flow")
   page       Int
   createTime DateTime @default(now())
-  updateTime DateTime @default(now())
+  updateTime DateTime @updatedAt @default(now())
   pageImage  String?
 
   @@unique([chapterId, page], map: "opage")
@@ -37,7 +37,7 @@ model chapter {
   subTitle      String?
   picNum        Int?
   createTime    DateTime   @default(now())
-  updateTime    DateTime   @default(now())
+  updateTime    DateTime   @updatedAt @default(now())
   chapterName   String
   chapterPath   String
   chapterType   String     @default("image")
@@ -48,6 +48,7 @@ model chapter {
   compress      compress[]
   history       history[]
   collects      collect[]
+  latests       latest[]
 
   @@unique([mangaId, chapterName], map: "oname")
 }
@@ -66,7 +67,7 @@ model collect {
   chapterId   Int?
   chapterName String?
   createTime  DateTime @default(now())
-  updateTime  DateTime @default(now())
+  updateTime  DateTime @updatedAt @default(now())
 
   @@unique([userId, collectType, mangaId, chapterId], map: "uniqueMangaChapter")
 }
@@ -86,7 +87,7 @@ model compress {
   chapterPath    String
   userId         Int?
   createTime     DateTime @default(now())
-  updateTime     DateTime @default(now())
+  updateTime     DateTime @updatedAt @default(now())
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -104,7 +105,7 @@ model history {
   chapterPath String?
   browseType  String   @default("flow")
   createTime  DateTime @default(now())
-  updateTime  DateTime @default(now())
+  updateTime  DateTime @updatedAt @default(now())
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -114,12 +115,13 @@ model latest {
   finish     Int      @default(0)
   manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int
+  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId  Int
   userId     Int
   createTime DateTime @default(now())
-  updateTime DateTime @default(now())
+  updateTime DateTime @updatedAt @default(now())
 
-  @@unique([mangaId, userId], map: "uniqueMangaUser")
+  @@unique([chapterId, userId], map: "uniqueChapterUser")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -136,7 +138,7 @@ model log {
   context     String?
   device      String?
   createTime  DateTime @default(now())
-  updateTime  DateTime @default(now())
+  updateTime  DateTime @updatedAt @default(now())
   userId      Int?
 }
 
@@ -151,7 +153,7 @@ model login {
   ip         String
   userAgent  String?
   createTime DateTime @default(now())
-  updateTime DateTime @default(now())
+  updateTime DateTime @updatedAt @default(now())
   token      String?
 }
 
@@ -178,7 +180,7 @@ model manga {
   publishDate  DateTime?
   deleteFlag   Int        @default(0)
   createTime   DateTime   @default(now())
-  updateTime   DateTime   @default(now())
+  updateTime   DateTime   @updatedAt @default(now())
   latests      latest[]
   historys     history[]
   chapters     chapter[]
@@ -199,7 +201,7 @@ model mangaTag {
   tag        tag      @relation(fields: [tagId], references: [tagId])
   tagId      Int
   createTime DateTime @default(now())
-  updateTime DateTime @default(now())
+  updateTime DateTime @updatedAt @default(now())
 
   @@unique([mangaId, tagId], map: "uniqueMangaTag")
   @@map("mangaTag")
@@ -218,7 +220,7 @@ model media {
   removeFirst     Int              @default(0)
   deleteFlag      Int              @default(0)
   createTime      DateTime         @default(now())
-  updateTime      DateTime         @default(now())
+  updateTime      DateTime         @updatedAt @default(now())
   paths           path[]
   mangas          manga[]
   chapters        chapter[]
@@ -233,7 +235,7 @@ model mediaPermisson {
   media            media    @relation(fields: [mediaId], references: [mediaId])
   mediaId          Int
   createTime       DateTime @default(now())
-  updateTime       DateTime @default(now())
+  updateTime       DateTime @updatedAt @default(now())
 
   @@unique([userId, mediaId], map: "userMedia")
   @@map("mediaPermisson")
@@ -249,7 +251,7 @@ model meta {
   metaContent String?
   description String?
   createTime  DateTime @default(now())
-  updateTime  DateTime @default(now())
+  updateTime  DateTime @updatedAt @default(now())
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -264,7 +266,7 @@ model path {
   lastScanTime DateTime?
   deleteFlag   Int       @default(0)
   createTime   DateTime  @default(now())
-  updateTime   DateTime  @default(now())
+  updateTime   DateTime  @updatedAt @default(now())
   pathContent  String
   mangas       manga[]
 
@@ -280,7 +282,7 @@ model scan {
   scanCount   Int?
   scanIndex   Int?     @default(0)
   createTime  DateTime @default(now())
-  updateTime  DateTime @default(now())
+  updateTime  DateTime @updatedAt @default(now())
   pathContent String
 }
 
@@ -292,7 +294,7 @@ model tag {
   userId      Int?
   description String?
   createTime  DateTime   @default(now())
-  updateTime  DateTime   @default(now())
+  updateTime  DateTime   @updatedAt @default(now())
   mangaTags   mangaTag[]
 }
 
@@ -302,7 +304,7 @@ model task {
   taskName   String    @default("")
   command    String
   createTime DateTime  @default(now())
-  updateTime DateTime  @default(now())
+  updateTime DateTime  @updatedAt @default(now())
   status     String    @default("pending")
   args       String?
   startTime  DateTime?
@@ -322,7 +324,7 @@ model taskFailed {
   endTime    DateTime?
   error      String?
   createTime DateTime  @default(now())
-  updateTime DateTime  @default(now())
+  updateTime DateTime  @updatedAt @default(now())
 
   @@map("taskFailed")
 }
@@ -337,7 +339,7 @@ model taskSuccess {
   startTime  DateTime?
   endTime    DateTime?
   createTime DateTime  @default(now())
-  updateTime DateTime  @default(now())
+  updateTime DateTime  @updatedAt @default(now())
 
   @@map("taskSuccess")
 }
@@ -350,7 +352,7 @@ model token {
   token      String
   expires    DateTime?
   createTime DateTime  @default(now())
-  updateTime DateTime  @default(now())
+  updateTime DateTime  @updatedAt @default(now())
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -363,7 +365,7 @@ model user {
   role            String?          @default("user")
   mediaPermit     String?          @default("limit")
   createTime      DateTime         @default(now())
-  updateTime      DateTime         @default(now())
+  updateTime      DateTime         @updatedAt @default(now())
   userConfig      String?
   logins          login[]
   tokens          token[]
@@ -381,7 +383,7 @@ model userPermisson {
   module          String
   operation       String   @default("default")
   createTime      DateTime @default(now())
-  updateTime      DateTime @default(now())
+  updateTime      DateTime @updatedAt @default(now())
 
   @@unique([userId, module, operation], map: "userModuleOperation")
   @@map("userPermisson")
@@ -393,5 +395,5 @@ model version {
   version     String   @unique(map: "uniqueVersion")
   description String?
   createTime  DateTime @default(now())
-  updateTime  DateTime @default(now())
+  updateTime  DateTime @updatedAt @default(now())
 }

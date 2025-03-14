@@ -3,7 +3,7 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '#interfaces/response'
 import { Prisma } from '@prisma/client'
 import { TaskPriority } from '#type/index'
-import { addTask, scanQueue } from '#services/queue_service'
+import { addTask } from '#services/queue_service'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
@@ -31,7 +31,7 @@ export default class MangaController {
 
     let listResponse = null
     if (page) {
-      listResponse = await this.paginate({ mediaId, page, pageSize, isAdmin, mediaPermissons })
+      listResponse = await this.paginate({ mediaId, page, pageSize, isAdmin, mediaPermissons, userId })
     } else {
       listResponse = await this.no_paginate({ mediaId, isAdmin, mediaPermissons })
     }
@@ -60,7 +60,7 @@ export default class MangaController {
   }
 
   // 分页
-  private async paginate({ mediaId, page, pageSize, isAdmin, mediaPermissons }: any) {
+  private async paginate({ mediaId, page, pageSize, isAdmin, mediaPermissons, userId }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -77,6 +77,18 @@ export default class MangaController {
       prisma.manga.findMany(queryParams),
       prisma.manga.count({ where: queryParams.where }),
     ])
+
+    // 统计未观看章节数
+    for (let i = 0; i < list.length; i++) {
+      const manga: any = list[i];
+      const chapterCount = await prisma.chapter.count({ where: { mangaId: manga.mangaId } })
+      const historys = await prisma.history.groupBy({
+        by: ['chapterId'],
+        where: { mangaId: manga.mangaId, userId },
+      })
+
+      manga.unWatched = chapterCount - historys.length
+    }
 
     return new ListResponse({
       code: 0,

@@ -2,13 +2,13 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 15:33:32
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-13 19:31:19
+ * @LastEditTime: 2025-03-14 13:11:25
  * @FilePath: \smanga-adonis\start\init.ts
  */
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
-import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os,get_config } from '#utils/index'
+import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os } from '#utils/index'
 import { create_scan_cron } from '#services/cron_service'
 
 // 默认配置

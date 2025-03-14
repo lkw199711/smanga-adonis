@@ -87,15 +87,18 @@ router.delete('/compress/:compressId', [CompressesController, 'destroy'])
 router.get('/history', [HistoriesController, 'index'])
 router.get('/history/:historyId', [HistoriesController, 'show'])
 router.post('/history', [HistoriesController, 'create'])
-router.put('/history/:historyId', [HistoriesController, 'update'])
-router.delete('/history/:historyId', [HistoriesController, 'destroy'])
+router.put('/history/:chapterId', [HistoriesController, 'update'])
+router.delete('/history/:chapterId', [HistoriesController, 'destroy'])
+router.put('/read-all-chapters/:mangaId', [HistoriesController, 'read_all_chapters'])
+router.put('/unread-all-chapters/:mangaId', [HistoriesController, 'unread_all_chapters'])
+router.get('/chapter-is-read/:chapterId', [HistoriesController, 'chapter_is_read'])
 
 // 最后阅读记录 latest
 router.get('/latest', [LatestsController, 'index'])
 router.get('/latest/:mangaId', [LatestsController, 'show'])
 router.post('/latest', [LatestsController, 'create'])
-router.put('/latest/:latestId', [LatestsController, 'update'])
-router.delete('/latest/:latestId', [LatestsController, 'destroy'])
+router.put('/latest/:chapterId', [LatestsController, 'update'])
+router.delete('/latest/:chapterId', [LatestsController, 'destroy'])
 
 // 日志模块 log
 router.get('/log', [LogsController, 'index'])

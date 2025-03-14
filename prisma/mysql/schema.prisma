@@ -48,6 +48,7 @@ model chapter {
   compress      compress[]
   history       history[]
   collects      collect[]
+  latests      latest[]
 
   @@unique([mangaId, chapterName], map: "oname")
 }
@@ -111,15 +112,17 @@ model history {
 model latest {
   latestId   Int      @id @default(autoincrement()) @db.UnsignedInt
   page       Int      @db.UnsignedInt
+  count      Int?     @db.UnsignedInt
   finish     Int      @default(0) @db.UnsignedInt
   manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int      @db.UnsignedInt
+  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId  Int      @db.UnsignedInt
   userId     Int      @db.UnsignedInt
   createTime DateTime @default(now()) @db.DateTime(6)
   updateTime DateTime @updatedAt @default(now()) @db.DateTime(6)
 
-  @@unique([mangaId, userId], map: "uniqueMangaUser")
+  @@unique([chapterId, userId], map: "uniqueChapterUser")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
