@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE `latest` ADD COLUMN `count` INTEGER UNSIGNED NULL;
