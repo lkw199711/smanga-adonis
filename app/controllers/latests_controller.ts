@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-14 21:25:05
+ * @LastEditTime: 2025-03-15 02:10:56
  * @FilePath: \smanga-adonis\app\controllers\latests_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -12,21 +12,34 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 export default class LatestsController {
   public async index({ request, response }: HttpContext) {
     const { userId } = request as any
-    const list = await prisma.latest.findMany({
-      where: {
-        userId
-      },
-      include: { manga: true },
-      orderBy: {
-        updateTime: 'desc'
-      },
-      take: 10,
-    })
+    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
+    const list: any = await prisma.$queryRaw`SELECT 
+          latest.mangaId,
+          MAX(latest.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
+          MAX(latest.mangaId) AS mangaId,  -- 使用聚合函数选择 mangaId
+          MAX(latest.userId) AS userId,          -- 使用聚合函数选择 userId
+          MAX(manga.mangaName) AS mangaName, -- 使用聚合函数选择 mangaName
+          MAX(manga.mangaCover) AS mangaCover,   -- 使用聚合函数选择 mangaCover
+          MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType
+      FROM 
+          latest
+      JOIN 
+          manga ON latest.mangaId = manga.mangaId
+      WHERE 
+          latest.userId = ${userId}
+      GROUP BY 
+          latest.mangaId
+      ORDER BY 
+          MAX(latest.updateTime) DESC  -- 根据 updateTime 排序
+      LIMIT 
+          ${pageSize ? pageSize : 10};
+      `;
+
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list: list.map((item) => item.manga),
-      count: list.length,
+      list,
+      count: list?.length,
     })
     return response.json(listResponse)
   }

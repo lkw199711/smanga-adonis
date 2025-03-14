@@ -7,6 +7,9 @@
 -- DropIndex
 DROP INDEX "uniqueMangaUser";
 
+-- AlterTable
+ALTER TABLE "latest" ADD COLUMN     "count" INTEGER;
+
 -- CreateIndex
 CREATE UNIQUE INDEX "uniqueChapterUser" ON "latest"("chapterId", "userId");
 

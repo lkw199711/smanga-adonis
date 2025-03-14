@@ -112,6 +112,7 @@ model history {
 model latest {
   latestId   Int      @id @default(autoincrement())
   page       Int
+  count      Int?
   finish     Int      @default(0)
   manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int

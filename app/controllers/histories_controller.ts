@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-14 21:24:39
+ * @LastEditTime: 2025-03-15 01:53:30
  * @FilePath: \smanga-adonis\app\controllers\histories_controller.ts
  */
 
@@ -34,8 +34,10 @@ export default class HistoriesController {
           history.mangaId
       ORDER BY 
           MAX(history.createTime) DESC  -- 根据 createTime 排序
-      LIMIT 
-          ${page ? pageSize : 100};
+      LIMIT
+        ${pageSize} 
+      OFFSET
+        ${(page - 1) * pageSize}
       `,
       prisma.$queryRaw`SELECT COUNT(DISTINCT mangaId) AS count FROM history WHERE userId = ${userId}`,
     ])

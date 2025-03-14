@@ -4,6 +4,7 @@ PRAGMA foreign_keys=OFF;
 CREATE TABLE "new_latest" (
     "latestId" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "page" INTEGER NOT NULL,
+    "count" INTEGER,
     "finish" INTEGER NOT NULL DEFAULT 0,
     "mangaId" INTEGER NOT NULL,
     "chapterId" INTEGER NOT NULL,
