@@ -2,7 +2,7 @@
  * @Author: lkw199711 lkw199711@163.com
  * @Date: 2024-08-03 05:28:15
  * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-15 02:10:56
+ * @LastEditTime: 2025-03-15 02:16:16
  * @FilePath: \smanga-adonis\app\controllers\latests_controller.ts
  */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -47,12 +47,13 @@ export default class LatestsController {
   public async show({ request, params, response }: HttpContext) {
     const { userId } = request as any
     let { mangaId } = params
-    const latest = await prisma.latest.findUnique({
+    const latest = await prisma.latest.findFirst({
       where: {
-        chapterId_userId: {
-          chapterId: Number(mangaId),
-          userId,
-        },
+        userId,
+        mangaId,
+      },
+      orderBy: {
+        updateTime: 'desc',
       },
     })
     const showResponse = new SResponse({ code: 0, message: '', data: latest })
