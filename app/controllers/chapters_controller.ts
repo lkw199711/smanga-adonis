@@ -99,7 +99,16 @@ export default class ChaptersController {
         deleteFlag: 0,
         ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
-      include: { latests: true },
+      include: {
+        latests: true,
+        manga: {
+          select: {
+            browseType: true,
+            removeFirst: true,
+            direction: true,
+           }
+        }
+      },
       orderBy: { ...(order && order_params(order)) },
     }
 
@@ -110,6 +119,10 @@ export default class ChaptersController {
 
     list.forEach((chapter: any) => {
       chapter.latest = chapter.latests?.length ? chapter.latests[0] : null;
+      chapter = {
+        ...chapter,
+        ...chapter.manga,
+      }
     })
 
     return new ListResponse({

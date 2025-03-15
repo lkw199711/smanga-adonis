@@ -18,6 +18,7 @@ export default class LatestsController {
           MAX(latest.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
           MAX(latest.mangaId) AS mangaId,  -- 使用聚合函数选择 mangaId
           MAX(latest.userId) AS userId,          -- 使用聚合函数选择 userId
+          MAX(manga.mediaId) AS mediaId, -- 使用聚合函数选择 mediaId
           MAX(manga.mangaName) AS mangaName, -- 使用聚合函数选择 mangaName
           MAX(manga.mangaCover) AS mangaCover,   -- 使用聚合函数选择 mangaCover
           MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType

@@ -51,7 +51,24 @@ export default class CollectsController {
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
     const quertParams = {
       where: { userId, collectType: 'chapter' },
-      include: { chapter: true },
+      include: {
+        chapter: {
+          select: {
+            chapterId: true,
+            chapterName: true,
+            chapterCover: true,
+          },
+        },
+        manga: {
+          select: {
+            mediaId: true,
+            mangaId: true,
+            browseType: true,
+            removeFirst: true,
+            describe: true
+          },
+        }
+      },
       skip: (page - 1) * pageSize,
       take: pageSize,
       // orderBy: order_params(order),
@@ -65,7 +82,12 @@ export default class CollectsController {
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list: list.map((item) => item.chapter),
+      list: list.map((item) => {
+        return {
+          ...item.chapter,
+          ...item.manga,
+        }
+      }),
       count,
     })
     return response.json(listResponse)
