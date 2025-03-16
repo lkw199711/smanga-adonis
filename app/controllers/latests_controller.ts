@@ -35,7 +35,7 @@ export default class LatestsController {
       LIMIT 
           ${pageSize ? pageSize : 10};
       `;
-    
+
     // 统计未观看章节数
     for (let i = 0; i < list.length; i++) {
       const manga: any = list[i];
@@ -69,6 +69,13 @@ export default class LatestsController {
       orderBy: {
         updateTime: 'desc',
       },
+      include: {
+        manga: {
+          select: {
+            mediaId: true,
+          },
+        }
+      }
     })
     const showResponse = new SResponse({ code: 0, message: '', data: latest })
     return response.json(showResponse)
