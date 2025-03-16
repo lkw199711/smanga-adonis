@@ -81,7 +81,9 @@ export default class BookmarksController {
         chapter.latest = await prisma.latest.findFirst({
           where: { userId, chapterId },
         })
-        chapter.latest.page = chapter.page
+        if (chapter.latest) {
+          chapter.latest.page = chapter.page
+        }
       } else {
         chapter.latest = null
       }
