@@ -12,23 +12,25 @@ import { compressImageToSize } from '../utils/sharp.js'
 import { path_bookmark, get_config, s_delete } from '../utils/index.js'
 export default class BookmarksController {
   public async index({ request, response }: HttpContext) {
+    const { userId } = request as any
     const { chapterId, page, pageSize } = request.only(['page', 'pageSize', 'chapterId', 'order'])
 
     let listResponse = null
     if (page) {
-      listResponse = await this.paginate(chapterId, page, pageSize)
+      listResponse = await this.paginate(userId, chapterId, page, pageSize)
     } else {
-      listResponse = await this.no_paginate(chapterId)
+      listResponse = await this.no_paginate(userId, chapterId)
     }
 
     return response.json(listResponse)
   }
 
   // 不分页
-  private async no_paginate(chapterId: number) {
+  private async no_paginate(userId: number, chapterId: number) {
     const queryParams = {
       where: {
         ...(chapterId && { chapterId }),
+        userId
       },
     }
 
@@ -43,7 +45,7 @@ export default class BookmarksController {
   }
 
   // 分页
-  private async paginate(chapterId: number, page: number, pageSize: number) {
+  private async paginate(userId: number, chapterId: number, page: number, pageSize: number) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -51,6 +53,7 @@ export default class BookmarksController {
       }),
       where: {
         ...(chapterId && { chapterId }),
+        userId
       },
       include: {
         chapter: {
@@ -70,6 +73,19 @@ export default class BookmarksController {
       prisma.bookmark.findMany(queryParams),
       prisma.bookmark.count({ where: queryParams.where }),
     ])
+
+    for (let i = 0; i < list.length; i++) {
+      const chapter: any = list[i];
+      const chapterId = Number(chapter.chapterId);
+      if (chapterId) {
+        chapter.latest = await prisma.latest.findFirst({
+          where: { userId, chapterId },
+        })
+        chapter.latest.page = chapter.page
+      } else {
+        chapter.latest = null
+      }
+    }
 
     return new ListResponse({
       code: 0,

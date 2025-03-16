@@ -26,7 +26,19 @@ export default class CollectsController {
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
     const queryParams = {
       where: { userId, collectType: 'manga' },
-      include: { manga: true },
+      include: {
+        manga: {
+          select: {
+            mangaId: true,
+            mangaName: true,
+            mangaCover: true,
+            mediaId: true,
+            browseType: true,
+            removeFirst: true,
+            describe: true
+          },
+        }
+      },
       skip: (page - 1) * pageSize,
       take: pageSize,
       // orderBy: order_params(order),
@@ -37,10 +49,28 @@ export default class CollectsController {
       prisma.collect.count({ where: queryParams.where }),
     ])
 
+    // 统计未观看章节数
+    for (let i = 0; i < list.length; i++) {
+      const manga: any = list[i];
+      const mangaId = Number(manga.mangaId);
+      const chapterCount = await prisma.chapter.count({ where: { mangaId } })
+      const historys = await prisma.history.groupBy({
+        by: ['chapterId'],
+        where: { mangaId, userId },
+      })
+
+      manga.unWatched = chapterCount - historys.length
+    }
+
     const listResponse = new ListResponse({
       code: 0,
       message: '',
-      list: list.map((item) => item.manga),
+      list: list.map((item) => {
+        return {
+          ...item,
+          ...item.manga
+        }
+      }),
       count,
     })
     return response.json(listResponse)
@@ -57,7 +87,7 @@ export default class CollectsController {
             chapterId: true,
             chapterName: true,
             chapterCover: true,
-          },
+          }
         },
         manga: {
           select: {
@@ -79,11 +109,24 @@ export default class CollectsController {
       prisma.collect.count({ where: quertParams.where }),
     ])
 
+    for (let i = 0; i < list.length; i++) {
+      const chapter: any = list[i];
+      const chapterId = Number(chapter.chapterId);
+      if (chapterId) {
+        chapter.latest = await prisma.latest.findFirst({
+          where: { userId, chapterId },
+        })
+      } else {
+        chapter.latest = null
+      }
+    }
+
     const listResponse = new ListResponse({
       code: 0,
       message: '',
       list: list.map((item) => {
         return {
+          ...item,
           ...item.chapter,
           ...item.manga,
         }
@@ -216,7 +259,7 @@ export default class CollectsController {
 
     if (mangaId) {
       const collect = await prisma.collect.findFirst({
-        where: { mangaId: Number(mangaId), userId },
+        where: { mangaId, chapterId: null, userId },
       })
 
       return response.json(new SResponse({ code: 0, message: '', data: !!collect }))
@@ -224,7 +267,7 @@ export default class CollectsController {
 
     if (chapterId) {
       const collect = await prisma.collect.findFirst({
-        where: { chapterId: Number(chapterId), userId },
+        where: { chapterId: chapterId, userId },
       })
 
       return response.json(new SResponse({ code: 0, message: '', data: !!collect }))

@@ -42,6 +42,18 @@ export default class HistoriesController {
       prisma.$queryRaw`SELECT COUNT(DISTINCT mangaId) AS count FROM history WHERE userId = ${userId}`,
     ])
 
+    for (let i = 0; i < list.length; i++) {
+      const chapter: any = list[i];
+      const chapterId = Number(chapter.chapterId);
+      if (chapterId) {
+        chapter.latest = await prisma.latest.findFirst({
+          where: { userId, chapterId },
+        })
+      } else {
+        chapter.latest = null
+      }
+    }
+
     const listResponse = new ListResponse({
       code: 0,
       message: '',

@@ -35,6 +35,19 @@ export default class LatestsController {
       LIMIT 
           ${pageSize ? pageSize : 10};
       `;
+    
+    // 统计未观看章节数
+    for (let i = 0; i < list.length; i++) {
+      const manga: any = list[i];
+      const mangaId = Number(manga.mangaId);
+      const chapterCount = await prisma.chapter.count({ where: { mangaId } })
+      const historys = await prisma.history.groupBy({
+        by: ['chapterId'],
+        where: { mangaId, userId },
+      })
+
+      manga.unWatched = chapterCount - historys.length
+    }
 
     const listResponse = new ListResponse({
       code: 0,

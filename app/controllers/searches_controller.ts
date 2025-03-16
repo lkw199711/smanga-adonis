@@ -51,6 +51,19 @@ export default class SearchesController {
       prisma.manga.count({ where: quertParams.where }),
     ])
 
+    // 统计未观看章节数
+    for (let i = 0; i < list.length; i++) {
+      const manga: any = list[i];
+      const mangaId = Number(manga.mangaId);
+      const chapterCount = await prisma.chapter.count({ where: { mangaId } })
+      const historys = await prisma.history.groupBy({
+        by: ['chapterId'],
+        where: { mangaId, userId },
+      })
+
+      manga.unWatched = chapterCount - historys.length
+    }
+
     const listResponse = new ListResponse({
       code: 0,
       message: '',
@@ -98,6 +111,18 @@ export default class SearchesController {
       prisma.chapter.findMany(quertParams),
       prisma.chapter.count({ where: quertParams.where }),
     ])
+
+    for (let i = 0; i < list.length; i++) {
+      const chapter: any = list[i];
+      const chapterId = Number(chapter.chapterId);
+      if (chapterId) {
+        chapter.latest = await prisma.latest.findFirst({
+          where: { userId, chapterId },
+        })
+      } else {
+        chapter.latest = null
+      }
+    }
 
     const listResponse = new ListResponse({
       code: 0,
