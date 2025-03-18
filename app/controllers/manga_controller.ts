@@ -29,23 +29,32 @@ export default class MangaController {
         select: { mediaId: true },
       })) || []
 
+    if (!isAdmin) {
+      // 非管理员权限
+      const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
+      if (!mediaIds.includes(Number(mediaId))) {
+        return response
+          .status(401)
+          .json(new SResponse({ code: 401, message: '无权限操作', status: 'permisson error' }))
+      }
+    }
+
     let listResponse = null
     if (page) {
-      listResponse = await this.paginate({ mediaId, page, pageSize, isAdmin, mediaPermissons, userId })
+      listResponse = await this.paginate({ mediaId, page, pageSize, userId })
     } else {
-      listResponse = await this.no_paginate({ mediaId, isAdmin, mediaPermissons })
+      listResponse = await this.no_paginate({ mediaId })
     }
 
     return response.json(listResponse)
   }
 
   // 不分页
-  private async no_paginate({ mediaId, isAdmin, mediaPermissons }: any) {
+  private async no_paginate({ mediaId }: any) {
     const queryParams = {
       where: {
         ...(mediaId && { mediaId }),
         deleteFlag: 0,
-        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
     }
 
@@ -60,7 +69,8 @@ export default class MangaController {
   }
 
   // 分页
-  private async paginate({ mediaId, page, pageSize, isAdmin, mediaPermissons, userId }: any) {
+  private async paginate({ mediaId, page, pageSize, userId }: any) {
+
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -69,7 +79,6 @@ export default class MangaController {
       where: {
         ...(mediaId && { mediaId }),
         deleteFlag: 0,
-        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
     }
 

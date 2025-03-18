@@ -184,6 +184,6 @@ router.get('/search-mangas', [SearchesController, 'mangas'])
 router.get('/search-chapters', [SearchesController, 'chapters'])
 
 // 配置信息
-router.get('user-config', [UsersController, 'config'])
+router.get('client-user-config', [UsersController, 'config'])
 router.get('serve-config', [ConfigsController, 'get'])
 router.put('serve-config', [ConfigsController, 'set'])
