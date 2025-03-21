@@ -80,6 +80,9 @@ export default class MangaController {
         ...(mediaId && { mediaId }),
         deleteFlag: 0,
       },
+      orderBy: {
+        updateTime: 'desc',
+      },
     }
 
     const [list, count] = await Promise.all([
@@ -171,5 +174,42 @@ export default class MangaController {
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: manga })
     return response.json(destroyResponse)
+  }
+
+  public async scan({ params, response }: HttpContext) { 
+    let { mangaId } = params
+    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    if (!manga) {
+      return response
+        .status(404)
+        .json(new SResponse({ code: 404, message: '漫画不存在', status: 'not found' }))
+    }
+
+    const path = await prisma.path.findUnique({ where: { pathId: manga.pathId } })
+    const media = await prisma.media.findUnique({ where: { mediaId: manga.mediaId } })
+
+    if (!path) { 
+      return response
+        .status(404)
+        .json(new SResponse({ code: 404, message: '路径不存在', status: 'not found' }))
+    }
+
+    addTask({
+      taskName: `scan_manga_${manga.mangaId}`,
+      command: 'taskScanManga',
+      args: {
+        pathId: path.pathId,
+        pathInfo: path,
+        mediaInfo: media,
+        mangaPath: manga.mangaPath,
+        mangaName: manga.mangaName,
+        mangaId: manga.mangaId
+      },
+      priority: TaskPriority.scanManga,
+      timeout: 1000 * 60 * 60 * 2,
+    })
+
+    const scanResponse = new SResponse({ code: 0, message: '扫描任务添加成功', data: manga })
+    return response.json(scanResponse)
   }
 }

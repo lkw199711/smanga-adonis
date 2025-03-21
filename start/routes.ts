@@ -156,6 +156,7 @@ router.get('/manga/:mangaId', [MangaController, 'show'])
 router.post('/manga', [MangaController, 'create'])
 router.put('/manga/:mangaId', [MangaController, 'update'])
 router.delete('/manga/:mangaId', [MangaController, 'destroy'])
+router.put('/manga/:mangaId/scan', [MangaController, 'scan'])
 
 // 章节
 router.get('/chapter', [chaptersController, 'index'])

@@ -19,6 +19,7 @@ import { scanQueue } from '#services/queue_service'
 import { compressImageToSize } from '#utils/sharp'
 import { s_delete } from '#utils/index'
 import create_media_poster_job from '#services/create_media_poster_job'
+import { insert_manga_scan_log } from '#utils/log'
 
 export default async function handle({
   pathId,
@@ -28,6 +29,7 @@ export default async function handle({
   mangaName,
   parentPath
 }: any) {
+  
   let mangaRecord: any = null
   let chapterRecord: any = null
   let nonNumericChapterCounter: number | null = null
@@ -120,6 +122,13 @@ export default async function handle({
     if (!chapterRecord.chapterCover) {
       await chapter_poster(mangaPath)
     }
+
+    // 讲漫画扫描成果写入日志
+    insert_manga_scan_log({
+      mangaId: mangaRecord.mangaId,
+      mangaName: mangaRecord.mangaName,
+      newChapters: 1,
+    });
   } else {
     /**
      * 当漫画类型为连载漫画
@@ -198,8 +207,26 @@ export default async function handle({
         }
       }
 
+      // 更新漫画更新时间
+      prisma.manga.update({
+        data: { updateTime: new Date() },
+        where: { mangaId: mangaRecord.mangaId },
+      });
+
+      // 讲漫画扫描成果写入日志
+      insert_manga_scan_log({
+        mangaId: mangaRecord.mangaId,
+        mangaName: mangaRecord.mangaName,
+        newChapters: newChapterList.length,
+      });
+
     } else if (chapterList.length === chapterListSql.length) {
       // 无变更
+      insert_manga_scan_log({
+        mangaId: mangaRecord.mangaId,
+        mangaName: mangaRecord.mangaName,
+        newChapters: 0,
+      });
     } else {
       // 删除章节
       const delChapterList = chapterListSql.filter((item: any) => {
@@ -210,6 +237,13 @@ export default async function handle({
         const element = delChapterList[index];
         await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
       }
+
+      // 讲漫画扫描成果写入日志
+      insert_manga_scan_log({
+        mangaId: mangaRecord.mangaId,
+        mangaName: mangaRecord.mangaName,
+        newChapters: delChapterList.length * -1,
+      });
     }
 
     const wattingJobs = await scanQueue.getWaiting()

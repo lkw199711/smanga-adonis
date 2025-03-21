@@ -9,29 +9,35 @@ import prisma from '#start/prisma';
 import { path_poster } from '#utils/index';
 import sharp from 'sharp';
 import * as path from 'path'
+import { media_cover_log } from '#utils/log';
 
 export default async function handle({ mediaId }: any) {
-    const mangas = await prisma.manga.findMany({
-        where: {
-            mediaId,
-            mangaCover: { not: null },
-        },
-        take: 4,
-        select: { mangaId: true, mangaName: true, mangaCover: true },
-    })
+  const mangas = await prisma.manga.findMany({
+    where: {
+      mediaId,
+      mangaCover: { not: null },
+    },
+    take: 4,
+    select: { mangaId: true, mangaName: true, mangaCover: true },
+    orderBy: { updateTime: 'desc' },
+  })
 
-    if (!mangas.length) return
+  if (!mangas.length) return
 
-    const imagePaths = mangas.map(manga => manga.mangaCover) as string[] // 图片路径
-    const outputPath = path.join(path_poster(), `smanga-media-${mediaId}.jpg`) // 合并后的图片路径
-    // 生成封面
-    mergeImages(imagePaths, outputPath, 60, 90)
-    await prisma.media.update({
-        where: { mediaId },
-        data: { mediaCover: outputPath },
-    })
+  const imagePaths = mangas.map(manga => manga.mangaCover) as string[] // 图片路径
+  const outputPath = path.join(path_poster(), `smanga-media-${mediaId}.jpg`) // 合并后的图片路径
+  // 生成封面
+  mergeImages(imagePaths, outputPath, 60, 90)
+  const media = await prisma.media.findUnique({ where: { mediaId } })
+  await prisma.media.update({
+    where: { mediaId },
+    data: { mediaCover: outputPath },
+  })
 
-    return outputPath;
+  // 记录日志
+  media_cover_log({ mediaId, mediaName: media?.mediaName, mediaCover: outputPath })
+
+  return outputPath;
 }
 
 async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number, gap: number = 2) {
