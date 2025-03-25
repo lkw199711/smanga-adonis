@@ -208,7 +208,7 @@ export default async function handle({
       }
 
       // 更新漫画更新时间
-      prisma.manga.update({
+      await prisma.manga.update({
         data: { updateTime: new Date() },
         where: { mangaId: mangaRecord.mangaId },
       });
@@ -221,12 +221,15 @@ export default async function handle({
       });
 
     } else if (chapterList.length === chapterListSql.length) {
-      // 无变更
-      insert_manga_scan_log({
+      /**
+       *  无变更
+        insert_manga_scan_log({
         mangaId: mangaRecord.mangaId,
         mangaName: mangaRecord.mangaName,
         newChapters: 0,
       });
+       */
+      
     } else {
       // 删除章节
       const delChapterList = chapterListSql.filter((item: any) => {
