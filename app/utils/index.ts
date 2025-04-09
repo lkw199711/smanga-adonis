@@ -144,12 +144,16 @@ export function order_params(order: string = 'asc', model: string = 'chapter'): 
 export function sql_parse_json(jsonVal: string | object | number | true) {
   const config = get_config()
   let parseVal = jsonVal
+  let jsonStr = jsonVal
   if (typeof jsonVal === 'string') {
     parseVal = JSON.parse(jsonVal)
   }
+  if (typeof jsonVal === 'object') { 
+    jsonStr = JSON.stringify(jsonVal)
+  }
 
   if (config.sql.client === 'sqlite') {
-    return jsonVal;
+    return jsonStr;
   } else {
     return parseVal
   }
