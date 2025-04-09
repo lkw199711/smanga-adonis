@@ -38,7 +38,7 @@ export function get_env() {
   return process.env.NODE_ENV
 }
 
-export function path_poster():string {
+export function path_poster(): string {
   if (platform === 'win32') {
     return path.join(rootDir, 'data', 'poster')
   } else if (platform === 'linux') {
@@ -142,10 +142,16 @@ export function order_params(order: string = 'asc', model: string = 'chapter'): 
  * @returns
  */
 export function sql_parse_json(jsonVal: string | object | number | true) {
+  const config = get_config()
+  let parseVal = null
   if (typeof jsonVal === 'string') {
-    return JSON.parse(jsonVal)
+    parseVal = JSON.parse(jsonVal)
+  }
+
+  if (config.sql.client === 'sqlite') {
+    return jsonVal;
   } else {
-    return jsonVal
+    return parseVal
   }
 }
 
