@@ -106,7 +106,7 @@ export default class ChaptersController {
             browseType: true,
             removeFirst: true,
             direction: true,
-           }
+          }
         }
       },
       orderBy: { ...(order && order_params(order)) },
@@ -302,6 +302,13 @@ function image_files(dirPath: string): string[] {
       // 如果是图片文件, 添加绝对路径到数组
       imagePaths.push(filePath)
     }
+  })
+
+  // 将返回的图片按数字排序
+  imagePaths.sort((a: any, b: any) => {
+    const fileNameA: string = path.basename(a, path.extname(a))
+    const fileNameB: string = path.basename(b, path.extname(b))
+    return Number(fileNameA) - Number(fileNameB)
   })
 
   return imagePaths

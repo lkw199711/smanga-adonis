@@ -91,9 +91,26 @@ export default class MediaController {
       'mediaType',
       'removeFirst',
     ])
-    const media = await prisma.media.create({
-      data: insertData,
+
+    let media = null
+    media = await prisma.media.findFirst({
+      where: {
+        mediaName: insertData.mediaName,
+      },
     })
+
+    // 如果存在媒体库则取消删除标识
+    if (media) {
+      await prisma.media.update({
+        where: { mediaId: media.mediaId },
+        data: { deleteFlag: 0 },
+      })
+    } else { 
+      media = await prisma.media.create({
+        data: insertData,
+      })
+    }
+    
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: media })
     return response.json(saveResponse)
   }
