@@ -9,8 +9,9 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { SResponse } from '../interfaces/response.js'
 import { promises as fs } from 'fs'
 import { join } from 'path'
-import { path_config, get_config } from '#utils/index'
+import { path_config, get_config, sql_parse_json } from '#utils/index'
 import { create_scan_cron } from '#services/cron_service'
+import prisma from '#start/prisma'
 
 export default class ConfigsController {
   public async get({ response }: HttpContext) {
@@ -58,5 +59,26 @@ export default class ConfigsController {
 
     const configResponse = new SResponse({ code: 0, message: '设置成功', data: config })
     return configResponse
+  }
+
+  public async user_config({ request, response }: HttpContext) { 
+    const userId = (request as any).userId
+    const { userConfig } = request.only([
+      'userConfig',
+    ])
+    const user = await prisma.user.update({
+      where: { userId },
+      data: {
+        userConfig: sql_parse_json(userConfig),
+      },
+    })
+
+    // 更新失败报错
+    if (!user) {
+      return response.json(new SResponse({ code: 1, message: '更新失败' }))
+    }
+
+    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
+    return response.json(updateResponse)
   }
 }

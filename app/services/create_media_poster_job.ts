@@ -24,7 +24,8 @@ export default async function handle({ mediaId }: any) {
 
   if (!mangas.length) return
 
-  const imagePaths = mangas.map(manga => manga.mangaCover) as string[] // 图片路径
+  const imagePaths = mangas.filter(manga => manga.mangaCover)
+    .map(manga => manga.mangaCover) as string[] // 图片路径
   const outputPath = path.join(path_poster(), `smanga-media-${mediaId}.jpg`) // 合并后的图片路径
   // 生成封面
   mergeImages(imagePaths, outputPath, 60, 90)

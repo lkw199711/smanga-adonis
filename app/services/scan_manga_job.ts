@@ -461,12 +461,15 @@ export default async function handle({
     folderList.forEach((item) => {
       const itemPath = path.join(dir, item)
       const fileName = item
-      const chapterName = path.basename(item, path.extname(item))
+      // 文件夹章节 全名作为章节名
+      let chapterName = fileName
       const chapterPath = itemPath
 
       // 如果不是目录
       let type = 'img'
       if (!fs.statSync(itemPath).isDirectory()) {
+        // 文件章节 获取其基础名称作为章节名
+        chapterName = path.basename(item, path.extname(item))
         if (/(.cbr|.cbz|.zip|.epub)$/.test(itemPath)) {
           type = 'zip'
         } else if (/.7z$/i.test(itemPath)) {

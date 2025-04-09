@@ -9,7 +9,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
-import { sql_parse_json } from '../utils/index.js'
+import { sql_parse_json } from '#utils/index'
 
 export default class UsersController {
   public async index({ request, response }: HttpContext) {
@@ -118,24 +118,27 @@ export default class UsersController {
     }
 
     // 更新用户权限
-    mediaLimit.forEach(async (item: any) => {
-      const permisson = await prisma.mediaPermisson.findFirst({
-        where: { userId, mediaId: item.mediaId },
-      })
+    if (mediaLimit) {
+      mediaLimit.forEach(async (item: any) => {
+        const permisson = await prisma.mediaPermisson.findFirst({
+          where: { userId, mediaId: item.mediaId },
+        })
 
-      // 如果权限配置为true，则插入数据
-      if (item.permit && !permisson) {
-        await prisma.mediaPermisson.create({
-          data: { userId, mediaId: item.mediaId },
-        })
-      }
-      // 如果权限配置为false，则删除数据
-      if (!item.permit && permisson) {
-        await prisma.mediaPermisson.delete({
-          where: { mediaPermissonId: permisson.mediaPermissonId },
-        })
-      }
-    })
+        // 如果权限配置为true，则插入数据
+        if (item.permit && !permisson) {
+          await prisma.mediaPermisson.create({
+            data: { userId, mediaId: item.mediaId },
+          })
+        }
+        // 如果权限配置为false，则删除数据
+        if (!item.permit && permisson) {
+          await prisma.mediaPermisson.delete({
+            where: { mediaPermissonId: permisson.mediaPermissonId },
+          })
+        }
+      })
+    }
+
 
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
     return response.json(updateResponse)
