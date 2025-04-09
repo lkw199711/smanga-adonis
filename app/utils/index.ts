@@ -143,7 +143,7 @@ export function order_params(order: string = 'asc', model: string = 'chapter'): 
  */
 export function sql_parse_json(jsonVal: string | object | number | true) {
   const config = get_config()
-  let parseVal = null
+  let parseVal = jsonVal
   if (typeof jsonVal === 'string') {
     parseVal = JSON.parse(jsonVal)
   }
