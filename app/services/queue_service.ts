@@ -126,7 +126,9 @@ async function path_deleting(pathId: number) {
 }
 
 async function addTask({ taskName, command, args, priority, timeout }: any) {
-
+    // console.log(`添加任务: ${taskName}, 命令: ${command}, 参数: ${JSON.stringify(args)}, 优先级: ${priority}, 超时: ${timeout}`);
+    console.log(`添加任务: ${taskName}`);
+    
     // 才用同步还是异步的方式执行扫描任务
     const config = get_config()
     const dispatchSync = config.debug.dispatchSync == 1
