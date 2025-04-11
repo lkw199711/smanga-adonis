@@ -19,7 +19,7 @@ export default class LogsController {
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: {
-        createTime: 'desc',
+        createTime: Prisma.SortOrder.desc,
       }
       // orderBy: order_params(order),
     }
