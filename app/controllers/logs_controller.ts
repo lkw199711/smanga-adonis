@@ -18,6 +18,9 @@ export default class LogsController {
     const queryParams = {
       skip: (page - 1) * pageSize,
       take: pageSize,
+      orderBy: {
+        createTime: 'desc',
+      }
       // orderBy: order_params(order),
     }
     const [list, count] = await Promise.all([prisma.log.findMany(queryParams), prisma.log.count()])

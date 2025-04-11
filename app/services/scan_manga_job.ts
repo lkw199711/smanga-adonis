@@ -124,7 +124,7 @@ export default async function handle({
     }
 
     // 讲漫画扫描成果写入日志
-    insert_manga_scan_log({
+    await insert_manga_scan_log({
       mangaId: mangaRecord.mangaId,
       mangaName: mangaRecord.mangaName,
       newChapters: 1,
@@ -214,7 +214,7 @@ export default async function handle({
       });
 
       // 讲漫画扫描成果写入日志
-      insert_manga_scan_log({
+      await insert_manga_scan_log({
         mangaId: mangaRecord.mangaId,
         mangaName: mangaRecord.mangaName,
         newChapters: newChapterList.length,
@@ -242,7 +242,7 @@ export default async function handle({
       }
 
       // 讲漫画扫描成果写入日志
-      insert_manga_scan_log({
+      await insert_manga_scan_log({
         mangaId: mangaRecord.mangaId,
         mangaName: mangaRecord.mangaName,
         newChapters: delChapterList.length * -1,
