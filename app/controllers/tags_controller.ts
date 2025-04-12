@@ -135,13 +135,12 @@ export default class TagsController {
         select: { mediaId: true },
       })) || []
 
-    // const tagArr = tagIds.split(',').map((item: string) => Number(item))
     const mangaTags = await prisma.mangaTag.findMany({
       skip: (page - 1) * pageSize,
       take: pageSize,
       where: {
         tagId: {
-          in: tagIds.map((item: string) => Number(item)),
+          in: tagIds.split(',').map((item: string) => Number(item)),
         },
         manga: {
           deleteFlag: 0,
