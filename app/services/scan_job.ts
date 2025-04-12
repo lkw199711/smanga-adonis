@@ -9,9 +9,7 @@ import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
 import * as fs from 'fs'
 import * as path from 'path'
-import { addTask, scanQueue } from './queue_service.js'
-import { get_config } from '#utils/index'
-import scan_manga_job from '#services/scan_manga_job'
+import { addTask } from './queue_service.js'
 
 type mangaItem = {
   mangaPath: string
@@ -36,7 +34,10 @@ export default async function handle({ pathId }: any) {
   mediaInfo = pathInfo?.media
 
   // 不存在路径 结束扫面任务
-  if (!pathInfo || !mediaInfo) return
+  if (!pathInfo || !mediaInfo) {
+    console.log('不存在路径或媒体库');
+    return
+  }
 
   // 目录中的漫画
   let mangaList: mangaItem[] = []
@@ -58,31 +59,50 @@ export default async function handle({ pathId }: any) {
   }
 
   mangaListSql = await prisma.manga.findMany({ where: { pathId } })
+  const delMangaList = mangaListSql.filter((manga) => {
+    return !mangaList.some((item) => {
+      return item.mangaName === manga.mangaName
+    })
+  })
 
-  if (mangaList.length < mangaListSql.length) {
-    // 现存漫画少于库中漫画, 说明删除了文件. 不进行新增,只删除库中的记录
-  } else {
-    // 现存漫画多于库中漫画, 说明新增了文件. 进行新增 dev_log
-    for (let index = 0; index < mangaList.length; index++) {
-      const item = mangaList[index];
-      // 生成参数
-      const args = {
-        pathId,
-        pathInfo,
-        mediaInfo,
-        mangaCount: mangaList.length,
-        mangaIndex: index,
-        ...item,
-      }
-
-      addTask({
-        taskName: `scan_path_${pathId}`,
-        command: 'taskScanManga',
-        args,
-        priority: TaskPriority.scanManga,
-        timeout: 1000 * 60 * 5,
-      })
+  // 删除目录中不存在的漫画
+  for (let index = 0; index < delMangaList.length; index++) {
+    const item = delMangaList[index]
+    // 生成参数
+    const args = {
+      pathId,
+      mangaId: item.mangaId
     }
+
+    addTask({
+      taskName: `delete_manga_${item.mangaId}`,
+      command: 'deleteManga',
+      args,
+      priority: TaskPriority.deleteManga,
+      timeout: 1000 * 60 * 5,
+    })
+  }
+
+  // 扫描现有目录漫画
+  for (let index = 0; index < mangaList.length; index++) {
+    const item = mangaList[index];
+    // 生成参数
+    const args = {
+      pathId,
+      pathInfo,
+      mediaInfo,
+      mangaCount: mangaList.length,
+      mangaIndex: index,
+      ...item,
+    }
+
+    addTask({
+      taskName: `scan_path_${pathId}`,
+      command: 'taskScanManga',
+      args,
+      priority: TaskPriority.scanManga,
+      timeout: 1000 * 60 * 5,
+    })
   }
 }
 

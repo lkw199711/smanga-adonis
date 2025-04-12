@@ -29,6 +29,7 @@ const SearchesController = () => import('#controllers/searches_controller')
 const ConfigsController = () => import('#controllers/configs_controller')
 const TestsController = () => import('#controllers/tests_controller')
 const DeploysController = () => import('#controllers/deploys_controller')
+const FilesController = () => import('#controllers/files_controller')
 
 router.get('/', async () => {
   return {
@@ -189,3 +190,6 @@ router.get('client-user-config', [UsersController, 'config'])
 router.get('serve-config', [ConfigsController, 'get'])
 router.put('serve-config', [ConfigsController, 'set'])
 router.put('user-config', [ConfigsController, 'user_config'])
+
+// 资源文件
+router.get('/file/apk', [FilesController, 'apk'])
