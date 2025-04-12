@@ -119,7 +119,15 @@ export default class TagsController {
   }
 
   public async tags_manga({ request, response }: HttpContext) {
-    const { tagIds, page, pageSize } = request.only(['tagIds', 'page', 'pageSize', 'order'])
+    let { tagIds, page, pageSize } = request.only(['tagIds', 'page', 'pageSize', 'order'])
+    // 处理 tagIds 的类型
+    if (!tagIds) {
+      return response.status(400).json(new SResponse({ code: 400, message: 'tagIds不能为空' }))
+    } else if (typeof tagIds === 'string') {
+      tagIds = tagIds.split(',').map((item: string) => Number(item))
+    } else {
+      tagIds = tagIds.map((item: string) => Number(item))
+    }
 
     const userId = (request as any).userId
     const user = await prisma.user.findUnique({ where: { userId } })
@@ -135,12 +143,13 @@ export default class TagsController {
         select: { mediaId: true },
       })) || []
 
+
     const mangaTags = await prisma.mangaTag.findMany({
       skip: (page - 1) * pageSize,
       take: pageSize,
       where: {
         tagId: {
-          in: tagIds.split(',').map((item: string) => Number(item)),
+          in: tagIds,
         },
         manga: {
           deleteFlag: 0,

@@ -1,11 +1,11 @@
 {
   "sql": {
-    "client": "sqlite",
+    "client": "mysql",
     "host": "192.168.2.36",
     "port": 3306,
     "username": "smanga",
     "password": "smanga",
-    "database": "smanga",
+    "database": "smanga-18",
     "file": "./data/smanga.db",
     "deploy": true
   },
