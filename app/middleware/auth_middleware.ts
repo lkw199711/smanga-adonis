@@ -60,7 +60,7 @@ export default class AuthMiddleware {
     // const permissonRoutes = ['/user', '/media', '/collect', '/compress', '/history', '/latest', '/log', '/task', '/path', '/bookmark', '/tag', '/manga', '/chapter', '/image', '/manga-tag', '/chart', '/search', '/config']
 
     // 用户信息模块
-    if (request.url().startsWith('/user')) {
+    if (request.url().startsWith('/user') && request.url() !== '/user-config') {
       if (user.role !== 'admin') {
         return response
           .status(401)
