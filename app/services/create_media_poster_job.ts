@@ -11,34 +11,42 @@ import sharp from 'sharp';
 import * as path from 'path'
 import { media_cover_log } from '#utils/log';
 
-export default async function handle({ mediaId }: any) {
-  const mangas = await prisma.manga.findMany({
-    where: {
-      mediaId,
-      mangaCover: { not: null },
-    },
-    take: 4,
-    select: { mangaId: true, mangaName: true, mangaCover: true },
-    orderBy: { updateTime: 'desc' },
-  })
+export default class CreateMediaPosterJob {
+  private mediaId: number
 
-  if (!mangas.length) return
+  constructor({ mediaId }: { mediaId: number }) {
+    this.mediaId = mediaId
+  }
 
-  const imagePaths = mangas.filter(manga => manga.mangaCover)
-    .map(manga => manga.mangaCover) as string[] // 图片路径
-  const outputPath = path.join(path_poster(), `smanga-media-${mediaId}.jpg`) // 合并后的图片路径
-  // 生成封面
-  mergeImages(imagePaths, outputPath, 60, 90)
-  const media = await prisma.media.findUnique({ where: { mediaId } })
-  await prisma.media.update({
-    where: { mediaId },
-    data: { mediaCover: outputPath },
-  })
+  async run() {
+    const mangas = await prisma.manga.findMany({
+      where: {
+        mediaId: this.mediaId,
+        mangaCover: { not: null },
+      },
+      take: 4,
+      select: { mangaId: true, mangaName: true, mangaCover: true },
+      orderBy: { updateTime: 'desc' },
+    })
 
-  // 记录日志
-  media_cover_log({ mediaId, mediaName: media?.mediaName, mediaCover: outputPath })
+    if (!mangas.length) return
 
-  return outputPath;
+    const imagePaths = mangas.filter(manga => manga.mangaCover)
+      .map(manga => manga.mangaCover) as string[] // 图片路径
+    const outputPath = path.join(path_poster(), `smanga-media-${this.mediaId}.jpg`) // 合并后的图片路径
+    // 生成封面
+    mergeImages(imagePaths, outputPath, 60, 90)
+    const media = await prisma.media.findUnique({ where: { mediaId: this.mediaId } })
+    await prisma.media.update({
+      where: { mediaId: this.mediaId },
+      data: { mediaCover: outputPath },
+    })
+
+    // 记录日志
+    media_cover_log({ mediaId: this.mediaId, mediaName: media?.mediaName, mediaCover: outputPath })
+
+    return outputPath;
+  }
 }
 
 async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number, gap: number = 2) {

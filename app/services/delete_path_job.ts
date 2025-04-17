@@ -9,23 +9,33 @@ import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
 import { scanQueue } from '#services/queue_service'
 
-export default async function handle({ pathId }: any) {
-  if (!pathId) return
+export default class DeletePathJob { 
+  private pathId: number
 
-  // 标记为删除
-  await prisma.path.update({ where: { pathId }, data: { deleteFlag: 1 } })
+  constructor({ pathId }: { pathId: number }) { 
+    this.pathId = pathId
+  }
 
-  // 删除漫画
-  const mangas = await prisma.manga.findMany({ where: { pathId } })
-  for (let index = 0; index < mangas.length; index++) {
-    const manga = mangas[index];
-    scanQueue.add({
-      taskName: `delete_manga_${manga.mangaId}`,
-      command: 'deleteManga',
-      args: { mangaId: manga.mangaId }
-    }, {
-      priority: TaskPriority.deleteManga,
-      timeout: 1000 * 60 * 1,
-    })
+  async run() { 
+    const pathId = this.pathId
+
+    if (!pathId) return
+    
+    // 标记为删除
+    await prisma.path.update({ where: { pathId }, data: { deleteFlag: 1 } })
+
+    // 删除漫画
+    const mangas = await prisma.manga.findMany({ where: { pathId } })
+    for (let index = 0; index < mangas.length; index++) {
+      const manga = mangas[index];
+      scanQueue.add({
+        taskName: `delete_manga_${manga.mangaId}`,
+        command: 'deleteManga',
+        args: { mangaId: manga.mangaId }
+      }, {
+        priority: TaskPriority.deleteManga,
+        timeout: 1000 * 60 * 1,
+      })
+    }
   }
 }

@@ -9,21 +9,31 @@ import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
 import { scanQueue } from '#services/queue_service'
 
-export default async function handle({ mediaId }: any) {
-  if (!mediaId) return
+export default class DeleteMediaJob {
+  private mediaId: number
 
-  // 标记为删除
-  await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
+  constructor({ mediaId }: { mediaId: number }) {
+    this.mediaId = mediaId
+  }
 
-  // 删除漫画
-  const paths = await prisma.path.findMany({ where: { mediaId } })
-  paths.forEach(async (path) => {
-    scanQueue.add({
-      taskName: `delete_path_${path.pathId}`,
-      command: 'deletePath',
-      args: { pathId: path.pathId }
-    }, {
-      priority: TaskPriority.delete
+  async run() {
+    const mediaId = this.mediaId
+
+    if (!mediaId) return
+    
+    // 标记为删除
+    await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
+
+    // 删除漫画
+    const paths = await prisma.path.findMany({ where: { mediaId } })
+    paths.forEach(async (path) => {
+      scanQueue.add({
+        taskName: `delete_path_${path.pathId}`,
+        command: 'deletePath',
+        args: { pathId: path.pathId }
+      }, {
+        priority: TaskPriority.delete
+      })
     })
-  })
+  }
 }

@@ -6,13 +6,13 @@
  * @FilePath: \smanga-adonis\start\queue.ts
  */
 import ScanPathJob from './scan_job.js'
-import scan_manga_job from './scan_manga_job.js'
-import delete_chapter_job from './delete_chapter_job.js'
-import delete_manga_job from './delete_manga_job.js'
-import delete_path_job from './delete_path_job.js'
-import delete_media_job from './delete_media_job.js'
-import copy_poster_job from './copy_poster_job.js'
-import create_media_poster_job from './create_media_poster_job.js'
+import ScanMangaJob from './scan_manga_job.js'
+import DeleteChapterJob from './delete_chapter_job.js'
+import DeleteMangaJob from './delete_manga_job.js'
+import DeletePathJob from './delete_path_job.js'
+import DeleteMediaJob from './delete_media_job.js'
+import CopyPosterJob from './copy_poster_job.js'
+import CreateMediaPosterJob from './create_media_poster_job.js'
 import { get_config } from '#utils/index'
 
 import Bull from 'bull'
@@ -43,30 +43,30 @@ scanQueue.process(2, async (job: any) => {
         case 'taskScanManga':
             console.log('执行扫描漫画任务')
             //扫描漫画任务调用
-            await scan_manga_job(args)
+            await new ScanMangaJob(args).run()
             break
         case 'deleteMedia':
             //删除媒体库
             console.log('删除媒体库')
-            await delete_media_job(args)
+            await new DeleteMediaJob(args).run()
             break
         case 'deletePath':
             //删除路径
             console.log('删除路径')
-            await delete_path_job(args)
+            await new DeletePathJob(args).run()
             break
         case 'deleteManga':
             //删除漫画
             console.log('删除漫画')
-            await delete_manga_job(args)
+            await new DeleteMangaJob(args).run()
             break
         case 'deleteChapter':
             //删除章节
             console.log('删除章节')
-            await delete_chapter_job(args)
+            await new DeleteChapterJob(args).run()
             break
         case 'copyPoster':
-            await copy_poster_job(args);
+            await new CopyPosterJob(args).run();
             break
         case 'compressChapter':
             //压缩章节
@@ -76,7 +76,7 @@ scanQueue.process(2, async (job: any) => {
         case 'createMediaPoster':
             //生成媒体库封面
             console.log('生成媒体库封面')
-            await create_media_poster_job(args)
+            await new CreateMediaPosterJob(args).run()
             break
         default:
             break
@@ -128,7 +128,7 @@ async function path_deleting(pathId: number) {
 async function addTask({ taskName, command, args, priority, timeout }: any) {
     // console.log(`添加任务: ${taskName}, 命令: ${command}, 参数: ${JSON.stringify(args)}, 优先级: ${priority}, 超时: ${timeout}`);
     console.log(`添加任务: ${taskName}`);
-    
+
     // 才用同步还是异步的方式执行扫描任务
     const config = get_config()
     const dispatchSync = config.debug.dispatchSync == 1
@@ -138,29 +138,29 @@ async function addTask({ taskName, command, args, priority, timeout }: any) {
                 await new ScanPathJob(args).run()
                 break
             case 'taskScanManga':
-                scan_manga_job(args)
+                await new ScanMangaJob(args).run()
                 break
             case 'deleteMedia':
-                delete_media_job(args)
+                await new DeleteMediaJob(args).run()
                 break
             case 'deletePath':
-                delete_path_job(args)
+                await new DeletePathJob(args).run()
                 break
             case 'deleteManga':
-                delete_manga_job(args)
+                await new DeleteMangaJob(args).run()
                 break
             case 'deleteChapter':
-                delete_chapter_job(args)
+                await new DeleteChapterJob(args).run()
                 break
             case 'copyPoster':
-                copy_poster_job(args);
+                await new CopyPosterJob(args).run()
                 break
             case 'compressChapter':
                 //压缩章节
                 // compress_chapter_job(args)
                 break
             case 'createMediaPoster':
-                create_media_poster_job(args)
+                await new CreateMediaPosterJob(args).run()
                 break
             default:
                 break
@@ -171,7 +171,7 @@ async function addTask({ taskName, command, args, priority, timeout }: any) {
                 console.log(`路径${args.pathId} 正在被扫描,跳过执行`)
                 return false
             }
-        } else if (command === 'deletePath') { 
+        } else if (command === 'deletePath') {
             if (await path_deleting(args.pathId)) {
                 console.log(`路径${args.pathId} 正在被删除,跳过执行`)
                 return false
