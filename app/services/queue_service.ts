@@ -5,7 +5,7 @@
  * @LastEditTime: 2025-03-13 20:16:08
  * @FilePath: \smanga-adonis\start\queue.ts
  */
-import scan_job from './scan_job.js'
+import ScanPathJob from './scan_job.js'
 import scan_manga_job from './scan_manga_job.js'
 import delete_chapter_job from './delete_chapter_job.js'
 import delete_manga_job from './delete_manga_job.js'
@@ -38,7 +38,7 @@ scanQueue.process(2, async (job: any) => {
         case 'taskScanPath':
             //扫描任务调用
             console.log('执行扫描任务')
-            await scan_job(args)
+            await new ScanPathJob(args).run()
             break
         case 'taskScanManga':
             console.log('执行扫描漫画任务')
@@ -135,7 +135,7 @@ async function addTask({ taskName, command, args, priority, timeout }: any) {
     if (dispatchSync) {
         switch (command) {
             case 'taskScanPath':
-                scan_job(args)
+                await new ScanPathJob(args).run()
                 break
             case 'taskScanManga':
                 scan_manga_job(args)

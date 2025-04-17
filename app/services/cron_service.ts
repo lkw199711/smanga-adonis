@@ -7,7 +7,7 @@ import prisma from '#start/prisma'
 import { addTask } from './queue_service.js';
 import { TaskPriority } from '#type/index'
 
-let scanCron: any = {stop: () => {}}
+let scanCron: any = { stop: () => { } }
 
 function create_scan_cron() {
     // 停止旧扫描任务
@@ -19,7 +19,7 @@ function create_scan_cron() {
     try {
         scanCron = cron.schedule(scanInterval, async () => {
             const paths = await prisma.path.findMany()
-            const autoScanPaths = paths.filter((path: any) => path.autoScan == 1)
+            const autoScanPaths = paths.filter((path: any) => path.autoScan == 1 && path.deleteFlag == 0)
             autoScanPaths.forEach((path: any) => {
                 addTask({
                     taskName: `scan_path_${path.pathId}`,
@@ -29,10 +29,10 @@ function create_scan_cron() {
                 })
             })
         });
-    } catch (e) { 
+    } catch (e) {
         console.error('部署corn扫描任务失败', e)
     }
-    
+
 }
 
 /*
