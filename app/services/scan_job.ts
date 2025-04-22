@@ -27,6 +27,8 @@ export default class ScanPathJob {
 
   constructor({ pathId }: { pathId: number }) {
     this.pathId = pathId
+    console.log('扫描路径任务', pathId);
+    
   }
 
   async run() {

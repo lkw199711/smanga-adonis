@@ -101,6 +101,16 @@ export function get_config() {
   return config
 }
 
+export function set_config(config: object) { 
+  if (platform === 'win32') {
+    fs.writeFileSync('./data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')
+  } else if (platform === 'linux') {
+    fs.writeFileSync('/data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')
+  } else {
+    fs.writeFileSync('/data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')
+  }
+}
+
 export function order_params(order: string = 'asc', model: string = 'chapter'): object {
   const sort = /desc/i.test(order) ? 'desc' : 'asc'
 

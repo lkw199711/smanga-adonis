@@ -10,7 +10,7 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
-import create_media_poster_job from '#services/create_media_poster_job'
+import CreateMediaPosterJob from '#services/create_media_poster_job'
 
 export default class MediaController {
   public async index({ request, response }: HttpContext) {
@@ -150,7 +150,7 @@ export default class MediaController {
 
   public async poster({ params, response }: HttpContext) {
     const { mediaId } = params
-    const posterFile = await create_media_poster_job({ mediaId: Number(mediaId) })
+    const posterFile = new CreateMediaPosterJob({ mediaId: Number(mediaId) }).run()
     const posterResponse = new SResponse({ code: 0, message: '', data: posterFile })
     return response.json(posterResponse)
   }

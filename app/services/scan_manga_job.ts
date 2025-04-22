@@ -15,10 +15,9 @@ import { extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
 import { TaskPriority } from '../type/index.js'
-import { scanQueue } from '#services/queue_service'
+import { addTask, scanQueue } from '#services/queue_service'
 import { compressImageToSize } from '#utils/sharp'
 import { s_delete } from '#utils/index'
-import CreateMediaPosterJob from '#services/create_media_poster_job'
 import { insert_manga_scan_log } from '#utils/log'
 
 export default class ScanMangaJob {
@@ -272,7 +271,12 @@ export default class ScanMangaJob {
 
       // 当扫描未进行到最后一步时,不再重复提交生成媒体库封面任务
       if (thisPathJobs.length <= 1) {
-        await new CreateMediaPosterJob({ mediaId: pathInfo.mediaId }).run()
+        await addTask({
+          taskName: `create_media_poster_${pathInfo.mediaId}`,
+          command: 'createMediaPoster',
+          args: { mediaId: pathInfo.mediaId },
+          priority: TaskPriority.createMediaPoster,
+        })
       }
     }
 

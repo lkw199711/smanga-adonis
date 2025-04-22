@@ -8,8 +8,8 @@
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
-import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os } from '#utils/index'
-import { create_scan_cron } from '#services/cron_service'
+import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config } from '#utils/index'
+import { create_scan_cron, create_media_poster_cron } from '#services/cron_service'
 
 // 默认配置
 const defaultConfig = {
@@ -28,7 +28,8 @@ const defaultConfig = {
     quality: 100,
   },
   scan: {
-    interval: 60,
+    interval: "0 0 0,12 * * *",
+    mediaPosterInterval: "0 0 1 * * *"
   },
   debug: {
     dispatchSync: 0,
@@ -49,10 +50,12 @@ export default async function boot() {
   const os = get_os()
 
   if (os === 'Windows') {
-    create_dir_win()
+    await create_dir_win()
   } else {
-    create_dir_linux()
+    await create_dir_linux()
   }
+
+  await check_config_ver()
 
   // 创建系统默认用户
   const users = await prisma.user.findMany()
@@ -87,18 +90,18 @@ export default async function boot() {
 
   // 设置路径自动扫描cron任务
   create_scan_cron()
-  
-  /*
-    // 清理已删除数据
-    try {
-      await prisma.path.deleteMany({ where: { deleteFlag: 1 } })
-      await prisma.media.deleteMany({ where: { deleteFlag: 1 } })  
-    } catch (e) {
-      console.log(e)
-    }
-  */
- // 任务队列通过bull实现 弃用定时器
-  // startTimer()
+  create_media_poster_cron()
+}
+
+async function check_config_ver() {
+  const config = get_config()
+  const mediaPosterInterval = config.scan?.mediaPosterInterval
+
+  if (!mediaPosterInterval) { 
+    console.log('配置文件不存在mediaPosterInterval字段，使用默认值')
+    config.scan.mediaPosterInterval = defaultConfig.scan.mediaPosterInterval
+    set_config(config)
+  }
 }
 
 async function create_dir_win() {

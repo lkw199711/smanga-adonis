@@ -17,7 +17,8 @@
   },
   "scan": {
     "auto": 0,
-    "interval": "0 0 0,12 * * *"
+    "interval": "0 0 0,12 * * *",
+    "mediaPosterInterval": "0 0 1 * * *"
   },
   "debug": {
     "dispatchSync": 0
