@@ -7,12 +7,13 @@ import { addTask } from '#services/queue_service'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
-    const { mediaId, page, pageSize } = request.only([
+    const { mediaId, page, pageSize, keyWord } = request.only([
       'mediaId',
       'page',
       'pageSize',
       'chapterId',
       'order',
+      'keyWord',
     ])
 
     const userId = (request as any).userId
@@ -41,7 +42,7 @@ export default class MangaController {
 
     let listResponse = null
     if (page) {
-      listResponse = await this.paginate({ mediaId, page, pageSize, userId })
+      listResponse = await this.paginate({ mediaId, page, pageSize, keyWord, userId })
     } else {
       listResponse = await this.no_paginate({ mediaId })
     }
@@ -69,7 +70,7 @@ export default class MangaController {
   }
 
   // 分页
-  private async paginate({ mediaId, page, pageSize, userId }: any) {
+  private async paginate({ mediaId, page, pageSize, keyWord, userId }: any) {
 
     const queryParams = {
       ...(page && {
@@ -78,6 +79,7 @@ export default class MangaController {
       }),
       where: {
         ...(mediaId && { mediaId }),
+        ...(keyWord && { subTitle: { contains: keyWord } }),
         deleteFlag: 0,
       },
       orderBy: {
@@ -176,7 +178,7 @@ export default class MangaController {
     return response.json(destroyResponse)
   }
 
-  public async scan({ params, response }: HttpContext) { 
+  public async scan({ params, response }: HttpContext) {
     let { mangaId } = params
     const manga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!manga) {
@@ -187,7 +189,7 @@ export default class MangaController {
 
     const path = await prisma.path.findUnique({ where: { pathId: manga.pathId } })
 
-    if (!path) { 
+    if (!path) {
       return response
         .status(404)
         .json(new SResponse({ code: 404, message: '路径不存在', status: 'not found' }))

@@ -20,11 +20,12 @@ import { addTask } from '#services/queue_service'
 
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
-    const { mangaId, page, pageSize, order } = request.only([
+    const { mangaId, page, pageSize, order, keyWord } = request.only([
       'page',
       'pageSize',
       'mangaId',
       'order',
+      'keyWord',
     ])
 
     const userId = (request as any).userId
@@ -47,6 +48,7 @@ export default class ChaptersController {
         mangaId,
         page,
         pageSize,
+        keyWord,
         order,
         isAdmin,
         mediaPermissons,
@@ -86,7 +88,7 @@ export default class ChaptersController {
   }
 
   // 分页
-  private async paginate({ mangaId, page, pageSize, order, isAdmin, mediaPermissons }: any) {
+  private async paginate({ mangaId, page, pageSize, keyWord, order, isAdmin, mediaPermissons }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -96,6 +98,7 @@ export default class ChaptersController {
         ...(mangaId && {
           mangaId: mangaId,
         }),
+        ...(keyWord && { subTitle: { contains: keyWord } }),
         deleteFlag: 0,
         ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
