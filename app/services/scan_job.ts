@@ -97,8 +97,6 @@ export default class ScanPathJob {
       // 生成参数
       const args = {
         pathId: this.pathId,
-        pathInfo: this.pathInfo,
-        mediaInfo: this.mediaInfo,
         mangaCount: mangaList.length,
         mangaIndex: index,
         ...item,

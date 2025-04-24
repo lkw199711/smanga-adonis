@@ -186,7 +186,6 @@ export default class MangaController {
     }
 
     const path = await prisma.path.findUnique({ where: { pathId: manga.pathId } })
-    const media = await prisma.media.findUnique({ where: { mediaId: manga.mediaId } })
 
     if (!path) { 
       return response
@@ -199,8 +198,6 @@ export default class MangaController {
       command: 'taskScanManga',
       args: {
         pathId: path.pathId,
-        pathInfo: path,
-        mediaInfo: media,
         mangaPath: manga.mangaPath,
         mangaName: manga.mangaName,
         mangaId: manga.mangaId
