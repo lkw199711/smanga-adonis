@@ -44,17 +44,6 @@ export default class CreateMediaPosterJob {
       .map(manga => manga.mangaCover) as string[] // 图片路径
     this.outputPath = path.join(path_poster(), `smanga-media-${this.mediaId}.jpg`) // 合并后的图片路径
     // 生成封面
-    await this.mergeImages()
-    this.mediaInfo = await prisma.media.findUnique({ where: { mediaId: this.mediaId } })
-    await prisma.media.update({
-      where: { mediaId: this.mediaId },
-      data: { mediaCover: this.outputPath },
-    })
-
-    return this.outputPath;
-  }
-
-  async mergeImages() {
     const images: Buffer[] = []
     for (let i = 0; i < this.mangaCovers.length; i++) {
       const imagePath = this.mangaCovers[i];
@@ -85,8 +74,16 @@ export default class CreateMediaPosterJob {
       console.log('合并完成，保存至', this.outputPath);
       // 记录日志
       media_cover_log({ mediaId: this.mediaId, mediaName: this.mediaInfo?.mediaName, mediaCover: this.outputPath })
+
+      this.mediaInfo = await prisma.media.findUnique({ where: { mediaId: this.mediaId } })
+      await prisma.media.update({
+        where: { mediaId: this.mediaId },
+        data: { mediaCover: this.outputPath },
+      })
+      return this.outputPath;
     } catch (error) {
       console.error('合并图片时出错:', error);
+      return false;
     }
   }
 }

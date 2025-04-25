@@ -105,12 +105,12 @@ export default class MediaController {
         where: { mediaId: media.mediaId },
         data: { deleteFlag: 0 },
       })
-    } else { 
+    } else {
       media = await prisma.media.create({
         data: insertData,
       })
     }
-    
+
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: media })
     return response.json(saveResponse)
   }
@@ -143,7 +143,7 @@ export default class MediaController {
       args: { mediaId: media.mediaId },
       priority: TaskPriority.deleteManga
     })
-    
+
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: media })
     return response.json(destroyResponse)
   }
@@ -152,6 +152,10 @@ export default class MediaController {
     const { mediaId } = params
     const posterFile = await new CreateMediaPosterJob({ mediaId: Number(mediaId) }).run()
     const posterResponse = new SResponse({ code: 0, message: '', data: posterFile })
-    return response.json(posterResponse)
+    if (posterResponse) {
+      return response.json(posterResponse)
+    } else {
+      return response.status(500).json(new SResponse({ code: 1, message: '生成封面失败' }))
+    }
   }
 }
