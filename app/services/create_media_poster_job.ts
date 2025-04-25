@@ -35,7 +35,7 @@ export default class CreateMediaPosterJob {
       .map(manga => manga.mangaCover) as string[] // 图片路径
     const outputPath = path.join(path_poster(), `smanga-media-${this.mediaId}.jpg`) // 合并后的图片路径
     // 生成封面
-    mergeImages(imagePaths, outputPath, 60, 90)
+    await mergeImages(imagePaths, outputPath, 60, 90)
     const media = await prisma.media.findUnique({ where: { mediaId: this.mediaId } })
     await prisma.media.update({
       where: { mediaId: this.mediaId },
