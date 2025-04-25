@@ -150,7 +150,7 @@ export default class MediaController {
 
   public async poster({ params, response }: HttpContext) {
     const { mediaId } = params
-    const posterFile = new CreateMediaPosterJob({ mediaId: Number(mediaId) }).run()
+    const posterFile = await new CreateMediaPosterJob({ mediaId: Number(mediaId) }).run()
     const posterResponse = new SResponse({ code: 0, message: '', data: posterFile })
     return response.json(posterResponse)
   }
