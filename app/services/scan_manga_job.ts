@@ -43,14 +43,14 @@ export default class ScanMangaJob {
 
   async run() {
     const pathId = this.pathId
-    this.pathInfo = await prisma.path.findUnique({ where: { pathId }, include: { media: true } }).catch((e) => { error_log(logModule, e.message) })
+    this.pathInfo = await prisma.path.findUnique({ where: { pathId }, include: { media: true } }).catch(async (e) => { await error_log(logModule, e.message) })
     this.mediaInfo = this.pathInfo?.media
     const mangaPath = this.mangaPath
     const mangaName = this.mangaName
     const parentPath = this.parentPath
 
     if (!this.pathInfo) {
-      error_log(logModule, `pathId ${pathId}路径不存在`)
+      await error_log(logModule, `pathId ${pathId}路径不存在`)
       return
     }
 
@@ -62,7 +62,7 @@ export default class ScanMangaJob {
     this.cachePath = path_cache()
 
     // 更新路径扫描时间
-    await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } }).catch((e) => { error_log(logModule, e.message) })
+    await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } }).catch(async (e) => { await error_log(logModule, e.message) })
 
     let mangaInsert: Prisma.mangaCreateInput
 
@@ -115,10 +115,9 @@ export default class ScanMangaJob {
       // 扫描元数据
       await this.meta_scan()
 
-      if (!this.mangaRecord.mangaCover) {
-        await this.manga_poster(mangaPath)
-      }
-
+      // 即使有封面 也更新漫画封面
+      await this.manga_poster(mangaPath)
+      
       const chapterInsert: Prisma.chapterCreateInput = {
         manga: {
           connect: {
@@ -312,11 +311,59 @@ export default class ScanMangaJob {
 
     // 重扫元数据的时候删除原有元数据
     if (recasn) {
-      prisma.meta.deleteMany({
+      await prisma.meta.deleteMany({
         where: {
           mangaId: this.mangaRecord.mangaId,
         },
       })
+    }
+
+    // banner,thumbnail,character
+    const metaFiles = fs.readdirSync(dirMeta)
+    const cahracterPics: string[] = []
+    for (let index = 0; index < metaFiles.length; index++) {
+      const file = metaFiles[index];
+      const filePath = path.join(dirMeta, file)
+      if (!is_img(file)) return
+      if (/banner/i.test(file)) {
+        await prisma.meta.create({
+          data: {
+            manga: {
+              connect: {
+                mangaId: this.mangaRecord.mangaId,
+              },
+            },
+            metaName: 'banner',
+            metaFile: filePath,
+          },
+        })
+      } else if (/thumbnail/i.test(file)) {
+        await prisma.meta.create({
+          data: {
+            manga: {
+              connect: {
+                mangaId: this.mangaRecord.mangaId,
+              },
+            },
+            metaName: 'thumbnail',
+            metaFile: filePath,
+          },
+        })
+      } else if (/cover/i.test(file)) {
+        await prisma.meta.create({
+          data: {
+            manga: {
+              connect: {
+                mangaId: this.mangaRecord.mangaId,
+              },
+            },
+            metaName: 'cover',
+            metaFile: filePath,
+          },
+        })
+      } else {
+        cahracterPics.push(filePath)
+      }
     }
 
     const infoFile = path.join(dirMeta, 'info.json')
@@ -354,42 +401,6 @@ export default class ScanMangaJob {
           } catch (e) {
             console.log(e);
           }
-        }
-      }
-
-      // banner,thumbnail,character
-      const metaFiles = fs.readdirSync(dirMeta)
-      const cahracterPics: string[] = []
-      for (let index = 0; index < metaFiles.length; index++) {
-        const file = metaFiles[index];
-        const filePath = path.join(dirMeta, file)
-        if (!is_img(file)) return
-        if (/banner/i.test(file)) {
-          await prisma.meta.create({
-            data: {
-              manga: {
-                connect: {
-                  mangaId: this.mangaRecord.mangaId,
-                },
-              },
-              metaName: 'banner',
-              metaFile: filePath,
-            },
-          })
-        } else if (/thumbnail/i.test(file)) {
-          await prisma.meta.create({
-            data: {
-              manga: {
-                connect: {
-                  mangaId: this.mangaRecord.mangaId,
-                },
-              },
-              metaName: 'thumbnail',
-              metaFile: filePath,
-            },
-          })
-        } else {
-          cahracterPics.push(filePath)
         }
       }
 
@@ -682,11 +693,10 @@ export default class ScanMangaJob {
         mangaRecord: this.mangaRecord
       }
 
-      scanQueue.add({
+      await addTask({
         taskName: `scan_path_${this.pathId}`,
         command: 'copyPoster',
-        args
-      }, {
+        args,
         priority: TaskPriority.copyPoster,
         timeout: 1000 * 6,
       })

@@ -13,6 +13,7 @@ import DeletePathJob from './delete_path_job.js'
 import DeleteMediaJob from './delete_media_job.js'
 import CopyPosterJob from './copy_poster_job.js'
 import CreateMediaPosterJob from './create_media_poster_job.js'
+import ReloadMangaMetaJob from './reload_manga_meta_job.js'
 import { get_config } from '#utils/index'
 
 import Bull from 'bull'
@@ -78,6 +79,11 @@ scanQueue.process(2, async (job: any) => {
             console.log('生成媒体库封面')
             await new CreateMediaPosterJob(args).run()
             break
+        case 'reloadMangaMeta':
+            //重新加载漫画元数据
+            console.log('重新加载漫画元数据')
+            await new ReloadMangaMetaJob(args).run()
+            break
         default:
             break
     }
@@ -125,7 +131,15 @@ async function path_deleting(pathId: number) {
     return false
 }
 
-async function addTask({ taskName, command, args, priority, timeout }: any) {
+type addTaskType = {
+    taskName: string
+    command: string
+    args: any
+    priority?: number
+    timeout?: number
+}
+
+async function addTask({ taskName, command, args, priority, timeout }: addTaskType) {
     // console.log(`添加任务: ${taskName}, 命令: ${command}, 参数: ${JSON.stringify(args)}, 优先级: ${priority}, 超时: ${timeout}`);
     console.log(`添加任务: ${taskName}`);
 
@@ -161,6 +175,9 @@ async function addTask({ taskName, command, args, priority, timeout }: any) {
                 break
             case 'createMediaPoster':
                 await new CreateMediaPosterJob(args).run()
+                break
+            case 'reloadMangaMeta':
+                await new ReloadMangaMetaJob(args).run()
                 break
             default:
                 break

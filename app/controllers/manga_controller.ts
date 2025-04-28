@@ -4,6 +4,7 @@ import { ListResponse, SResponse } from '#interfaces/response'
 import { Prisma } from '@prisma/client'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
+import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
@@ -210,5 +211,24 @@ export default class MangaController {
 
     const scanResponse = new SResponse({ code: 0, message: '扫描任务添加成功', data: manga })
     return response.json(scanResponse)
+  }
+
+  /**
+   * 重新扫描漫画元数据
+   * @param param0 
+   * @returns 
+   */
+  public async reload_meta({ params, response }: HttpContext) {
+    let { mangaId } = params
+
+    const res = await new ReloadMangaMetaJob({ mangaId }).run()
+
+    const reloadMetaResponse = new SResponse({
+      code: 0,
+      message: '元数据更新成功',
+      data: res,
+    });
+
+    return response.json(reloadMetaResponse)
   }
 }
