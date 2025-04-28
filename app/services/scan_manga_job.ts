@@ -324,7 +324,7 @@ export default class ScanMangaJob {
     for (let index = 0; index < metaFiles.length; index++) {
       const file = metaFiles[index];
       const filePath = path.join(dirMeta, file)
-      if (!is_img(file)) return
+      if (!is_img(file)) continue;
       if (/banner/i.test(file)) {
         await prisma.meta.create({
           data: {

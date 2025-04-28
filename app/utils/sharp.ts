@@ -18,7 +18,6 @@ export async function compressImageToSize(
     // 判断文件是否存在
     if (fs.existsSync(outputPath)) {
       unlink_file(inputPath)
-      return
     }
 
     const stats = fs.statSync(inputPath)
