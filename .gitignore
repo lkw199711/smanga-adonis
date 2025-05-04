@@ -26,8 +26,4 @@ yarn-error.log
 
 prisma/migration
 
-data/poster
-data/bookmark
-data/compress
-data/logs
 data
