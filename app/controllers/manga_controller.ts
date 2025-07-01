@@ -5,6 +5,8 @@ import { Prisma } from '@prisma/client'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
+import fs from 'fs'
+import { read_json } from '#utils/index'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
@@ -213,6 +215,66 @@ export default class MangaController {
     return response.json(scanResponse)
   }
 
+  public async edit_meta({ params, request, response }: HttpContext) {
+    let { mangaId } = params
+    let { title, author, publishDate, mangaCover, star, describe, tags, wirteMetaJson } = request.only(['title', 'author', 'publishDate', 'mangaCover', 'star', 'describe', 'tags', 'wirteMetaJson'])
+    mangaId = Number(mangaId)
+
+    // 修改或新增元数据
+    const res = await Promise.all([
+      this.meta_update(mangaId, 'title', title),
+      this.meta_update(mangaId, 'author', author),
+      this.meta_update(mangaId, 'publishDate', publishDate),
+      this.meta_update(mangaId, 'mangaCover', mangaCover),
+      this.meta_update(mangaId, 'star', star),
+      this.meta_update(mangaId, 'describe', describe),
+    ])
+
+    if (wirteMetaJson) {
+      const manga = await prisma.manga.findUnique({ where: { mangaId } })
+      const mangaPath = manga?.mangaPath;
+      if (mangaPath) {
+        const metaPath = mangaPath + '-smanga-info';
+        const metaFile = `${metaPath}/meta.json`;
+        let metaData: any = {};
+        if (!fs.existsSync(metaPath)) fs.mkdirSync(metaPath, { recursive: true });
+        if (fs.existsSync(metaFile)) metaData = read_json(metaFile);
+        if (author) metaData['author'] = author;
+        if (publishDate) metaData['publishDate'] = publishDate;
+        if (mangaCover) metaData['mangaCover'] = mangaCover;
+        if (star) metaData['star'] = star;
+        if (describe) metaData['describe'] = describe;
+        if (tags) metaData['tags'] = tags;
+
+        fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2), 'utf-8');
+      }
+    }
+
+    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: res })
+    return response.json(updateResponse)
+  }
+
+  async meta_update(mangaId: number, metaName: string, metaContent: string) {
+    if (!metaContent) return;
+    const meta = await prisma.meta.findFirst({
+      where: { mangaId, metaName },
+    })
+
+    if (meta) {
+      await prisma.meta.update({
+        where: { metaId: meta.metaId },
+        data: { metaContent },
+      })
+    } else {
+      await prisma.meta.create({
+        data: {
+          mangaId,
+          metaName,
+          metaContent,
+        },
+      })
+    }
+  }
   /**
    * 重新扫描漫画元数据
    * @param param0 
@@ -230,5 +292,51 @@ export default class MangaController {
     });
 
     return response.json(reloadMetaResponse)
+  }
+
+  public async add_tags({ params, request, response }: HttpContext) {
+    let { mangaId } = params
+    mangaId = Number(mangaId)
+    const { tags, metaWriteJson } = request.only(['tags', 'metaWriteJson'])
+
+    if (!Array.isArray(tags)) {
+      return response.status(400).json(new SResponse({ code: 400, message: '标签必须是数组' }))
+    }
+
+    // 删除旧的标签
+    await prisma.mangaTag.deleteMany({ where: { mangaId } })
+
+    // 添加新的标签
+    const mangaTags = tags.map((tag: any) => ({
+      mangaId,
+      tagId: tag.tagId,
+    }))
+    const createdTags = await prisma.mangaTag.createMany({
+      data: mangaTags,
+    })
+
+    const addTagsResponse = new SResponse({
+      code: 0,
+      message: '标签添加成功',
+      data: createdTags,
+    })
+
+    if (metaWriteJson) {
+      const manga = await prisma.manga.findUnique({ where: { mangaId } })
+      const mangaPath = manga?.mangaPath;
+      if (mangaPath) {
+        const metaPath = mangaPath + '-smanga-info';
+        const metaFile = `${metaPath}/meta.json`;
+        let metaData: any = {};
+        if (!fs.existsSync(metaPath)) fs.mkdirSync(metaPath, { recursive: true });
+        if (fs.existsSync(metaFile)) metaData = read_json(metaFile);
+
+        metaData['tags'] = tags.map((tag: any) => tag.tagName);
+
+        fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2), 'utf-8');
+      }
+    }
+
+    return response.json(addTagsResponse)
   }
 }

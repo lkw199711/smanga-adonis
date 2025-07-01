@@ -9,7 +9,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
-const version = '3.7.8';
+const version = '3.9.4';
 const environment = 'production';
 
 export default class LogsController {

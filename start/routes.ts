@@ -159,6 +159,8 @@ router.put('/manga/:mangaId', [MangaController, 'update'])
 router.delete('/manga/:mangaId', [MangaController, 'destroy'])
 router.put('/manga/:mangaId/scan', [MangaController, 'scan'])
 router.put('/manga/:mangaId/reload-meta', [MangaController, 'reload_meta'])
+router.put('/manga/:mangaId/meta', [MangaController, 'edit_meta'])
+router.put('/manga/:mangaId/tags', [MangaController, 'add_tags'])
 
 // 章节
 router.get('/chapter', [chaptersController, 'index'])

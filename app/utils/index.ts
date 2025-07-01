@@ -192,3 +192,7 @@ export function write_log(logMessage: string) {
 export function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
+
+export function read_json(file: string) {
+  return JSON.parse(fs.readFileSync(file, 'utf-8'))
+}
