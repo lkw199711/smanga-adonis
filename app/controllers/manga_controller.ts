@@ -6,11 +6,11 @@ import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 import fs from 'fs'
-import { read_json } from '#utils/index'
+import { order_params, read_json } from '#utils/index'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
-    const { mediaId, page, pageSize, keyWord } = request.only([
+    const { mediaId, page, pageSize, keyWord, order } = request.only([
       'mediaId',
       'page',
       'pageSize',
@@ -45,21 +45,22 @@ export default class MangaController {
 
     let listResponse = null
     if (page) {
-      listResponse = await this.paginate({ mediaId, page, pageSize, keyWord, userId })
+      listResponse = await this.paginate({ mediaId, page, pageSize, keyWord, userId, order })
     } else {
-      listResponse = await this.no_paginate({ mediaId })
+      listResponse = await this.no_paginate({ mediaId, order })
     }
 
     return response.json(listResponse)
   }
 
   // 不分页
-  private async no_paginate({ mediaId }: any) {
+  private async no_paginate({ mediaId, order }: any) {
     const queryParams = {
       where: {
         ...(mediaId && { mediaId }),
         deleteFlag: 0,
       },
+      orderBy: order_params(order, 'manga'),
     }
 
     const list = await prisma.manga.findMany(queryParams)
@@ -73,7 +74,7 @@ export default class MangaController {
   }
 
   // 分页
-  private async paginate({ mediaId, page, pageSize, keyWord, userId }: any) {
+  private async paginate({ mediaId, page, pageSize, keyWord, userId, order }: any) {
 
     const queryParams = {
       ...(page && {
@@ -85,9 +86,7 @@ export default class MangaController {
         ...(keyWord && { subTitle: { contains: keyWord } }),
         deleteFlag: 0,
       },
-      orderBy: {
-        updateTime: 'desc',
-      },
+      orderBy: order_params(order, 'manga'),
     }
 
     const [list, count] = await Promise.all([
