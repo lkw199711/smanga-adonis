@@ -33,6 +33,7 @@ export default class ScanMangaJob {
   private parentPath: string
   private cachePath: string = ''
   private nonNumericChapterCounter: number | null = null
+  private meta: any = null
 
   constructor({ pathId, mangaPath, mangaName, parentPath }: { pathId: number, pathInfo: any, mediaInfo: any, mangaPath: string, mangaName: string, parentPath: string }) {
     this.pathId = pathId
@@ -117,7 +118,7 @@ export default class ScanMangaJob {
 
       // 即使有封面 也更新漫画封面
       await this.manga_poster(mangaPath)
-      
+
       const chapterInsert: Prisma.chapterCreateInput = {
         manga: {
           connect: {
@@ -159,6 +160,9 @@ export default class ScanMangaJob {
        * 当漫画类型为连载漫画
        */
 
+      // 扫描元数据
+      await this.meta_scan()
+      
       // 扫描目录结构获取章节列表
       let chapterList = await this.scan_path(mangaPath)
       let chapterListSql: any = []
@@ -172,8 +176,6 @@ export default class ScanMangaJob {
         // 库中不存在则新增
         mangaInsert.chapterCount = chapterList.length
         this.mangaRecord = await prisma.manga.create({ data: mangaInsert })
-        // 扫描元数据
-        await this.meta_scan()
       }
 
       if (!this.mangaRecord.mangaCover) {
@@ -214,7 +216,7 @@ export default class ScanMangaJob {
             browseType: this.mediaInfo.browseType,
             subTitle: subTitle,
             chapterType: this.compress_type(item.chapterPath),
-            chapterNumber: this.chapter_number(item.chapterName),
+            chapterNumber: this.chapter_index(item.chapterName),
           }
 
           try {
@@ -379,7 +381,7 @@ export default class ScanMangaJob {
     if (fs.existsSync(targetMetaFile)) {
       const rawData = fs.readFileSync(targetMetaFile, 'utf-8')
       const info = JSON.parse(rawData)
-
+      this.meta = info
       // 一般性元数据
       const keys = Object.keys(info)
       for (let index = 0; index < keys.length; index++) {
@@ -804,5 +806,13 @@ export default class ScanMangaJob {
       // console.error('Error:', err)
       return false
     }
+  }
+
+  chapter_index(chapterName: string) {
+    if (!this.meta?.chapters) return this.chapter_number(chapterName);
+
+    const chapterIndex = this.meta.chapters.findIndex((chapter: any) => [chapter?.chapterName, chapter?.name, chapter.title].includes(chapterName));
+
+    return chapterIndex === -1 ? this.chapter_number(chapterName) : chapterIndex;
   }
 }

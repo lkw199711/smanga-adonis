@@ -260,7 +260,7 @@ export default class ChaptersController {
 
   public async update({ params, request, response }: HttpContext) {
     let { chapterId } = params
-    const modifyData = request.only(['chapterName', 'chapterPath', 'chapterCover'])
+    const modifyData = request.only(['chapterName', 'chapterPath', 'chapterCover', 'chapterNumber'])
     const chapter = await prisma.chapter.update({
       where: { chapterId },
       data: modifyData,
