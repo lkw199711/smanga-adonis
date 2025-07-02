@@ -17,6 +17,14 @@ import ReloadMangaMetaJob from './reload_manga_meta_job.js'
 import { get_config } from '#utils/index'
 
 import Bull from 'bull'
+type queueConfigType = {
+    attempts: number; // 最大重试次数
+    timeout: number; // 超时时间（毫秒）
+}
+const queueConfig: queueConfigType = get_config()?.queue || {
+    attempts: 3, // 默认重试次数
+    timeout: 120000, // 默认超时时间为2分钟
+}
 const scanQueue = new Bull('smanga', {
     redis: {
         host: '127.0.0.1',
@@ -32,7 +40,7 @@ scanQueue.on('failed', (job, err) => {
     console.error(`Job failed: ${job.id} with error: ${err.message}`);
 });
 
-scanQueue.process(2, async (job: any) => {
+scanQueue.process('scan', 2, async (job: any) => {
     const { command, args } = job.data;
 
     switch (command) {
@@ -195,13 +203,23 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
             }
         }
 
-        scanQueue.add({
+        scanQueue.add('scan', {
             taskName,
             command,
             args
         }, {
             priority,
-            timeout
+            timeout: queueConfig.timeout,  // 使用配置的超时时间
+            attempts: queueConfig.attempts,  // 最大重试次数
+            backoff: {
+                type: 'exponential',
+                delay: 10 * 1000,  // 初始延迟10秒
+                options: {
+                    factor: 2,     // 每次延迟翻倍
+                    jitter: true,     // 添加随机抖动，避免并发重试风暴‌:ml-citation{ref="3,4" data="citationList"}
+                    maxDelay: 2 * 60 * 1000   // 最大延迟时间（防止无限增长）
+                }
+            }
         })
     }
 

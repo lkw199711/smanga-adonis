@@ -107,7 +107,16 @@ export default class ScanMangaJob {
        */
 
       // 漫画已存在 跳过此漫画
-      if (this.mangaRecord) return
+      if (this.mangaRecord) {
+        // 如果漫画已被标记为删除,则恢复漫画
+        if (this.mangaRecord.deleteFlag) {
+          await prisma.manga.update({
+            where: { mangaId: this.mangaRecord.mangaId },
+            data: { deleteFlag: 0 },
+          })
+        }
+        return;
+      }
 
       mangaInsert.chapterCount = 1
 
@@ -162,12 +171,19 @@ export default class ScanMangaJob {
 
       // 扫描元数据
       await this.meta_scan()
-      
+
       // 扫描目录结构获取章节列表
       let chapterList = await this.scan_path(mangaPath)
       let chapterListSql: any = []
 
       if (this.mangaRecord) {
+        // 如果漫画已被标记为删除,则恢复漫画
+        if (this.mangaRecord.deleteFlag) {
+          await prisma.manga.update({
+            where: { mangaId: this.mangaRecord.mangaId },
+            data: { deleteFlag: 0 },
+          })
+        }
         // 库中章节列表
         chapterListSql = await prisma.chapter.findMany({
           where: { mangaId: this.mangaRecord.mangaId },
