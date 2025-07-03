@@ -20,7 +20,7 @@ import { compressImageToSize } from '#utils/sharp'
 import { s_delete } from '#utils/index'
 import { error_log, insert_manga_scan_log } from '#utils/log'
 import { path as sqlPathType, media as sqlMediaType } from '@prisma/client'
-type pathType = sqlPathType & { media: sqlMediaType }
+type pathType = sqlPathType
 const logModule = '[manga scan]'
 export default class ScanMangaJob {
   private pathId: number
@@ -44,8 +44,8 @@ export default class ScanMangaJob {
 
   async run() {
     const pathId = this.pathId
-    this.pathInfo = await prisma.path.findFirst({ where: { pathId }, include: { media: true } }).catch(async (e) => { await error_log(logModule, e.message) })
-    this.mediaInfo = this.pathInfo?.media
+    this.pathInfo = await prisma.path.findFirst({ where: { pathId }}).catch(async (e) => { await error_log(logModule, e.message) })
+    this.mediaInfo = await prisma.media.findFirst({ where: { mediaId: this.pathInfo?.mediaId } }).catch(async (e) => { await error_log(logModule, e.message) })
     const mangaPath = this.mangaPath
     const mangaName = this.mangaName
     const parentPath = this.parentPath
