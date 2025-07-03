@@ -27,8 +27,6 @@ export default class ScanPathJob {
 
   constructor({ pathId }: { pathId: number }) {
     this.pathId = pathId
-    console.log('扫描路径任务', pathId);
-    
   }
 
   async run() {
@@ -134,7 +132,7 @@ export default class ScanPathJob {
       if (!fs.statSync(itemPath).isDirectory()) {
         // 获取文件扩展名
         const ext = path.extname(item).toLowerCase()
-        if (['.zip', '.cbz', 'cbr'].includes(ext)) {
+        if (['.zip', '.cbz', '.cbr', '.epub'].includes(ext)) {
           mangaType = 'zip'
         } else if (ext === '.rar') {
           mangaType = 'rar'
@@ -146,7 +144,7 @@ export default class ScanPathJob {
           mangaType = 'other'
         }
       }
-
+      
       return {
         mangaPath: itemPath,
         mangaName: item,
@@ -154,7 +152,7 @@ export default class ScanPathJob {
         parentPath: dir,
       }
     })
-
+   
     // 根据正则规则过滤出漫画目录
     mangaList = mangaList.filter((item) => {
       // 排除元数据文件夹
