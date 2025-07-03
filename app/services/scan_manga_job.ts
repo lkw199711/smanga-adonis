@@ -321,7 +321,6 @@ export default class ScanMangaJob {
    * @returns 
    */
   async meta_scan(recasn: boolean = false) {
-    console.log(this.mangaRecord,'漫画记录')
     const dirOutExt = this.mangaRecord.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
     const dirMeta = dirOutExt + '-smanga-info'
 
