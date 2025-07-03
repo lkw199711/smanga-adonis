@@ -20,7 +20,7 @@ import { compressImageToSize } from '#utils/sharp'
 import { s_delete } from '#utils/index'
 import { error_log, insert_manga_scan_log } from '#utils/log'
 import { path as sqlPathType, media as sqlMediaType } from '@prisma/client'
-type pathType = sqlPathType
+type pathType = sqlPathType & { media: sqlMediaType }
 const logModule = '[manga scan]'
 export default class ScanMangaJob {
   private pathId: number
@@ -44,8 +44,8 @@ export default class ScanMangaJob {
 
   async run() {
     const pathId = this.pathId
-    this.pathInfo = await prisma.path.findFirst({ where: { pathId }}).catch(async (e) => { await error_log(logModule, e.message) })
-    this.mediaInfo = await prisma.media.findFirst({ where: { mediaId: this.pathInfo?.mediaId } }).catch(async (e) => { await error_log(logModule, e.message) })
+    this.pathInfo = await prisma.path.findUnique({ where: { pathId }, include: { media: true } }).catch(async (e) => { await error_log(logModule, e.message) })
+    this.mediaInfo = this.pathInfo?.media
     const mangaPath = this.mangaPath
     const mangaName = this.mangaName
     const parentPath = this.parentPath
@@ -169,9 +169,6 @@ export default class ScanMangaJob {
        * 当漫画类型为连载漫画
        */
 
-      // 扫描元数据
-      await this.meta_scan()
-
       // 扫描目录结构获取章节列表
       let chapterList = await this.scan_path(mangaPath)
       let chapterListSql: any = []
@@ -197,6 +194,9 @@ export default class ScanMangaJob {
       if (!this.mangaRecord.mangaCover) {
         await this.manga_poster(mangaPath)
       }
+
+      // 扫描元数据
+      await this.meta_scan()
 
       /** 漫画已存在 更新漫画信息
        * // 实际目录扫描多于数据库章节 (说明新增了章节)
@@ -321,6 +321,7 @@ export default class ScanMangaJob {
    * @returns 
    */
   async meta_scan(recasn: boolean = false) {
+    console.log(this.mangaRecord,'漫画记录')
     const dirOutExt = this.mangaRecord.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
     const dirMeta = dirOutExt + '-smanga-info'
 
