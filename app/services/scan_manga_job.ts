@@ -44,7 +44,7 @@ export default class ScanMangaJob {
 
   async run() {
     const pathId = this.pathId
-    this.pathInfo = await prisma.path.findUnique({ where: { pathId }, include: { media: true } }).catch(async (e) => { await error_log(logModule, e.message) })
+    this.pathInfo = await prisma.path.findFirst({ where: { pathId }, include: { media: true } }).catch(async (e) => { await error_log(logModule, e.message) })
     this.mediaInfo = this.pathInfo?.media
     const mangaPath = this.mangaPath
     const mangaName = this.mangaName
