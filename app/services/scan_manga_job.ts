@@ -320,25 +320,24 @@ export default class ScanMangaJob {
    * @param recasn 是否重新扫描元数据
    * @returns 
    */
-  async meta_scan(recasn: boolean = false) {
+  async meta_scan() {
     const dirOutExt = this.mangaRecord.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
     const dirMeta = dirOutExt + '-smanga-info'
 
     // 没有元数据文件
     if (!fs.existsSync(dirMeta)) return false
 
-    // 重扫元数据的时候删除原有元数据
-    if (recasn) {
-      await prisma.meta.deleteMany({
-        where: {
-          mangaId: this.mangaRecord.mangaId,
-        },
-      })
-    }
+    // 删除原有的元数据
+    await prisma.meta.deleteMany({
+      where: {
+        mangaId: this.mangaRecord.mangaId,
+      },
+    })
 
     // banner,thumbnail,character
     const metaFiles = fs.readdirSync(dirMeta)
     const cahracterPics: string[] = []
+
     for (let index = 0; index < metaFiles.length; index++) {
       const file = metaFiles[index];
       const filePath = path.join(dirMeta, file)
