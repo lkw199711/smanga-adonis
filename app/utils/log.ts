@@ -1,6 +1,6 @@
 
 import prisma from "#start/prisma";
-const version = '3.9.6';
+const version = '3.9.9';
 const environment = 'production';
 
 /**

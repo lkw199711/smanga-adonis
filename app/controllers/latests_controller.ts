@@ -74,7 +74,12 @@ export default class LatestsController {
           select: {
             mediaId: true,
           },
-        }
+        },
+        chapter: {
+          select: {
+            chapterName: true,
+          },
+        },
       }
     })
     const showResponse = new SResponse({ code: 0, message: '', data: latest })

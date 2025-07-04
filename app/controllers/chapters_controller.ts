@@ -20,10 +20,11 @@ import { addTask } from '#services/queue_service'
 
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
-    const { mangaId, page, pageSize, order, keyWord } = request.only([
+    const { mangaId, mediaId, page, pageSize, order, keyWord } = request.only([
       'page',
       'pageSize',
       'mangaId',
+      'mediaId',
       'order',
       'keyWord',
     ])
@@ -46,6 +47,7 @@ export default class ChaptersController {
     if (page) {
       listResponse = await this.paginate({
         mangaId,
+        mediaId,
         page,
         pageSize,
         keyWord,
@@ -54,18 +56,21 @@ export default class ChaptersController {
         mediaPermissons,
       })
     } else {
-      listResponse = await this.no_paginate({ mangaId, order })
+      listResponse = await this.no_paginate({ mangaId, mediaId, order })
     }
 
     return response.json(listResponse)
   }
 
   // 不分页
-  private async no_paginate({ mangaId, order }: any) {
+  private async no_paginate({ mangaId, mediaId, order }: any) {
     const queryParams = {
       where: {
         ...(mangaId && {
           mangaId: mangaId,
+        }),
+        ...(mediaId && {
+          mediaId: mediaId,
         }),
         deleteFlag: 0,
       },
@@ -88,7 +93,7 @@ export default class ChaptersController {
   }
 
   // 分页
-  private async paginate({ mangaId, page, pageSize, keyWord, order, isAdmin, mediaPermissons }: any) {
+  private async paginate({ mangaId, mediaId,page, pageSize, keyWord, order, isAdmin, mediaPermissons }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -97,6 +102,9 @@ export default class ChaptersController {
       where: {
         ...(mangaId && {
           mangaId: mangaId,
+        }),
+        ...(mediaId && {
+          mediaId: mediaId,
         }),
         ...(keyWord && { subTitle: { contains: keyWord } }),
         deleteFlag: 0,
