@@ -18,13 +18,21 @@ import { get_config } from '#utils/index'
 
 import Bull from 'bull'
 type queueConfigType = {
+    concurrency: number; // 并发数
     attempts: number; // 最大重试次数
     timeout: number; // 超时时间（毫秒）
 }
+
 const queueConfig: queueConfigType = get_config()?.queue || {
+    concurrency: 1, // 默认并发数
     attempts: 3, // 默认重试次数
     timeout: 120000, // 默认超时时间为2分钟
 }
+
+const concurrency = queueConfig?.concurrency ?? 1; // 并发数
+const attempts = queueConfig?.attempts ?? 3; // 最大重试次数
+const timeout = queueConfig?.timeout ?? 120000; // 超时时间（毫秒）
+
 const scanQueue = new Bull('smanga', {
     redis: {
         host: '127.0.0.1',
@@ -40,7 +48,7 @@ scanQueue.on('failed', (job, err) => {
     console.error(`Job failed: ${job.id} with error: ${err.message}`);
 });
 
-scanQueue.process('scan', 2, async (job: any) => {
+scanQueue.process('scan', queueConfig.concurrency, async (job: any) => {
     const { command, args } = job.data;
 
     switch (command) {

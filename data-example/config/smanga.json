@@ -17,6 +17,7 @@
   },
   "scan": {
     "auto": 0,
+    "doNotCopyCover": 1,
     "interval": "0 0 0,12 * * *",
     "mediaPosterInterval": "0 0 1 * * *"
   },
@@ -32,5 +33,10 @@
     "saveDuration": 100,
     "poster": 300,
     "bookmark": 300
+  },
+  "queue": {
+    "concurrency": 1,
+    "attempts": 3,
+    "timeout": 120000
   }
 }

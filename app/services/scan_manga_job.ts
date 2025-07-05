@@ -564,6 +564,8 @@ export default class ScanMangaJob {
     const posterName = `${posterPath}/smanga_chapter_${this.chapterRecord.chapterId}.jpg`
     // 压缩目标图片大小
     const maxSizeKB = get_config()?.compress?.poster || 100
+    // 不复制封面,直接使用源文件
+    const doNotCopyCover = get_config()?.scan?.doNotCopyCover ?? 1
     // 源封面
     let sourcePoster = ''
     // 检索平级目录封面图片
@@ -619,18 +621,35 @@ export default class ScanMangaJob {
       }
     }
 
+    // 不复制封面,直接使用源文件
+    if (sourcePoster && doNotCopyCover && fs.statSync(sourcePoster).size <= maxSizeKB * 1024) {
+      await prisma.chapter.update({
+        where: { chapterId: this.chapterRecord.chapterId },
+        data: { chapterCover: sourcePoster },
+      })
+
+      this.chapterRecord.chapterCover = sourcePoster
+
+      if (!this.mangaRecord.mangaCover) {
+        // 直接使用update的返回值会丢失id 才用补充赋值的形式补全数据
+        await prisma.manga.update({
+          where: { mangaId: this.mangaRecord.mangaId },
+          data: { mangaCover: sourcePoster },
+        })
+
+        this.mangaRecord.mangaCover = sourcePoster
+      }
+
+      return sourcePoster
+    }
+
     if (sourcePoster) {
       // 写入漫画与章节封面
-      try {
-
-        await prisma.chapter.update({
-          where: { chapterId: this.chapterRecord.chapterId },
-          data: { chapterCover: posterName },
-        })
-        this.chapterRecord.chapterCover = posterName
-      } catch (e) {
-        console.log('章节封面插入失败', e)
-      }
+      await prisma.chapter.update({
+        where: { chapterId: this.chapterRecord.chapterId },
+        data: { chapterCover: posterName },
+      })
+      this.chapterRecord.chapterCover = posterName
 
       if (!this.mangaRecord.mangaCover) {
         // 直接使用update的返回值会丢失id 才用补充赋值的形式补全数据
@@ -638,32 +657,28 @@ export default class ScanMangaJob {
           where: { mangaId: this.mangaRecord.mangaId },
           data: { mangaCover: posterName },
         })
-
         this.mangaRecord.mangaCover = posterName
       }
 
       // 压缩图片
-      await compressImageToSize(sourcePoster, posterName, maxSizeKB)
-      /*      
-            // 复制封面到poster目录 使用单独任务队列
-            const args = {
-              inputPath: sourcePoster,
-              outputPath: posterName,
-              maxSizeKB,
-              chapterRecord
-            }
-      
-            
-      
-            scanQueue.add({
-              taskName: `scan_path_${pathId}`,
-              command: 'copyPoster',
-              args
-            }, {
-              priority: TaskPriority.copyPoster,
-              timeout: 1000 * 6,
-            })
-      */
+      // await compressImageToSize(sourcePoster, posterName, maxSizeKB)
+
+      // 复制封面到poster目录 使用单独任务队列
+      const args = {
+        inputPath: sourcePoster,
+        outputPath: posterName,
+        maxSizeKB,
+        chapterRecord: this.chapterRecord
+      }
+
+      await addTask({
+        taskName: `scan_path_${this.pathId}`,
+        command: 'copyPoster',
+        args,
+        priority: TaskPriority.copyPoster,
+        timeout: 1000 * 6,
+      })
+
       return posterName
     } else {
       return ''
@@ -675,7 +690,8 @@ export default class ScanMangaJob {
     // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
     const posterName = `${posterPath}/smanga_manga_${this.mangaRecord.mangaId}.jpg`
     // 压缩目标图片大小
-    const maxSizeKB = get_config()?.compress?.poster || 100
+    const maxSizeKB = get_config()?.compress?.poster ?? 100
+    const doNotCopyCover = get_config()?.scan?.doNotCopyCover ?? 1
     // 源封面
     let sourcePoster = ''
     // 检索平级目录封面图片
@@ -699,6 +715,16 @@ export default class ScanMangaJob {
           return true
         }
       })
+    }
+
+    // 不复制封面,直接使用源文件
+    if (sourcePoster && doNotCopyCover && fs.statSync(sourcePoster).size <= maxSizeKB * 1024) {
+      await prisma.manga.update({
+        where: { mangaId: this.mangaRecord.mangaId },
+        data: { mangaCover: sourcePoster },
+      })
+      this.mangaRecord.mangaCover = sourcePoster
+      return sourcePoster
     }
 
     if (sourcePoster) {
@@ -828,6 +854,6 @@ export default class ScanMangaJob {
 
     const chapterIndex = this.meta.chapters.findIndex((chapter: any) => [chapter?.chapterName, chapter?.name, chapter.title].includes(chapterName));
 
-    return chapterIndex === -1 ? this.chapter_number(chapterName) : chapterIndex;
+    return chapterIndex === -1 ? this.chapter_number(chapterName) : chapterIndex.toString().padStart(5, '0');
   }
 }
