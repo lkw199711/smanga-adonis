@@ -93,7 +93,7 @@ export default class ChaptersController {
   }
 
   // 分页
-  private async paginate({ mangaId, mediaId,page, pageSize, keyWord, order, isAdmin, mediaPermissons }: any) {
+  private async paginate({ mangaId, mediaId, page, pageSize, keyWord, order, isAdmin, mediaPermissons }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -173,6 +173,8 @@ export default class ChaptersController {
 
     let images: string[] = []
     let compress: any = null
+    const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
+    const exclude = pathInfo?.exclude
 
     //  纯图片章节
     if (chapter.chapterType === 'img') {
@@ -248,6 +250,12 @@ export default class ChaptersController {
     })
 
     images = image_files(compress.compressPath)
+
+    // 如果有排除规则，则过滤掉不符合规则的图片
+    if (exclude) {
+      images = images.filter((image: string) => !new RegExp(exclude).test(image))
+    }
+    
     const imagesResponse = new SResponse({
       code: 0,
       message: '',
