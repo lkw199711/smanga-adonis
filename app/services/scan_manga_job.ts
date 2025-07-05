@@ -566,6 +566,8 @@ export default class ScanMangaJob {
     const maxSizeKB = get_config()?.compress?.poster || 100
     // 不复制封面,直接使用源文件
     const doNotCopyCover = get_config()?.scan?.doNotCopyCover ?? 1
+    // 是否在压缩包内找到封面
+    let hasPosterInZip = false
     // 源封面
     let sourcePoster = ''
     // 检索平级目录封面图片
@@ -599,7 +601,7 @@ export default class ScanMangaJob {
     if (!sourcePoster && ['zip', 'rar', '7z'].includes(this.chapterRecord.chapterType)) {
       // 解压缩获取封面
       const cachePoster = `${this.cachePath}/smanga_cache_${this.chapterRecord.chapterId}.jpg`
-      let hasPosterInZip = false
+
       if (this.chapterRecord.chapterType === 'zip') {
         hasPosterInZip = await extractFirstImageSyncOrder(dir, cachePoster)
         if (hasPosterInZip) {
@@ -622,7 +624,7 @@ export default class ScanMangaJob {
     }
 
     // 不复制封面,直接使用源文件
-    if (sourcePoster && doNotCopyCover && fs.statSync(sourcePoster).size <= maxSizeKB * 1024) {
+    if (!hasPosterInZip && sourcePoster && doNotCopyCover && fs.statSync(sourcePoster).size <= maxSizeKB * 1024) {
       await prisma.chapter.update({
         where: { chapterId: this.chapterRecord.chapterId },
         data: { chapterCover: sourcePoster },
