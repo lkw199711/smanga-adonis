@@ -178,7 +178,7 @@ export default class ChaptersController {
 
     //  纯图片章节
     if (chapter.chapterType === 'img') {
-      images = image_files(chapter.chapterPath)
+      images = image_files(chapter.chapterPath, exclude)
       const imagesResponse = new SResponse({
         code: 0,
         message: '',
@@ -191,7 +191,7 @@ export default class ChaptersController {
     // 已完成解压缩的章节
     compress = await prisma.compress.findUnique({ where: { chapterId: chapterId } })
     if (compress) {
-      images = image_files(compress.compressPath)
+      images = image_files(compress.compressPath, exclude)
       const imagesResponse = new SResponse({
         code: 0,
         message: '',
@@ -249,12 +249,8 @@ export default class ChaptersController {
       },
     })
 
-    images = image_files(compress.compressPath)
-
-    // 如果有排除规则，则过滤掉不符合规则的图片
-    if (exclude) {
-      images = images.filter((image: string) => !new RegExp(exclude).test(image))
-    }
+    images = image_files(compress.compressPath, exclude)
+    console.log(exclude)
 
     const imagesResponse = new SResponse({
       code: 0,
@@ -304,7 +300,7 @@ export default class ChaptersController {
 // 定义支持的图片文件扩展名
 const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp']
 
-function image_files(dirPath: string): string[] {
+function image_files(dirPath: string, exclude: string | null | undefined = ''): string[] {
   let imagePaths: string[] = []
 
   // 读取目录下的所有文件和子目录
@@ -329,6 +325,11 @@ function image_files(dirPath: string): string[] {
     const fileNameB: string = path.basename(b, path.extname(b))
     return extract_numbers(fileNameA) - extract_numbers(fileNameB)
   })
+
+  // 如果有排除规则，则过滤掉不符合规则的图片
+  if (exclude) {
+    imagePaths = imagePaths.filter((image: string) => !new RegExp(exclude).test(image))
+  }
 
   return imagePaths
 }
