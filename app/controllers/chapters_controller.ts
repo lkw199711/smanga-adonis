@@ -312,7 +312,7 @@ function image_files(dirPath: string, exclude: string | null | undefined = ''): 
 
     if (stat.isDirectory()) {
       // 如果是目录, 递归处理
-      imagePaths = imagePaths.concat(image_files(filePath))
+      imagePaths = imagePaths.concat(image_files(filePath, exclude))
     } else if (imageExtensions.includes(path.extname(file).toLowerCase())) {
       // 如果是图片文件, 添加绝对路径到数组
       imagePaths.push(filePath)
