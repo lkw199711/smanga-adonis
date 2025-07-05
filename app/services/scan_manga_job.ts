@@ -9,7 +9,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
-import { path_poster, path_cache, is_img, get_config } from '../utils/index.js'
+import { path_poster, path_cache, is_img, get_config } from '#utils/index'
 import { S } from '../utils/convertText.js'
 import { extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
@@ -307,12 +307,6 @@ export default class ScanMangaJob {
         })
       }
     }
-
-    // 删除缓存文件
-    fs.readdirSync(this.cachePath).forEach((file) => {
-      const filePath = path.join(this.cachePath, file)
-      s_delete(filePath)
-    })
   }
 
   /**

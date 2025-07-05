@@ -1,3 +1,4 @@
+import { s_delete } from '#utils/index'
 import { compressImageToSize } from '#utils/sharp'
 
 export default class CopyPosterJob {
@@ -13,5 +14,7 @@ export default class CopyPosterJob {
 
     async run() {
         await compressImageToSize(this.inputPath, this.outputPath, this.maxSizeKB)
+        // 删除输入缓存源文件
+        if (/smanga_cache/.test(this.inputPath)) s_delete(this.inputPath)
     }
 }
