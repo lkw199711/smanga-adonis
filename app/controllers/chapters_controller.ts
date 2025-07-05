@@ -13,7 +13,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { unzipFile } from '../utils/unzip.js'
 import { extractRar } from '../utils/unrar.js'
-import { path_compress, order_params } from '#utils/index'
+import { path_compress, order_params, extract_numbers } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { extract7z } from '#utils/un7z'
 import { addTask } from '#services/queue_service'
@@ -255,7 +255,7 @@ export default class ChaptersController {
     if (exclude) {
       images = images.filter((image: string) => !new RegExp(exclude).test(image))
     }
-    
+
     const imagesResponse = new SResponse({
       code: 0,
       message: '',
@@ -327,7 +327,7 @@ function image_files(dirPath: string): string[] {
   imagePaths.sort((a: any, b: any) => {
     const fileNameA: string = path.basename(a, path.extname(a))
     const fileNameB: string = path.basename(b, path.extname(b))
-    return Number(fileNameA) - Number(fileNameB)
+    return extract_numbers(fileNameA) - extract_numbers(fileNameB)
   })
 
   return imagePaths

@@ -101,7 +101,7 @@ export function get_config() {
   return config
 }
 
-export function set_config(config: object) { 
+export function set_config(config: object) {
   if (platform === 'win32') {
     fs.writeFileSync('./data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')
   } else if (platform === 'linux') {
@@ -158,7 +158,7 @@ export function sql_parse_json(jsonVal: string | object | number | true) {
   if (typeof jsonVal === 'string') {
     parseVal = JSON.parse(jsonVal)
   }
-  if (typeof jsonVal === 'object') { 
+  if (typeof jsonVal === 'object') {
     jsonStr = JSON.stringify(jsonVal)
   }
 
@@ -195,4 +195,10 @@ export function delay(ms: number) {
 
 export function read_json(file: string) {
   return JSON.parse(fs.readFileSync(file, 'utf-8'))
+}
+
+export function extract_numbers(str: string) {
+  const numbers = str.match(/\d+/g);
+  const joinedNumbersString = numbers?.join('');
+  return joinedNumbersString ? parseInt(joinedNumbersString, 10) : 0;
 }
