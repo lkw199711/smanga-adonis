@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-10-08 15:36:23
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-28 12:28:15
- * @FilePath: \smanga-adonis\app\services\database_check_service.ts
- */
 import * as path from 'path'
 import * as fs from 'fs'
 import { runNpxCommand } from '#utils/npxShell'
@@ -78,3 +71,22 @@ export default async function hanle() {
 
   await fs.promises.writeFile(configFile, JSON.stringify(config, null, 2))
 }
+
+/*
+  * 运行命令
+  * npx prisma generate --schema=./prisma/mysql/schema.prisma
+  * npx prisma migrate deploy --schema=./prisma/mysql/schema.prisma
+  * 
+  * 生成迁移文件
+  * npx prisma migrate dev --name share --schema=./prisma/mysql/schema.prisma
+  * 生成 Prisma Client
+  * npx prisma generate --schema=./prisma/mysql/schema.prisma
+  * 部署迁移
+  * npx prisma migrate deploy --schema=./prisma/mysql/schema.prisma
+  * 注意：如果是第一次运行，可能需要先创建数据库
+  * 
+npx prisma generate --schema=./prisma/mysql/schema.prisma
+// npx prisma migrate deploy --schema=./prisma/mysql/schema.prisma
+
+// npx prisma migrate dev--name add_created_at  # --name 指定迁移描述
+*/

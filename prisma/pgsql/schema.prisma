@@ -9,40 +9,40 @@ datasource db {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model bookmark {
-  bookmarkId Int      @id @default(autoincrement()) 
-  mediaId    Int      
+  bookmarkId Int      @id @default(autoincrement())
+  mediaId    Int
   manga      manga    @relation(fields: [mangaId], references: [mangaId])
-  mangaId    Int      
+  mangaId    Int
   chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
-  chapterId  Int      
-  userId     Int      
-  browseType String   @default("flow") 
-  page       Int      
-  createTime DateTime @default(now()) 
-  updateTime DateTime @updatedAt @default(now()) 
-  pageImage  String?  
+  chapterId  Int
+  userId     Int
+  browseType String   @default("flow")
+  page       Int
+  createTime DateTime @default(now())
+  updateTime DateTime @default(now()) @updatedAt
+  pageImage  String?
 
   @@unique([chapterId, page], map: "opage")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model chapter {
-  chapterId     Int        @id @default(autoincrement()) 
+  chapterId     Int        @id @default(autoincrement())
   manga         manga      @relation(fields: [mangaId], references: [mangaId])
-  mangaId       Int        
+  mangaId       Int
   media         media      @relation(fields: [mediaId], references: [mediaId])
-  mediaId       Int        
-  pathId        Int        
-  browseType    String     @default("flow") 
-  subTitle      String?    
-  picNum        Int?       
-  createTime    DateTime   @default(now()) 
-  updateTime    DateTime   @updatedAt @default(now()) 
-  chapterName   String     
-  chapterPath   String     
-  chapterType   String     @default("image") 
-  chapterCover  String?    
-  chapterNumber String?    
+  mediaId       Int
+  pathId        Int
+  browseType    String     @default("flow")
+  subTitle      String?
+  picNum        Int?
+  createTime    DateTime   @default(now())
+  updateTime    DateTime   @default(now()) @updatedAt
+  chapterName   String
+  chapterPath   String
+  chapterType   String     @default("image")
+  chapterCover  String?
+  chapterNumber String?
   deleteFlag    Int        @default(0)
   bookmarks     bookmark[]
   compress      compress[]
@@ -55,133 +55,133 @@ model chapter {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model collect {
-  collectId   Int      @id @default(autoincrement()) 
-  collectType String   @default("manga") 
+  collectId   Int      @id @default(autoincrement())
+  collectType String   @default("manga")
   user        user     @relation(fields: [userId], references: [userId])
-  userId      Int      
-  mediaId     Int      
+  userId      Int
+  mediaId     Int
   manga       manga    @relation(fields: [mangaId], references: [mangaId])
-  mangaId     Int      
-  mangaName   String?  
+  mangaId     Int
+  mangaName   String?
   chapter     chapter? @relation(fields: [chapterId], references: [chapterId])
-  chapterId   Int?     
-  chapterName String?  
-  createTime  DateTime @default(now()) 
-  updateTime  DateTime @updatedAt @default(now()) 
+  chapterId   Int?
+  chapterName String?
+  createTime  DateTime @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
 
   @@unique([userId, collectType, mangaId, chapterId], map: "uniqueMangaChapter")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model compress {
-  compressId     Int      @id @unique(map: "id") @default(autoincrement()) 
-  compressType   String   
-  compressPath   String   
-  compressStatus String?  
-  imageCount     Int?     
-  mediaId        Int      
+  compressId     Int      @id @unique(map: "id") @default(autoincrement())
+  compressType   String
+  compressPath   String
+  compressStatus String?
+  imageCount     Int?
+  mediaId        Int
   manga          manga    @relation(fields: [mangaId], references: [mangaId])
-  mangaId        Int      
+  mangaId        Int
   chapter        chapter  @relation(fields: [chapterId], references: [chapterId])
-  chapterId      Int      @unique(map: "uniqueChapter") 
-  chapterPath    String   
-  userId         Int?     
-  createTime     DateTime @default(now()) 
-  updateTime     DateTime @updatedAt @default(now()) 
+  chapterId      Int      @unique(map: "uniqueChapter")
+  chapterPath    String
+  userId         Int?
+  createTime     DateTime @default(now())
+  updateTime     DateTime @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model history {
-  historyId   Int      @id @default(autoincrement()) 
+  historyId   Int      @id @default(autoincrement())
   user        user     @relation(fields: [userId], references: [userId])
-  userId      Int      
-  mediaId     Int      
+  userId      Int
+  mediaId     Int
   manga       manga    @relation(fields: [mangaId], references: [mangaId])
-  mangaId     Int      
-  mangaName   String?  
+  mangaId     Int
+  mangaName   String?
   chapter     chapter  @relation(fields: [chapterId], references: [chapterId])
-  chapterId   Int      
-  chapterName String?  
-  chapterPath String?  
-  browseType  String   @default("flow") 
-  createTime  DateTime @default(now()) 
-  updateTime  DateTime @updatedAt @default(now()) 
+  chapterId   Int
+  chapterName String?
+  chapterPath String?
+  browseType  String   @default("flow")
+  createTime  DateTime @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model latest {
-  latestId   Int      @id @default(autoincrement()) 
-  page       Int      
-  count      Int?      
-  finish     Int      @default(0) 
+  latestId   Int      @id @default(autoincrement())
+  page       Int
+  count      Int?
+  finish     Int      @default(0)
   manga      manga    @relation(fields: [mangaId], references: [mangaId])
-  mangaId    Int        
-  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])  
-  chapterId  Int      
-  userId     Int      
-  createTime DateTime @default(now()) 
-  updateTime DateTime @updatedAt @default(now()) 
+  mangaId    Int
+  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
+  chapterId  Int
+  userId     Int
+  createTime DateTime @default(now())
+  updateTime DateTime @default(now()) @updatedAt
 
   @@unique([chapterId, userId], map: "uniqueChapterUser")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model log {
-  logId       Int      @id @default(autoincrement()) 
-  logType     String   @default("process") 
-  logLevel    Int      @default(0) 
-  module      String?  
-  queue       String?  
-  message     String   
+  logId       Int      @id @default(autoincrement())
+  logType     String   @default("process")
+  logLevel    Int      @default(0)
+  module      String?
+  queue       String?
+  message     String
   exception   String?  @db.Text
   version     String   @db.Text
   environment String   @db.Text
   context     Json?
   device      Json?
-  createTime  DateTime @default(now()) 
-  updateTime  DateTime @updatedAt @default(now()) 
-  userId      Int?     
+  createTime  DateTime @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
+  userId      Int?
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model login {
-  loginId    Int      @id @default(autoincrement()) 
+  loginId    Int      @id @default(autoincrement())
   user       user?    @relation(fields: [userId], references: [userId])
-  userId     Int?     
-  userName   String?  
-  nickName   String?  
-  request    Int      
-  ip         String   
+  userId     Int?
+  userName   String?
+  nickName   String?
+  request    Int
+  ip         String
   userAgent  Json?
-  createTime DateTime @default(now()) 
-  updateTime DateTime @updatedAt @default(now()) 
-  token      String?  
+  createTime DateTime @default(now())
+  updateTime DateTime @default(now()) @updatedAt
+  token      String?
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model manga {
-  mangaId      Int        @id @default(autoincrement()) 
+  mangaId      Int        @id @default(autoincrement())
   media        media      @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int        
+  mediaId      Int
   path         path       @relation(fields: [pathId], references: [pathId])
-  pathId       Int        
-  mangaName    String     
-  mangaPath    String     
-  parentPath   String?    
-  mangaCover   String?    
-  mangaNumber  String?    
-  chapterCount Int?       
-  browseType   String     @default("flow") 
-  direction    Int        @default(1) 
-  removeFirst  Int        @default(0) 
-  title        String?    
-  subTitle     String?    
-  author       String?    
-  describe     String?    
+  pathId       Int
+  mangaName    String
+  mangaPath    String
+  parentPath   String?
+  mangaCover   String?
+  mangaNumber  String?
+  chapterCount Int?
+  browseType   String     @default("flow")
+  direction    Int        @default(1)
+  removeFirst  Int        @default(0)
+  title        String?
+  subTitle     String?
+  author       String?
+  describe     String?
   publishDate  DateTime?  @db.Date
   deleteFlag   Int        @default(0)
-  createTime   DateTime   @default(now()) 
-  updateTime   DateTime   @updatedAt @default(now()) 
+  createTime   DateTime   @default(now())
+  updateTime   DateTime   @default(now()) @updatedAt
   latests      latest[]
   historys     history[]
   chapters     chapter[]
@@ -196,31 +196,32 @@ model manga {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model mangaTag {
-  mangaTagId Int      @id @default(autoincrement()) 
+  mangaTagId Int      @id @default(autoincrement())
   manga      manga    @relation(fields: [mangaId], references: [mangaId])
-  mangaId    Int      
+  mangaId    Int
   tag        tag      @relation(fields: [tagId], references: [tagId])
-  tagId      Int      
-  createTime DateTime @default(now()) 
-  updateTime DateTime @updatedAt @default(now()) 
+  tagId      Int
+  createTime DateTime @default(now())
+  updateTime DateTime @default(now()) @updatedAt
 
   @@unique([mangaId, tagId], map: "unique-mangaTag")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model media {
-  mediaId         Int              @id @default(autoincrement()) 
-  mediaName       String           @unique(map: "uniqueMedianame") 
-  mediaType       Int              
-  mediaRating     String           @default("child") 
-  mediaCover      String?          
-  directoryFormat Int              @default(0) 
-  browseType      String           @default("flow") 
-  direction       Int              @default(1) 
-  removeFirst     Int              @default(0) 
+  mediaId         Int              @id @default(autoincrement())
+  mediaName       String           @unique(map: "uniqueMedianame")
+  mediaType       Int
+  mediaRating     String           @default("child")
+  mediaCover      String?
+  sourceWebsite   String?
+  directoryFormat Int              @default(0)
+  browseType      String           @default("flow")
+  direction       Int              @default(1)
+  removeFirst     Int              @default(0)
   deleteFlag      Int              @default(0)
-  createTime      DateTime         @default(now()) 
-  updateTime      DateTime         @updatedAt @default(now()) 
+  createTime      DateTime         @default(now())
+  updateTime      DateTime         @default(now()) @updatedAt
   paths           path[]
   mangas          manga[]
   chapters        chapter[]
@@ -229,13 +230,13 @@ model media {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model mediaPermisson {
-  mediaPermissonId Int      @id @default(autoincrement()) 
+  mediaPermissonId Int      @id @default(autoincrement())
   user             user     @relation(fields: [userId], references: [userId])
-  userId           Int      
+  userId           Int
   media            media    @relation(fields: [mediaId], references: [mediaId])
-  mediaId          Int      
-  createTime       DateTime @default(now()) 
-  updateTime       DateTime @updatedAt @default(now()) 
+  mediaId          Int
+  createTime       DateTime @default(now())
+  updateTime       DateTime @default(now()) @updatedAt
 
   @@unique([userId, mediaId], map: "userMedia")
   @@map("mediaPermisson")
@@ -243,31 +244,31 @@ model mediaPermisson {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model meta {
-  metaId      Int      @id @default(autoincrement()) 
-  metaName    String   
+  metaId      Int      @id @default(autoincrement())
+  metaName    String
   manga       manga    @relation(fields: [mangaId], references: [mangaId])
-  mangaId     Int      
-  metaFile    String?  
-  metaContent String?  
-  description String?  
-  createTime  DateTime @default(now()) 
-  updateTime  DateTime @updatedAt @default(now()) 
+  mangaId     Int
+  metaFile    String?
+  metaContent String?
+  description String?
+  createTime  DateTime @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model path {
-  pathId       Int       @id @default(autoincrement()) 
+  pathId       Int       @id @default(autoincrement())
   media        media     @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int       
-  pathType     String?   
-  autoScan     Int       @default(0) 
-  include      String?   
-  exclude      String?   
-  lastScanTime DateTime? 
+  mediaId      Int
+  pathType     String?
+  autoScan     Int       @default(0)
+  include      String?
+  exclude      String?
+  lastScanTime DateTime?
   deleteFlag   Int       @default(0)
-  createTime   DateTime  @default(now()) 
-  updateTime   DateTime  @updatedAt @default(now()) 
-  pathContent  String    
+  createTime   DateTime  @default(now())
+  updateTime   DateTime  @default(now()) @updatedAt
+  pathContent  String
   mangas       manga[]
 
   @@unique([mediaId, pathContent], map: "opath")
@@ -275,39 +276,39 @@ model path {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model scan {
-  scanId      Int      @default(autoincrement()) 
-  scanStatus  String   
-  targetPath  String?  
-  pathId      Int      @unique(map: "uniquePath") 
-  scanCount   Int?     
+  scanId      Int      @default(autoincrement())
+  scanStatus  String
+  targetPath  String?
+  pathId      Int      @unique(map: "uniquePath")
+  scanCount   Int?
   scanIndex   Int?     @default(0)
-  createTime  DateTime @default(now()) 
-  updateTime  DateTime @updatedAt @default(now()) 
-  pathContent String   
+  createTime  DateTime @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
+  pathContent String
 
   @@id([scanId, pathId])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model tag {
-  tagId       Int        @id @default(autoincrement()) 
-  tagName     String     
-  tagColor    String     @default("#a0d911") 
-  userId      Int?       
-  description String?    
-  createTime  DateTime   @default(now()) 
-  updateTime  DateTime   @updatedAt @default(now()) 
+  tagId       Int        @id @default(autoincrement())
+  tagName     String
+  tagColor    String     @default("#a0d911")
+  userId      Int?
+  description String?
+  createTime  DateTime   @default(now())
+  updateTime  DateTime   @default(now()) @updatedAt
   mangaTags   mangaTag[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model task {
-  taskId     Int       @id @default(autoincrement()) 
-  taskName   String    @default("") 
+  taskId     Int       @id @default(autoincrement())
+  taskName   String    @default("")
   command    String    @db.Text
-  createTime DateTime  @default(now()) 
-  updateTime DateTime  @updatedAt @default(now()) 
-  status     String    @default("pending") 
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
+  status     String    @default("pending")
   args       Json?
   startTime  DateTime? @db.Timestamp(0)
   endTime    DateTime? @db.Timestamp(0)
@@ -317,57 +318,57 @@ model task {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model taskFailed {
-  taskId     Int       @id @default(autoincrement()) 
-  taskName   String    @default("") 
-  status     String    
+  taskId     Int       @id @default(autoincrement())
+  taskName   String    @default("")
+  status     String
   command    String    @db.Text
   args       Json?
   startTime  DateTime? @db.Timestamp(0)
   endTime    DateTime? @db.Timestamp(0)
   error      String?   @db.Text
-  createTime DateTime  @default(now()) 
-  updateTime DateTime  @updatedAt @default(now()) 
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
 
   @@map("taskFailed")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model taskSuccess {
-  taskId     Int       @id @default(autoincrement()) 
-  taskName   String    @default("") 
-  status     String    
+  taskId     Int       @id @default(autoincrement())
+  taskName   String    @default("")
+  status     String
   command    String    @db.Text
   args       Json?
   startTime  DateTime? @db.Timestamp(0)
   endTime    DateTime? @db.Timestamp(0)
-  createTime DateTime  @default(now()) 
-  updateTime DateTime  @updatedAt @default(now()) 
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
 
   @@map("taskSuccess")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model token {
-  tokenId    Int       @id @default(autoincrement()) 
+  tokenId    Int       @id @default(autoincrement())
   user       user      @relation(fields: [userId], references: [userId])
-  userId     Int       
-  token      String    
-  expires    DateTime? 
-  createTime DateTime  @default(now()) 
-  updateTime DateTime  @updatedAt @default(now()) 
+  userId     Int
+  token      String
+  expires    DateTime?
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model user {
-  userId          Int              @id @default(autoincrement()) 
-  userName        String           @unique(map: "uniqueUsername") 
+  userId          Int              @id @default(autoincrement())
+  userName        String           @unique(map: "uniqueUsername")
   passWord        String           @db.Char(32)
-  nickName        String?          
-  header          String?          
+  nickName        String?
+  header          String?
   role            String?          @default("user")
   mediaPermit     String?          @default("limit")
-  createTime      DateTime         @default(now()) 
-  updateTime      DateTime         @updatedAt @default(now()) 
+  createTime      DateTime         @default(now())
+  updateTime      DateTime         @default(now()) @updatedAt
   userConfig      Json?
   logins          login[]
   tokens          token[]
@@ -379,23 +380,54 @@ model user {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model userPermisson {
-  userPermissonId Int      @id @default(autoincrement()) 
+  userPermissonId Int      @id @default(autoincrement())
   user            user     @relation(fields: [userId], references: [userId])
-  userId          Int      
-  module          String   
-  operation       String   @default("default") 
-  createTime      DateTime @default(now()) 
-  updateTime      DateTime @updatedAt @default(now()) 
+  userId          Int
+  module          String
+  operation       String   @default("default")
+  createTime      DateTime @default(now())
+  updateTime      DateTime @default(now()) @updatedAt
 
   @@unique([userId, module, operation], map: "userModuleOperation")
   @@map("userPermisson")
 }
 
+model share {
+  shareId    Int       @id @default(autoincrement()) 
+  shareType  String    @default("manga") @db.VarChar(191)
+  source     String    @db.VarChar(191)
+  userId     Int?      
+  mediaId    Int       
+  mangaId    Int?      
+  link       String    @db.VarChar(191)
+  secret     String    @db.VarChar(191)
+  expires    DateTime? 
+  enable     Int       @default(1) 
+  whiteList  String?   @db.VarChar(191)
+  blackList  String?   @db.VarChar(191)
+  createTime DateTime  @default(now()) 
+  updateTime DateTime  @default(now()) @updatedAt 
+}
+
+model sync {
+  syncId     Int      @id @default(autoincrement()) 
+  syncType   String   @default("manga") @db.VarChar(191)
+  source     String   @db.VarChar(191)
+  mediaId    Int      
+  userId     Int?     
+  shareId    Int      
+  link       String   @db.VarChar(191)
+  secret     String   @db.VarChar(191)
+  auto       Int      @default(0) 
+  token      String?  @db.VarChar(191)
+  createTime DateTime @default(now()) 
+  updateTime DateTime @default(now()) @updatedAt
+}
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model version {
-  versionId   Int      @id @default(autoincrement()) 
-  version     String   @unique(map: "uniqueVersion") 
-  description String?  
-  createTime  DateTime @default(now()) 
-  updateTime  DateTime @updatedAt @default(now()) 
+  versionId   Int      @id @default(autoincrement())
+  version     String   @unique(map: "uniqueVersion")
+  description String?
+  createTime  DateTime @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
 }

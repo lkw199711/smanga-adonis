@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-14 18:45:39
- * @FilePath: \smanga-adonis\app\controllers\media_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '#interfaces/response'
@@ -90,6 +83,7 @@ export default class MediaController {
       'mediaName',
       'mediaType',
       'removeFirst',
+      'sourceWebsite',
     ])
 
     let media = null
@@ -124,6 +118,7 @@ export default class MediaController {
       'mediaName',
       'mediaType',
       'removeFirst',
+      'sourceWebsite',
     ])
     const media = await prisma.media.update({
       where: { mediaId },

@@ -135,7 +135,13 @@ export function order_params(order: string = 'asc', model: string = 'chapter'): 
     }
   }
 
-  if (/time/i.test(order)) {
+  if (/createTime/i.test(order)) {
+    return {
+      createTime: sort,
+    }
+  }
+
+  if (/updateTime/i.test(order)) { 
     return {
       updateTime: sort,
     }

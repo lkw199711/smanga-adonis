@@ -124,6 +124,9 @@ export default class MangaController {
         mangaTags: {
           include: { tag: true },
         },
+        media: {
+          select: { sourceWebsite: true },
+        }
       },
     })
 

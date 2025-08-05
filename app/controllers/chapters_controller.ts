@@ -162,8 +162,9 @@ export default class ChaptersController {
     return response.json(showResponse)
   }
 
-  public async images({ params, response }: HttpContext) {
+  public async images({ params, request, response }: HttpContext) {
     let { chapterId } = params
+    const { orderChapterByNumber } = request.only(['orderChapterByNumber'])
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
       return response.json(
@@ -178,7 +179,7 @@ export default class ChaptersController {
 
     //  纯图片章节
     if (chapter.chapterType === 'img') {
-      images = image_files(chapter.chapterPath, exclude)
+      images = image_files(chapter.chapterPath, exclude, orderChapterByNumber)
       const imagesResponse = new SResponse({
         code: 0,
         message: '',
@@ -191,7 +192,7 @@ export default class ChaptersController {
     // 已完成解压缩的章节
     compress = await prisma.compress.findUnique({ where: { chapterId: chapterId } })
     if (compress) {
-      images = image_files(compress.compressPath, exclude)
+      images = image_files(compress.compressPath, exclude, orderChapterByNumber)
       const imagesResponse = new SResponse({
         code: 0,
         message: '',
@@ -250,7 +251,6 @@ export default class ChaptersController {
     })
 
     images = image_files(compress.compressPath, exclude)
-    console.log(exclude)
 
     const imagesResponse = new SResponse({
       code: 0,
@@ -300,7 +300,7 @@ export default class ChaptersController {
 // 定义支持的图片文件扩展名
 const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp']
 
-function image_files(dirPath: string, exclude: string | null | undefined = ''): string[] {
+function image_files(dirPath: string, exclude: string | null | undefined = '', orderChapterByNumber = true): string[] {
   let imagePaths: string[] = []
 
   // 读取目录下的所有文件和子目录
@@ -320,11 +320,18 @@ function image_files(dirPath: string, exclude: string | null | undefined = ''): 
   })
 
   // 将返回的图片按数字排序
-  imagePaths.sort((a: any, b: any) => {
-    const fileNameA: string = path.basename(a, path.extname(a))
-    const fileNameB: string = path.basename(b, path.extname(b))
-    return extract_numbers(fileNameA) - extract_numbers(fileNameB)
-  })
+  if (orderChapterByNumber) { 
+    imagePaths.sort((a: any, b: any) => {
+      const fileNameA: string = path.basename(a, path.extname(a))
+      const fileNameB: string = path.basename(b, path.extname(b))
+      return extract_numbers(fileNameA) - extract_numbers(fileNameB)
+    })
+  } else {
+    imagePaths.sort((a: any, b: any) => {
+      return a - b
+    })
+  }
+  
 
   // 如果有排除规则，则过滤掉不符合规则的图片
   if (exclude) {

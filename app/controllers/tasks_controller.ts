@@ -9,63 +9,48 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
+import { scanQueue } from '#services/queue_service'
 
 export default class TasksController {
-  public async index({ request, response }: HttpContext) {
-    const { page, pageSize } = request.only(['page', 'pageSize'])
-    const queryParams = {
-      ...(page && {
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-    }
-    const [list, count] = await Promise.all([
-      prisma.task.findMany(queryParams),
-      prisma.task.count(),
-    ])
+  async select({ request, response }: HttpContext) {
+    // const list = await scanQueue.getJobs(['active', 'waiting', 'completed', 'failed', 'delayed'])
+    const list = await scanQueue.getJobs(['active', 'waiting'])
+    // const count = await scanQueue.getJobCountByTypes(['active', 'waiting'])
     const listResponse = new ListResponse({
       code: 0,
       message: '',
       list,
-      count,
+      count: list.length,
     })
     return response.json(listResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
-    let { taskId } = params
-    taskId = Number(taskId)
-    const task = await prisma.task.findUnique({ where: { taskId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: task })
-    return response.json(showResponse)
+  async show({ params, response }: HttpContext) {
+    const { taskId } = params
+    const job = await scanQueue.getJob(taskId)
+
+    if (!job) {
+      return response.status(404).json(new SResponse({ code: 1, message: '任务未找到', status: 'not found' }))
+    }
+
+    return response.json(new SResponse({ code: 0, message: '', data: job }))
   }
 
-  public async create({ request, response }: HttpContext) {
-    const insertData = request.body() as Prisma.taskCreateInput
-    const task = await prisma.task.create({
-      data: insertData,
-    })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: task })
-    return response.json(saveResponse)
+  async destroy({ params, response }: HttpContext) {
+    const { taskId } = params
+    const job = await scanQueue.getJob(taskId)
+
+    if (!job) {
+      return response.status(404).json(new SResponse({ code: 1, message: '任务未找到', status: 'not found' }))
+    }
+
+    await job.remove()
+    return response.json(new SResponse({ code: 0, message: '任务已删除', status: 'success' }))
   }
 
-  public async update({ params, request, response }: HttpContext) {
-    let { taskId } = params
-    taskId = Number(taskId)
-    const modifyData = request.only(['taskName', 'taskStatus', 'taskType', 'taskContent']) as Prisma.taskUpdateInput
-    const task = await prisma.task.update({
-      where: { taskId },
-      data: modifyData,
-    })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: task })
-    return response.json(updateResponse)
-  }
-
-  public async destroy({ params, response }: HttpContext) {
-    let { taskId } = params
-    taskId = Number(taskId)
-    const task = await prisma.task.delete({ where: { taskId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: task })
-    return response.json(destroyResponse)
+  async destroy_all({ response }: HttpContext) {
+    // await scanQueue.empty() // 清空队列中的所有任务
+    await scanQueue.clean(0) // 清除所有任务，包括已完成和失败的任务
+    return response.json(new SResponse({ code: 0, message: '任务已清空', status: 'success' }))
   }
 }

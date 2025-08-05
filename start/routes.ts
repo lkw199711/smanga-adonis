@@ -30,6 +30,8 @@ const ConfigsController = () => import('#controllers/configs_controller')
 const TestsController = () => import('#controllers/tests_controller')
 const DeploysController = () => import('#controllers/deploys_controller')
 const FilesController = () => import('#controllers/files_controller')
+const SharesController = () => import('#controllers/shares_controller')
+const SyncsController = () => import('#controllers/syncs_controller')
 
 router.get('/', async () => {
   return {
@@ -116,11 +118,10 @@ router.put('/login/:loginId', [LoginController, 'update'])
 router.delete('/login/:loginId', [LoginController, 'destroy'])
 
 // 任务
-router.get('/task', [TasksController, 'index'])
+router.get('/task', [TasksController, 'select'])
 router.get('/task/:taskId', [TasksController, 'show'])
-router.post('/task', [TasksController, 'create'])
-router.put('/task/:taskId', [TasksController, 'update'])
 router.delete('/task/:taskId', [TasksController, 'destroy'])
+router.delete('/task', [TasksController, 'destroy_all'])
 
 // 媒体库
 router.get('/media', [MediaController, 'index'])
@@ -187,6 +188,20 @@ router.get('chart-frequency', [ChartsController, 'frequency'])
 // 搜索
 router.get('/search-mangas', [SearchesController, 'mangas'])
 router.get('/search-chapters', [SearchesController, 'chapters'])
+
+// 分享
+router.get('/share', [SharesController, 'index'])
+router.get('/share/:shareId', [SharesController, 'show'])
+router.post('/share', [SharesController, 'create'])
+router.put('/share/:shareId', [SharesController, 'update'])
+router.delete('/share/:shareId', [SharesController, 'destroy'])
+router.get('/analysis', [SharesController, 'analysis'])
+
+// 同步
+router.get('/sync', [SyncsController, 'select'])
+router.post('/sync', [SyncsController, 'create'])
+router.put('/sync/:syncId', [SyncsController, 'update'])
+router.delete('/sync/:syncId', [SyncsController, 'destroy'])
 
 // 配置信息
 router.get('client-user-config', [UsersController, 'config'])

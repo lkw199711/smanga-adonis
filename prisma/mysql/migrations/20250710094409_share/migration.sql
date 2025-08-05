@@ -1,0 +1,49 @@
+-- CreateTable
+CREATE TABLE `share` (
+    `shareId` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+    `shareType` VARCHAR(191) NOT NULL DEFAULT 'manga',
+    `source` VARCHAR(191) NOT NULL,
+    `userId` INTEGER UNSIGNED NULL,
+    `mediaId` INTEGER UNSIGNED NOT NULL,
+    `mangaId` INTEGER UNSIGNED NULL,
+    `link` VARCHAR(191) NOT NULL,
+    `secret` VARCHAR(191) NOT NULL,
+    `expires` DATETIME(0) NULL,
+    `enable` INTEGER UNSIGNED NOT NULL DEFAULT 1,
+    `whiteList` VARCHAR(191) NULL,
+    `blackList` VARCHAR(191) NULL,
+    `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+
+    PRIMARY KEY (`shareId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `sync` (
+    `syncId` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+    `syncType` VARCHAR(191) NOT NULL DEFAULT 'manga',
+    `source` VARCHAR(191) NOT NULL,
+    `mediaId` INTEGER UNSIGNED NOT NULL,
+    `userId` INTEGER UNSIGNED NULL,
+    `shareId` INTEGER UNSIGNED NOT NULL,
+    `link` VARCHAR(191) NOT NULL,
+    `secret` VARCHAR(191) NOT NULL,
+    `auto` INTEGER UNSIGNED NOT NULL DEFAULT 0,
+    `token` VARCHAR(191) NULL,
+    `createTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `updateTime` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+
+    PRIMARY KEY (`syncId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey
+ALTER TABLE `share` ADD CONSTRAINT `share_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`userId`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `share` ADD CONSTRAINT `share_mediaId_fkey` FOREIGN KEY (`mediaId`) REFERENCES `media`(`mediaId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `share` ADD CONSTRAINT `share_mangaId_fkey` FOREIGN KEY (`mangaId`) REFERENCES `manga`(`mangaId`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `sync` ADD CONSTRAINT `sync_mediaId_fkey` FOREIGN KEY (`mediaId`) REFERENCES `media`(`mediaId`) ON DELETE RESTRICT ON UPDATE CASCADE;

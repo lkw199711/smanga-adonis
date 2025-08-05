@@ -19,7 +19,7 @@ model bookmark {
   browseType String   @default("flow") @db.VarChar(191)
   page       Int      @db.UnsignedInt
   createTime DateTime @default(now()) @db.DateTime(6)
-  updateTime DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @updatedAt @db.DateTime(6)
   pageImage  String?  @db.VarChar(191)
 
   @@unique([chapterId, page], map: "opage")
@@ -37,7 +37,7 @@ model chapter {
   subTitle      String?    @db.VarChar(191)
   picNum        Int?       @db.UnsignedInt
   createTime    DateTime   @default(now()) @db.DateTime(6)
-  updateTime    DateTime   @updatedAt @default(now()) @db.DateTime(6)
+  updateTime    DateTime   @default(now()) @updatedAt @db.DateTime(6)
   chapterName   String     @db.VarChar(191)
   chapterPath   String     @db.VarChar(191)
   chapterType   String     @default("image") @db.VarChar(191)
@@ -48,7 +48,7 @@ model chapter {
   compress      compress[]
   history       history[]
   collects      collect[]
-  latests      latest[]
+  latests       latest[]
 
   @@unique([mangaId, chapterName], map: "oname")
 }
@@ -67,7 +67,7 @@ model collect {
   chapterId   Int?     @db.UnsignedInt
   chapterName String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
 
   @@unique([userId, collectType, mangaId, chapterId], map: "uniqueMangaChapter")
 }
@@ -87,7 +87,7 @@ model compress {
   chapterPath    String   @db.VarChar(191)
   userId         Int?     @db.UnsignedInt
   createTime     DateTime @default(now()) @db.DateTime(6)
-  updateTime     DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime     DateTime @default(now()) @updatedAt @db.DateTime(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -105,7 +105,7 @@ model history {
   chapterPath String?  @db.VarChar(191)
   browseType  String   @default("flow") @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -120,7 +120,7 @@ model latest {
   chapterId  Int      @db.UnsignedInt
   userId     Int      @db.UnsignedInt
   createTime DateTime @default(now()) @db.DateTime(6)
-  updateTime DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @updatedAt @db.DateTime(6)
 
   @@unique([chapterId, userId], map: "uniqueChapterUser")
 }
@@ -139,7 +139,7 @@ model log {
   context     Json?
   device      Json?
   createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
   userId      Int?     @db.UnsignedInt
 }
 
@@ -154,7 +154,7 @@ model login {
   ip         String   @db.VarChar(191)
   userAgent  Json?
   createTime DateTime @default(now()) @db.DateTime(6)
-  updateTime DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @updatedAt @db.DateTime(6)
   token      String?  @db.VarChar(191)
 }
 
@@ -181,7 +181,7 @@ model manga {
   publishDate  DateTime?  @db.Date
   deleteFlag   Int        @default(0)
   createTime   DateTime   @default(now()) @db.DateTime(6)
-  updateTime   DateTime   @updatedAt @default(now()) @db.DateTime(6)
+  updateTime   DateTime   @default(now()) @updatedAt @db.DateTime(6)
   latests      latest[]
   historys     history[]
   chapters     chapter[]
@@ -190,6 +190,7 @@ model manga {
   compress     compress[]
   metas        meta[]
   mangaTags    mangaTag[]
+  shares       share[]
 
   @@unique([mediaId, mangaPath], map: "oname")
 }
@@ -202,7 +203,7 @@ model mangaTag {
   tag        tag      @relation(fields: [tagId], references: [tagId])
   tagId      Int      @db.UnsignedInt
   createTime DateTime @default(now()) @db.DateTime(6)
-  updateTime DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @updatedAt @db.DateTime(6)
 
   @@unique([mangaId, tagId], map: "mangaTag")
   @@map("mangaTag")
@@ -215,17 +216,20 @@ model media {
   mediaType       Int              @db.UnsignedInt
   mediaRating     String           @default("child") @db.VarChar(191)
   mediaCover      String?          @db.VarChar(191)
+  sourceWebsite   String?          @db.VarChar(191)
   directoryFormat Int              @default(0) @db.UnsignedInt
   browseType      String           @default("flow") @db.VarChar(191)
   direction       Int              @default(1) @db.UnsignedInt
   removeFirst     Int              @default(0) @db.UnsignedInt
   deleteFlag      Int              @default(0)
   createTime      DateTime         @default(now()) @db.DateTime(6)
-  updateTime      DateTime         @updatedAt @default(now()) @db.DateTime(6)
+  updateTime      DateTime         @default(now()) @updatedAt @db.DateTime(6)
   paths           path[]
   mangas          manga[]
   chapters        chapter[]
   mediaPermissons mediaPermisson[]
+  shares          share[]
+  syncs           sync[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -236,7 +240,7 @@ model mediaPermisson {
   media            media    @relation(fields: [mediaId], references: [mediaId])
   mediaId          Int      @db.UnsignedInt
   createTime       DateTime @default(now()) @db.DateTime(6)
-  updateTime       DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime       DateTime @default(now()) @updatedAt @db.DateTime(6)
 
   @@unique([userId, mediaId], map: "userMedia")
   @@map("mediaPermisson")
@@ -252,7 +256,7 @@ model meta {
   metaContent String?  @db.VarChar(191)
   description String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -267,7 +271,7 @@ model path {
   lastScanTime DateTime? @db.DateTime(0)
   deleteFlag   Int       @default(0)
   createTime   DateTime  @default(now()) @db.DateTime(6)
-  updateTime   DateTime  @updatedAt @default(now()) @db.DateTime(6)
+  updateTime   DateTime  @default(now()) @updatedAt @db.DateTime(6)
   pathContent  String    @db.VarChar(191)
   mangas       manga[]
 
@@ -283,7 +287,7 @@ model scan {
   scanCount   Int?     @db.UnsignedInt
   scanIndex   Int?     @default(0)
   createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
   pathContent String   @db.VarChar(191)
 
   @@id([scanId, pathId])
@@ -297,7 +301,7 @@ model tag {
   userId      Int?       @db.UnsignedInt
   description String?    @db.VarChar(191)
   createTime  DateTime   @default(now()) @db.DateTime(6)
-  updateTime  DateTime   @updatedAt @default(now()) @db.DateTime(6)
+  updateTime  DateTime   @default(now()) @updatedAt @db.DateTime(6)
   mangaTags   mangaTag[]
 }
 
@@ -307,7 +311,7 @@ model task {
   taskName   String    @default("") @db.VarChar(191)
   command    String    @db.Text
   createTime DateTime  @default(now()) @db.DateTime(6)
-  updateTime DateTime  @updatedAt @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @updatedAt @db.DateTime(6)
   status     String    @default("pending") @db.VarChar(191)
   args       Json?
   startTime  DateTime? @db.Timestamp(0)
@@ -327,7 +331,7 @@ model taskFailed {
   endTime    DateTime? @db.Timestamp(0)
   error      String?   @db.Text
   createTime DateTime  @default(now()) @db.DateTime(6)
-  updateTime DateTime  @updatedAt @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @updatedAt @db.DateTime(6)
 
   @@map("taskFailed")
 }
@@ -342,7 +346,7 @@ model taskSuccess {
   startTime  DateTime? @db.Timestamp(0)
   endTime    DateTime? @db.Timestamp(0)
   createTime DateTime  @default(now()) @db.DateTime(6)
-  updateTime DateTime  @updatedAt @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @updatedAt @db.DateTime(6)
 
   @@map("taskSuccess")
 }
@@ -355,7 +359,7 @@ model token {
   token      String    @db.VarChar(191)
   expires    DateTime? @db.DateTime(0)
   createTime DateTime  @default(now()) @db.DateTime(6)
-  updateTime DateTime  @updatedAt @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @updatedAt @db.DateTime(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -368,7 +372,7 @@ model user {
   role            String?          @default("user") @db.VarChar(191)
   mediaPermit     String?          @default("limit") @db.VarChar(191)
   createTime      DateTime         @default(now()) @db.DateTime(6)
-  updateTime      DateTime         @updatedAt @default(now()) @db.DateTime(6)
+  updateTime      DateTime         @default(now()) @updatedAt @db.DateTime(6)
   userConfig      Json?
   logins          login[]
   tokens          token[]
@@ -376,6 +380,7 @@ model user {
   mediaPermissons mediaPermisson[]
   historys        history[]
   collects        collect[]
+  shares          share[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -386,10 +391,46 @@ model userPermisson {
   module          String   @db.VarChar(100)
   operation       String   @default("default") @db.VarChar(100)
   createTime      DateTime @default(now()) @db.DateTime(6)
-  updateTime      DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime      DateTime @default(now()) @updatedAt @db.DateTime(6)
 
   @@unique([userId, module, operation], map: "userModuleOperation")
   @@map("userPermisson")
+}
+
+model share {
+  shareId    Int       @id @default(autoincrement()) @db.UnsignedInt
+  shareType  String    @default("manga") @db.VarChar(191)
+  source     String    @db.VarChar(191)
+  user       user?     @relation(fields: [userId], references: [userId])
+  userId     Int?      @db.UnsignedInt
+  media      media     @relation(fields: [mediaId], references: [mediaId])
+  mediaId    Int       @db.UnsignedInt
+  manga      manga?    @relation(fields: [mangaId], references: [mangaId])
+  mangaId    Int?      @db.UnsignedInt
+  link       String    @db.VarChar(191)
+  secret     String    @db.VarChar(191)
+  expires    DateTime? @db.DateTime(0)
+  enable     Int       @default(1) @db.UnsignedInt
+  whiteList  String?   @db.VarChar(191)
+  blackList  String?   @db.VarChar(191)
+  createTime DateTime  @default(now()) @db.DateTime(6)
+  updateTime DateTime  @default(now()) @updatedAt @db.DateTime(6)
+}
+
+model sync {
+  syncId     Int      @id @default(autoincrement()) @db.UnsignedInt
+  syncType   String   @default("manga") @db.VarChar(191)
+  source     String   @db.VarChar(191)
+  media      media    @relation(fields: [mediaId], references: [mediaId])
+  mediaId    Int      @db.UnsignedInt
+  userId     Int?     @db.UnsignedInt
+  shareId    Int      @db.UnsignedInt
+  link       String   @db.VarChar(191)
+  secret     String   @db.VarChar(191)
+  auto       Int      @default(0) @db.UnsignedInt
+  token      String?  @db.VarChar(191)
+  createTime DateTime @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @updatedAt @db.DateTime(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -398,5 +439,5 @@ model version {
   version     String   @unique(map: "uniqueVersion") @db.VarChar(191)
   description String?  @db.VarChar(191)
   createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @updatedAt @default(now()) @db.DateTime(6)
+  updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
 }

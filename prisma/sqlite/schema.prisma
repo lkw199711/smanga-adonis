@@ -215,6 +215,7 @@ model media {
   mediaType       Int
   mediaRating     String           @default("child")
   mediaCover      String?
+  sourceWebsite   String?
   directoryFormat Int              @default(0)
   browseType      String           @default("flow")
   direction       Int              @default(1)
@@ -388,6 +389,38 @@ model userPermisson {
 
   @@unique([userId, module, operation], map: "userModuleOperation")
   @@map("userPermisson")
+}
+
+model share {
+  shareId    Int       @id @default(autoincrement())
+  shareType  String    @default("manga")
+  source     String    
+  userId     Int?     
+  mediaId    Int      
+  mangaId    Int?     
+  link       String    
+  secret     String    
+  expires    DateTime? 
+  enable     Int       @default(1)
+  whiteList  String?   
+  blackList  String?   
+  createTime DateTime  @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
+}
+
+model sync {
+  syncId     Int      @id @default(autoincrement())
+  syncType   String   @default("manga") 
+  source     String   
+  mediaId    Int      
+  userId     Int?     
+  shareId    Int      
+  link       String   
+  secret     String   
+  auto       Int      @default(0) 
+  token      String?  
+  createTime DateTime @default(now())
+  updateTime DateTime @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

@@ -21,7 +21,7 @@ export default class AuthMiddleware {
   redirectTo = '/login'
 
   async handle({ request, response }: HttpContextWithUserId, next: NextFn) {
-    const skipRoutes = ['/deploy', '/test', '/login', '/file']
+    const skipRoutes = ['/deploy', '/test', '/login', '/file', '/analysis']
 
     if (skipRoutes.some((route) => request.url().startsWith(route))) {
       // 如果是 deploy 或 test 控制器，跳过中间件
