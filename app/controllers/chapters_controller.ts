@@ -173,91 +173,95 @@ export default class ChaptersController {
     }
 
     let images: string[] = []
-    let compress: any = null
+    let imagesResponse: SResponse;
+    // 查询解压记录
+    let compress: any = await prisma.compress.findUnique({ where: { chapterId: chapterId } })
     const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
     const exclude = pathInfo?.exclude
 
     //  纯图片章节
     if (chapter.chapterType === 'img') {
-      images = image_files(chapter.chapterPath, exclude, orderChapterByNumber)
-      const imagesResponse = new SResponse({
+      images = image_files(chapter.chapterPath, exclude)
+      images.sort()
+      imagesResponse = new SResponse({
         code: 0,
         message: '',
         data: images,
         status: 'compressed',
       })
-      return response.json(imagesResponse)
-    }
-
-    // 已完成解压缩的章节
-    compress = await prisma.compress.findUnique({ where: { chapterId: chapterId } })
-    if (compress) {
-      images = image_files(compress.compressPath, exclude, orderChapterByNumber)
-      const imagesResponse = new SResponse({
+    } else if (compress) {
+      // 已完成解压缩的章节
+      images = image_files(compress.compressPath, exclude)
+      imagesResponse = new SResponse({
         code: 0,
         message: '',
         data: images,
         status: 'compressed',
       })
-      return response.json(imagesResponse)
+    } else {
+      const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
+
+      // 创建解压缩任务
+      compress = await prisma.compress.create({
+        data: {
+          chapter: {
+            connect: {
+              chapterId: chapter.chapterId,
+            },
+          },
+          chapterPath: chapter.chapterPath,
+          manga: {
+            connect: {
+              mangaId: chapter.mangaId,
+            },
+          },
+          mediaId: chapter.mediaId,
+          compressType: chapter.chapterType,
+          compressPath,
+          compressStatus: 'compressing',
+        },
+      })
+
+      // 执行解压缩任务
+      switch (chapter.chapterType) {
+        case 'zip':
+          await unzipFile(chapter.chapterPath, compressPath)
+          break
+        case 'rar':
+          await extractRar(chapter.chapterPath, compressPath)
+          break
+        case '7z':
+          await extract7z(chapter.chapterPath, compressPath)
+          break
+        default:
+      }
+
+      // 更新解压缩任务状态
+      compress = await prisma.compress.update({
+        where: {
+          chapterId: chapter.chapterId,
+        },
+        data: {
+          compressStatus: 'compressed',
+        },
+      })
+
+      images = image_files(compress.compressPath, exclude)
+      imagesResponse = new SResponse({
+        code: 0,
+        message: '',
+        data: images,
+        status: 'compressed',
+      })
     }
 
-    const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
-
-    // 创建解压缩任务
-
-    compress = await prisma.compress.create({
-      data: {
-        chapter: {
-          connect: {
-            chapterId: chapter.chapterId,
-          },
-        },
-        chapterPath: chapter.chapterPath,
-        manga: {
-          connect: {
-            mangaId: chapter.mangaId,
-          },
-        },
-        mediaId: chapter.mediaId,
-        compressType: chapter.chapterType,
-        compressPath,
-        compressStatus: 'compressing',
-      },
-    })
-
-    // 执行解压缩任务
-    switch (chapter.chapterType) {
-      case 'zip':
-        await unzipFile(chapter.chapterPath, compressPath)
-        break
-      case 'rar':
-        await extractRar(chapter.chapterPath, compressPath)
-        break
-      case '7z':
-        await extract7z(chapter.chapterPath, compressPath)
-        break
-      default:
+    // 将返回的图片按数字排序
+    if (orderChapterByNumber) {
+      images.sort((a, b) => extract_numbers(a) - extract_numbers(b))
+    } else {
+      images.sort()
     }
 
-    // 更新解压缩任务状态
-    compress = await prisma.compress.update({
-      where: {
-        chapterId: chapter.chapterId,
-      },
-      data: {
-        compressStatus: 'compressed',
-      },
-    })
-
-    images = image_files(compress.compressPath, exclude)
-
-    const imagesResponse = new SResponse({
-      code: 0,
-      message: '',
-      data: images,
-      status: 'compressed',
-    })
     return response.json(imagesResponse)
   }
 
@@ -300,7 +304,7 @@ export default class ChaptersController {
 // 定义支持的图片文件扩展名
 const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp']
 
-function image_files(dirPath: string, exclude: string | null | undefined = '', orderChapterByNumber = true): string[] {
+function image_files(dirPath: string, exclude: string | null | undefined = ''): string[] {
   let imagePaths: string[] = []
 
   // 读取目录下的所有文件和子目录
@@ -318,20 +322,6 @@ function image_files(dirPath: string, exclude: string | null | undefined = '', o
       imagePaths.push(filePath)
     }
   })
-
-  // 将返回的图片按数字排序
-  if (orderChapterByNumber) { 
-    imagePaths.sort((a: any, b: any) => {
-      const fileNameA: string = path.basename(a, path.extname(a))
-      const fileNameB: string = path.basename(b, path.extname(b))
-      return extract_numbers(fileNameA) - extract_numbers(fileNameB)
-    })
-  } else {
-    imagePaths.sort((a: any, b: any) => {
-      return a - b
-    })
-  }
-  
 
   // 如果有排除规则，则过滤掉不符合规则的图片
   if (exclude) {
