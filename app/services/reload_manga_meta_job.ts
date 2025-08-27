@@ -226,7 +226,7 @@ export default class ReloadMangaMetaJob {
             for (let index = 0; index < chapters.length; index++) {
                 const chapter: any = chapters[index];
                 const title = chapter.title || chapter.name;
-                prisma.chapter.updateMany({
+                await prisma.chapter.updateMany({
                     where: {
                         mangaId: this.mangaRecord.mangaId,
                         chapterName: title,
