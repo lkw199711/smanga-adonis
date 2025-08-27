@@ -1,6 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
+import { addTask } from '#services/queue_service'
+import { TaskPriority } from '#type/index'
 
 export default class SyncsController {
     async select({ request, response }: HttpContext) {
@@ -51,6 +53,13 @@ export default class SyncsController {
         if (!sync) {
             return response.status(500).json(new SResponse({ code: 1, message: '同步任务创建失败', status: 'error' }))
         }
+
+        addTask({
+            taskName: 'sync_media_' + mediaId,
+            command: 'taskSyncMedia',
+            args: { source, secret },
+            priority: TaskPriority.syncMedia
+        })
 
         // 返回创建成功的响应
         return response.json(new SResponse({ code: 0, message: '同步任务创建成功', data: sync }))

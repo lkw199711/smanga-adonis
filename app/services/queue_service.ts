@@ -41,7 +41,6 @@ const scanQueue = new Bull('smanga', {
 });
 
 scanQueue.on('completed', (job) => {
-    console.log(`Job completed: ${job.id}`);
 });
 
 scanQueue.on('failed', (job, err) => {

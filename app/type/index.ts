@@ -6,6 +6,9 @@ enum TaskPriority {
   copyPoster = 220000,
   createMediaPoster = 230000,
   compress = 300000,
+  syncMedia = 400000,
+  syncManga = 410000,
+  syncChapter = 420000,
   default = 900000,
 }
 

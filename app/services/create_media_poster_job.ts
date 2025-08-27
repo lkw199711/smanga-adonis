@@ -71,7 +71,6 @@ export default class CreateMediaPosterJob {
         })))
         .toFile(this.outputPath); // 保存合并后的图像
 
-      console.log('合并完成，保存至', this.outputPath);
       // 记录日志
       media_cover_log({ mediaId: this.mediaId, mediaName: this.mediaInfo?.mediaName, mediaCover: this.outputPath })
 
@@ -82,7 +81,6 @@ export default class CreateMediaPosterJob {
       })
       return this.outputPath;
     } catch (error) {
-      console.error('合并图片时出错:', error);
       return false;
     }
   }

@@ -1,10 +1,3 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-07-31 20:21:50
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-03 12:12:44
- * @FilePath: \smanga-adonis\app\controllers\images_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 

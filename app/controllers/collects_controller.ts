@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-10 02:18:43
- * @FilePath: \smanga-adonis\app\controllers\collects_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
@@ -136,9 +129,10 @@ export default class CollectsController {
     return response.json(listResponse)
   }
 
-  public async collect_manga({ request, response }: HttpContext) {
-    const { userId } = request as any
-    const { mangaId, mangaName, mediaId } = request.only([
+  public async collect_manga({ params, request, response }: HttpContext) {
+    const { userId } = request as any;
+    const { mangaId } = params;
+    const { mangaName, mediaId } = request.only([
       'mangaId',
       'mangaName',
       'mediaId',
@@ -150,8 +144,8 @@ export default class CollectsController {
     })
 
     if (collect) {
-      await prisma.collect.delete({ where: { collectId: collect.collectId } })
-      const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: false })
+      const deleted = await prisma.collect.delete({ where: { collectId: collect.collectId } })
+      const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: deleted })
       return response.json(destroyResponse)
     } else {
       const collect = await prisma.collect.create({
@@ -169,9 +163,10 @@ export default class CollectsController {
     }
   }
 
-  public async collect_chapter({ request, response }: HttpContext) {
+  public async collect_chapter({ params, request, response }: HttpContext) {
     const { userId } = request as any
-    const { chapterId, chapterName, mediaId, mangaId, mangaName } = request.only([
+    const { chapterId } = params;
+    const { chapterName, mediaId, mangaId, mangaName } = request.only([
       'chapterId',
       'chapterName',
       'mediaId',
@@ -185,7 +180,8 @@ export default class CollectsController {
     })
 
     if (collect) {
-      const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: false })
+      const deleted = await prisma.collect.delete({ where: { collectId: collect.collectId } })
+      const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: deleted })
       return response.json(destroyResponse)
     } else {
       const collect = await prisma.collect.create({

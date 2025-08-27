@@ -51,11 +51,9 @@ export default class TestsController {
 
           // 写入文件
           fs.writeFileSync(outputFilePath, Buffer.from(file.fileData))
-          console.log(`Extracted: ${outputFilePath}`)
         }
       })
 
-      console.log('Extraction complete.')
       return true
     } else {
       throw new Error('Extraction failed or no files were extracted')
@@ -119,7 +117,6 @@ export default class TestsController {
 
     //     // 写入文件
     //     fs.writeFileSync(outputFilePath, Buffer.from(fileData))
-    //     console.log(`Extracted: ${outputFilePath}`)
 
     //     return true
     //   }
@@ -226,7 +223,6 @@ async function mergeImages(imagePaths: string[], outputPath: string, targetWidth
   // 保存合并后的图片
   const buffer: any = canvas.toBuffer('image/png');
   fs.writeFileSync(outputPath, buffer);
-  console.log('合并完成，保存至', outputPath);
 }
   */
 
@@ -252,8 +248,6 @@ async function mergeImages(imagePaths: string[], outputPath: string, targetWidth
       })))
       .toFile(outputPath); // 保存合并后的图像
 
-    console.log('合并完成，保存至', outputPath);
   } catch (error) {
-    console.error('合并图片时出错:', error);
   }
 }

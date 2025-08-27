@@ -54,16 +54,17 @@ export default class ChaptersController {
         order,
         isAdmin,
         mediaPermissons,
+        userId
       })
     } else {
-      listResponse = await this.no_paginate({ mangaId, mediaId, order })
+      listResponse = await this.no_paginate({ mangaId, mediaId, order, userId })
     }
 
     return response.json(listResponse)
   }
 
   // 不分页
-  private async no_paginate({ mangaId, mediaId, order }: any) {
+  private async no_paginate({ mangaId, mediaId, order, userId }: any) {
     const queryParams = {
       where: {
         ...(mangaId && {
@@ -74,8 +75,14 @@ export default class ChaptersController {
         }),
         deleteFlag: 0,
       },
-      include: { latests: true },
-      orderBy: { ...(order && order_params(order)) },
+      include: {
+        latests: {
+          where: { userId },
+        },
+      },
+      orderBy: {
+        ...(order && order_params(order))
+      },
     }
 
     const list = await prisma.chapter.findMany(queryParams)
@@ -93,7 +100,7 @@ export default class ChaptersController {
   }
 
   // 分页
-  private async paginate({ mangaId, mediaId, page, pageSize, keyWord, order, isAdmin, mediaPermissons }: any) {
+  private async paginate({ mangaId, mediaId, page, pageSize, keyWord, order, isAdmin, mediaPermissons, userId }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -111,7 +118,9 @@ export default class ChaptersController {
         ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
       include: {
-        latests: true,
+        latests: {
+          where: { userId },
+        },
         manga: {
           select: {
             browseType: true,
@@ -182,7 +191,6 @@ export default class ChaptersController {
     //  纯图片章节
     if (chapter.chapterType === 'img') {
       images = image_files(chapter.chapterPath, exclude)
-      images.sort()
       imagesResponse = new SResponse({
         code: 0,
         message: '',
@@ -261,7 +269,6 @@ export default class ChaptersController {
     } else {
       images.sort()
     }
-
     return response.json(imagesResponse)
   }
 
@@ -298,6 +305,46 @@ export default class ChaptersController {
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapter })
     return response.json(destroyResponse)
+  }
+
+  public async download({ request, response }: HttpContext) {
+    const { chapterId } = request.only(['chapterId'])
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    if (!chapter) {
+      return response.json(new SResponse({ code: 1, message: '章节不存在' }))
+    }
+
+    if (chapter.chapterType === 'img') {
+      const images = image_files(chapter.chapterPath, '')
+      const imagesResponse = new SResponse({
+        code: 0,
+        message: '',
+        data: images,
+        status: 'compressed',
+      })
+      return response.json(imagesResponse)
+    } else {
+      const fileName = path.basename(chapter.chapterPath)
+      response.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`)
+
+      // 设置文件的MIME类型，这里假设你要返回ZIP文件
+      response.header('Content-Type', 'application/octet-stream')
+
+      // 使用StreamedResponse返回文件流
+      response.stream(fs.createReadStream(chapter.chapterPath))
+
+      return response
+    }
+    /*
+        if (!fs.existsSync(filePath)) {
+          const compress = await prisma.compress.findUnique({ where: { chapterId } })
+          if (compress && fs.existsSync(compress.chapterPath)) {
+            filePath = compress.chapterPath
+          } else {
+            return response.json(new SResponse({ code: 1, message: '文件不存在' }))
+          }
+        }
+    */
   }
 }
 

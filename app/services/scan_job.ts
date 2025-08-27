@@ -1,10 +1,3 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-07-23 18:34:07
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-13 19:06:19
- * @FilePath: \smanga-adonis\app\services\scan_job.ts
- */
 import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
 import * as fs from 'fs'

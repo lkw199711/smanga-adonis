@@ -1,10 +1,3 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-07-29 15:44:04
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-15 03:42:59
- * @FilePath: \smanga-adonis\app\services\scan_manga_job.ts
- */
 import * as fs from 'fs'
 import * as path from 'path'
 import prisma from '#start/prisma'
@@ -16,8 +9,6 @@ import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
 import { TaskPriority } from '../type/index.js'
 import { addTask, scanQueue } from '#services/queue_service'
-import { compressImageToSize } from '#utils/sharp'
-import { s_delete } from '#utils/index'
 import { error_log, insert_manga_scan_log } from '#utils/log'
 import { path as sqlPathType, media as sqlMediaType } from '@prisma/client'
 type pathType = sqlPathType & { media: sqlMediaType }
@@ -49,6 +40,7 @@ export default class ScanMangaJob {
     const mangaPath = this.mangaPath
     const mangaName = this.mangaName
     const parentPath = this.parentPath
+    const reloadCover = get_config()?.scan?.reloadCover ?? 0
 
     if (!this.pathInfo) {
       await error_log(logModule, `pathId ${pathId}路径不存在`)
@@ -125,8 +117,10 @@ export default class ScanMangaJob {
       // 扫描元数据
       await this.meta_scan()
 
-      // 即使有封面 也更新漫画封面
-      await this.manga_poster(mangaPath)
+      // 更新漫画封面
+      if (!this.mangaRecord.mangaCover || reloadCover) {
+        await this.manga_poster(mangaPath)
+      }
 
       const chapterInsert: Prisma.chapterCreateInput = {
         manga: {
@@ -154,7 +148,7 @@ export default class ScanMangaJob {
       }
 
       // 获取封面图
-      if (!this.chapterRecord.chapterCover) {
+      if (!this.chapterRecord.chapterCover || reloadCover) {
         await this.chapter_poster(mangaPath)
       }
 
@@ -191,7 +185,7 @@ export default class ScanMangaJob {
         this.mangaRecord = await prisma.manga.create({ data: mangaInsert })
       }
 
-      if (!this.mangaRecord.mangaCover) {
+      if (!this.mangaRecord.mangaCover || reloadCover) {
         await this.manga_poster(mangaPath)
       }
 
@@ -245,7 +239,7 @@ export default class ScanMangaJob {
           }
 
           // 获取封面图
-          if (!this.chapterRecord.chapterCover) {
+          if (!this.chapterRecord.chapterCover || reloadCover) {
             await this.chapter_poster(item.chapterPath)
           }
         }
@@ -483,6 +477,22 @@ export default class ScanMangaJob {
             },
           })
         }
+      }
+
+      // 更新章节顺序
+      const chapters = info?.chapters || []
+      for (let index = 0; index < chapters.length; index++) {
+        const chapter: any = chapters[index];
+        const title = chapter.title || chapter.name;
+        prisma.chapter.updateMany({
+          where: {
+            mangaId: this.mangaRecord.mangaId,
+            chapterName: title,
+          },
+          data: {
+            chapterNumber: index.toString().padStart(5, '0'),
+          },
+        })
       }
     }
   }

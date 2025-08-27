@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-08 21:29:33
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-13 18:48:53
- * @FilePath: \smanga-adonis\app\controllers\configs_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import { SResponse } from '../interfaces/response.js'
 import { promises as fs } from 'fs'
@@ -36,6 +29,10 @@ export default class ConfigsController {
       config.scan.auto = value
     }
 
+    if (key === 'scan.reloadCover') {
+      config.scan.reloadCover = value
+    }
+
     if (key === 'compress.poster') {
       config.compress.poster = value
     }
@@ -61,7 +58,7 @@ export default class ConfigsController {
     return configResponse
   }
 
-  public async user_config({ request, response }: HttpContext) { 
+  public async user_config({ request, response }: HttpContext) {
     const userId = (request as any).userId
     const { userConfig } = request.only([
       'userConfig',
