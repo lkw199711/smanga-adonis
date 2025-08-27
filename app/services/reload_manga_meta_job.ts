@@ -39,7 +39,7 @@ export default class ReloadMangaMetaJob {
 
         sqlChapters.forEach(async (chapter) => {
             this.chapterRecord = chapter
-            await this.chapter_poster(this.mangaRecord.mangaPath);
+            await this.chapter_poster(this.chapterRecord.chapterPath);
         });
 
         return true;
