@@ -229,7 +229,6 @@ model media {
   chapters        chapter[]
   mediaPermissons mediaPermisson[]
   shares          share[]
-  syncs           sync[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -400,7 +399,8 @@ model userPermisson {
 model share {
   shareId    Int       @id @default(autoincrement()) @db.UnsignedInt
   shareType  String    @default("manga") @db.VarChar(191)
-  source     String    @db.VarChar(191)
+  shareName  String?   @db.VarChar(191)
+  origin     String    @db.VarChar(191)
   user       user?     @relation(fields: [userId], references: [userId])
   userId     Int?      @db.UnsignedInt
   media      media     @relation(fields: [mediaId], references: [mediaId])
@@ -418,19 +418,19 @@ model share {
 }
 
 model sync {
-  syncId     Int      @id @default(autoincrement()) @db.UnsignedInt
-  syncType   String   @default("manga") @db.VarChar(191)
-  source     String   @db.VarChar(191)
-  media      media    @relation(fields: [mediaId], references: [mediaId])
-  mediaId    Int      @db.UnsignedInt
-  userId     Int?     @db.UnsignedInt
-  shareId    Int      @db.UnsignedInt
-  link       String   @db.VarChar(191)
-  secret     String   @db.VarChar(191)
-  auto       Int      @default(0) @db.UnsignedInt
-  token      String?  @db.VarChar(191)
-  createTime DateTime @default(now()) @db.DateTime(6)
-  updateTime DateTime @default(now()) @updatedAt @db.DateTime(6)
+  syncId       Int      @id @default(autoincrement()) @db.UnsignedInt
+  syncType     String   @default("manga") @db.VarChar(191)
+  syncName     String?  @db.VarChar(191)
+  origin       String   @db.VarChar(191)
+  userId       Int?     @db.UnsignedInt
+  shareId      Int      @db.UnsignedInt
+  link         String   @db.VarChar(191)
+  secret       String   @db.VarChar(191)
+  auto         Int      @default(0) @db.UnsignedInt
+  token        String?  @db.VarChar(191)
+  receivedPath String   @db.VarChar(191)
+  createTime   DateTime @default(now()) @db.DateTime(6)
+  updateTime   DateTime @default(now()) @updatedAt @db.DateTime(6)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

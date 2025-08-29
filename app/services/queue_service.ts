@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2025-01-17 15:45:01
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-13 20:16:08
- * @FilePath: \smanga-adonis\start\queue.ts
- */
 import ScanPathJob from './scan_job.js'
 import ScanMangaJob from './scan_manga_job.js'
 import DeleteChapterJob from './delete_chapter_job.js'
@@ -14,6 +7,9 @@ import DeleteMediaJob from './delete_media_job.js'
 import CopyPosterJob from './copy_poster_job.js'
 import CreateMediaPosterJob from './create_media_poster_job.js'
 import ReloadMangaMetaJob from './reload_manga_meta_job.js'
+import SyncMediaJob from './sync_media_job.js'
+import SyncMangaJob from './sync_manga_job.js'
+import SyncChapterJob from './sync_chapter_job.js'
 import { get_config } from '#utils/index'
 
 import Bull from 'bull'
@@ -99,6 +95,31 @@ scanQueue.process('scan', queueConfig.concurrency, async (job: any) => {
             console.log('重新加载漫画元数据')
             await new ReloadMangaMetaJob(args).run()
             break
+        default:
+            break
+    }
+
+    return true;
+});
+
+scanQueue.process('sync', queueConfig.concurrency, async (job: any) => {
+    const { command, args } = job.data;
+
+    switch (command) {
+        case 'taskSyncMedia':
+            //媒体库同步任务调用
+            console.log('执行媒体库同步任务')
+            await new SyncMediaJob(args).run()
+            break
+        case 'taskSyncManga':
+            console.log('执行漫画同步任务')
+            //漫画同步任务调用
+            await new SyncMangaJob(args).run()
+            break
+        case 'taskSyncChapter':
+            console.log('执行章节同步任务')
+            //章节同步任务调用
+            await new SyncChapterJob(args).run()
         default:
             break
     }
@@ -210,7 +231,12 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
             }
         }
 
-        scanQueue.add('scan', {
+        let taskQueue = 'scan'
+        if (/sync/.test(taskName)) {
+            taskQueue = 'sync'
+        }
+
+        scanQueue.add(taskQueue, {
             taskName,
             command,
             args

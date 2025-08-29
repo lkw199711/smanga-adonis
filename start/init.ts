@@ -1,15 +1,8 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 15:33:32
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-14 13:11:25
- * @FilePath: \smanga-adonis\start\init.ts
- */
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
 import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config } from '#utils/index'
-import { create_scan_cron, create_media_poster_cron } from '#services/cron_service'
+import { create_scan_cron, create_sync_cron, create_media_poster_cron } from '#services/cron_service'
 
 // 默认配置
 const defaultConfig = {
@@ -28,8 +21,13 @@ const defaultConfig = {
     quality: 100,
   },
   scan: {
+    reloadCover: 1,
+    doNotCopyCover: 1,
     interval: "0 0 0,12 * * *",
     mediaPosterInterval: "0 0 1 * * *"
+  },
+  sync: {
+    interval: "0 0 23,11 * * *"
   },
   debug: {
     dispatchSync: 0,
@@ -90,6 +88,7 @@ export default async function boot() {
 
   // 设置路径自动扫描cron任务
   create_scan_cron()
+  create_sync_cron()
   create_media_poster_cron()
 }
 
@@ -97,7 +96,7 @@ async function check_config_ver() {
   const config = get_config()
   const mediaPosterInterval = config.scan?.mediaPosterInterval
 
-  if (!mediaPosterInterval) { 
+  if (!mediaPosterInterval) {
     console.log('配置文件不存在mediaPosterInterval字段，使用默认值')
     config.scan.mediaPosterInterval = defaultConfig.scan.mediaPosterInterval
     set_config(config)

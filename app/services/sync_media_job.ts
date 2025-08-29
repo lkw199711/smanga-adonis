@@ -1,36 +1,42 @@
-import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
-import * as fs from 'fs'
-import * as path from 'path'
 import { addTask } from './queue_service.js'
-import { syncApi } from '#utils/api.js'
-import { ListResponse } from '#interfaces/response'
-
-type mangaItem = {
-    mangaPath: string
-    mangaName: string
-    mangaType: string
-    parentPath: string
-}
-
+import { syncApi } from '#utils/api'
+import { media as mediaType } from '@prisma/client'
 export default class SyncMediaJob {
-    private source: string
-    private targetMediaId: number
+    private targetMediaRecord: mediaType | null = null
+    private receivedPath: string
+    private link: string
+    private origin: string
 
-    constructor({ source, targetMediaId }: { source: string, targetMediaId: number }) {
-        this.source = source
-        this.targetMediaId = 27
+    constructor({ receivedPath, link, origin }: { targetMediaId: number, receivedPath: string, link: string, origin: string }) {
+        this.receivedPath = receivedPath
+        this.link = link
+        this.origin = origin
     }
 
     async run() {
-        const mangaResponse = await syncApi.mangas(`${this.source}/manga`, this.targetMediaId)
+
+        // 如果有 link，说明是通过分享链接同步的，需要先验证链接
+        const analysisResponse = await syncApi.analysis(this.link)
+        if (analysisResponse.code !== 0) {
+            console.error('分享链接无效或已过期')
+            return
+        }
+
+        this.targetMediaRecord = analysisResponse.data?.media
+        if (!this.targetMediaRecord) {
+            console.error('目标媒体信息缺失')
+            return;
+        }
+
+        const mangaResponse = await syncApi.mangas(this.origin, this.targetMediaRecord.mediaId)
         const mangas = mangaResponse.list
 
         mangas.forEach((manga: any) => {
             addTask({
                 taskName: 'sync_media_',
                 command: 'taskSyncManga',
-                args: { source: this.source, mangaInfo: manga },
+                args: { link: this.link, origin: this.origin, receivedPath: this.receivedPath, targetMangaRecord: manga },
                 priority: TaskPriority.syncManga
             })
         })

@@ -196,12 +196,16 @@ router.post('/share', [SharesController, 'create'])
 router.put('/share/:shareId', [SharesController, 'update'])
 router.delete('/share/:shareId', [SharesController, 'destroy'])
 router.get('/analysis', [SharesController, 'analysis'])
+router.get('/analysis/chapters', [SharesController, 'analysis_chapters'])
+router.get('/analysis/mangas', [SharesController, 'analysis_mangas'])
+router.get('/analysis/images', [SharesController, 'analysis_images'])
 
 // 同步
 router.get('/sync', [SyncsController, 'select'])
 router.post('/sync', [SyncsController, 'create'])
 router.put('/sync/:syncId', [SyncsController, 'update'])
 router.delete('/sync/:syncId', [SyncsController, 'destroy'])
+router.post('/sync/execute/:syncId', [SyncsController, 'execute'])
 
 // 配置信息
 router.get('client-user-config', [UsersController, 'config'])
@@ -211,3 +215,4 @@ router.put('user-config', [ConfigsController, 'user_config'])
 
 // 资源文件
 router.get('/file/apk', [FilesController, 'apk'])
+router.get('/file', [FilesController, 'index'])

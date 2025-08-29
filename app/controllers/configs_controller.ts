@@ -25,6 +25,14 @@ export default class ConfigsController {
       config.scan.interval = value
     }
 
+    if (key === 'scan.mediaPosterInterval') {
+      config.scan.mediaPosterInterval = value
+    }
+
+    if (key === 'sync.interval') {
+      config.sync.interval = value
+    }
+
     if (key === 'scan.auto') {
       config.scan.auto = value
     }

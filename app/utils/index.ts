@@ -208,3 +208,32 @@ export function extract_numbers(str: string) {
   const joinedNumbersString = numbers?.join('');
   return joinedNumbersString ? parseInt(joinedNumbersString, 10) : 0;
 }
+
+// 定义支持的图片文件扩展名
+const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp']
+export function image_files(dirPath: string, exclude: string | null | undefined = ''): string[] {
+  let imagePaths: string[] = []
+
+  // 读取目录下的所有文件和子目录
+  const files: string[] = fs.readdirSync(dirPath)
+
+  files.forEach((file: string) => {
+    const filePath: string = path.join(dirPath, file)
+    const stat: fs.Stats = fs.statSync(filePath)
+
+    if (stat.isDirectory()) {
+      // 如果是目录, 递归处理
+      imagePaths = imagePaths.concat(image_files(filePath, exclude))
+    } else if (imageExtensions.includes(path.extname(file).toLowerCase())) {
+      // 如果是图片文件, 添加绝对路径到数组
+      imagePaths.push(filePath)
+    }
+  })
+
+  // 如果有排除规则，则过滤掉不符合规则的图片
+  if (exclude) {
+    imagePaths = imagePaths.filter((image: string) => !new RegExp(exclude).test(image))
+  }
+
+  return imagePaths
+}

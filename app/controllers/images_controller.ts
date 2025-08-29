@@ -1,3 +1,4 @@
+import { is_img } from '#utils/index'
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 
@@ -12,8 +13,13 @@ export default class ImagesController {
       })
     }
 
+    let fileType = 'image/jpeg'
+    if (is_img(file) === false) {
+      fileType = 'application/octet-stream'
+    }
+
     // 设置文件的MIME类型，这里假设你要返回JPEG图片
-    response.header('Content-Type', 'image/jpeg')
+    response.header('Content-Type', fileType)
 
     // 使用StreamedResponse返回图片文件流
     response.stream(fs.createReadStream(file))
