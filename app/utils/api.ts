@@ -71,13 +71,14 @@ const syncApi = {
     }
 }
 
-async function download_file(serverUrl: string, filePath: string, savePath: string): Promise<void> {
+async function download_file1(serverUrl: string, filePath: string, savePath: string): Promise<void> {
     try {
         // 创建写入流
         const writer = fs.createWriteStream(savePath);
 
         // 发起异步请求
         const response = await axios({
+            timeout: 60 * 1000,
             method: 'get',
             url: `${serverUrl}/file`,
             params: { file: filePath },
@@ -105,6 +106,66 @@ async function download_file(serverUrl: string, filePath: string, savePath: stri
     } catch (err) {
         console.error(`下载请求失败: ${err.message}`, `${serverUrl}/file`, filePath, savePath);
         throw new Error(`下载请求失败: ${err.message}`);
+    }
+}
+
+interface RetryOptions {
+    maxRetries: number;
+    initialDelay: number;
+    backoffFactor: number;
+}
+
+const defaultRetryOptions: RetryOptions = {
+    maxRetries: 3,
+    initialDelay: 1000,
+    backoffFactor: 2
+};
+
+async function download_file(
+    serverUrl: string,
+    filePath: string,
+    savePath: string,
+    retryOptions: RetryOptions = defaultRetryOptions
+): Promise<void> {
+    let retryCount = 0;
+    let currentDelay = retryOptions.initialDelay;
+
+    const performDownload = async () => {
+        const writer = fs.createWriteStream(savePath);
+        const response = await axios({
+            timeout: 60 * 1000,
+            method: 'get',
+            url: `${serverUrl}/file`,
+            params: { file: filePath },
+            data: { file: filePath },
+            headers: {
+                'Content-Type': 'application/json; charset=UTF-8',
+            },
+            responseType: 'stream'
+        });
+
+        return new Promise((resolve, reject) => {
+            response.data.pipe(writer);
+            writer.on('finish', resolve);
+            writer.on('error', (err) => {
+                fs.unlinkSync(savePath);
+                reject(new Error(`文件写入失败: ${err.message}`));
+            });
+        });
+    };
+
+    while (retryCount <= retryOptions.maxRetries) {
+        try {
+            await performDownload();
+            return;
+        } catch (err) {
+            if (retryCount === retryOptions.maxRetries) {
+                throw new Error(`下载失败，已重试${retryOptions.maxRetries}次: ${err.message}`);
+            }
+            await new Promise(resolve => setTimeout(resolve, currentDelay));
+            currentDelay *= retryOptions.backoffFactor;
+            retryCount++;
+        }
     }
 }
 
