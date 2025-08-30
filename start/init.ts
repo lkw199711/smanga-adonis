@@ -95,10 +95,17 @@ export default async function boot() {
 async function check_config_ver() {
   const config = get_config()
   const mediaPosterInterval = config.scan?.mediaPosterInterval
+  const syncInterval = config.sync?.interval
 
   if (!mediaPosterInterval) {
     console.log('配置文件不存在mediaPosterInterval字段，使用默认值')
     config.scan.mediaPosterInterval = defaultConfig.scan.mediaPosterInterval
+    set_config(config)
+  }
+
+  if (!syncInterval) {
+    console.log('配置文件不存在sync.interval字段，使用默认值')
+    config.sync = { interval: defaultConfig.sync.interval }
     set_config(config)
   }
 }

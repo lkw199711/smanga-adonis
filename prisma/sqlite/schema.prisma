@@ -190,6 +190,7 @@ model manga {
   compress     compress[]
   metas        meta[]
   mangaTags    mangaTag[]
+  shares       share[]
 
   @@unique([mediaId, mangaPath], map: "unique-name")
 }
@@ -227,6 +228,7 @@ model media {
   mangas          manga[]
   chapters        chapter[]
   mediaPermissons mediaPermisson[]
+  shares          share[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -375,6 +377,7 @@ model user {
   mediaPermissons mediaPermisson[]
   historys        history[]
   collects        collect[]
+  shares          share[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -396,8 +399,11 @@ model share {
   shareType  String    @default("manga")
   shareName  String
   origin     String
+  user       user?     @relation(fields: [userId], references: [userId])
   userId     Int?
+  media      media     @relation(fields: [mediaId], references: [mediaId])
   mediaId    Int
+  manga      manga?    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int?
   link       String
   secret     String
