@@ -51,6 +51,7 @@ function create_sync_cron() {
 
     if (!scanInterval || scanInterval.trim() === '') {
         console.log('未配置同步任务定时策略，跳过部署')
+        return;
     }
 
     // 定时扫描任务
