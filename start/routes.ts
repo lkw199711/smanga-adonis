@@ -217,3 +217,4 @@ router.put('user-config', [ConfigsController, 'user_config'])
 // 资源文件
 router.get('/file/apk', [FilesController, 'apk'])
 router.get('/file', [FilesController, 'index'])
+router.post('/file', [FilesController, 'index'])
