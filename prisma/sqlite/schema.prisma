@@ -19,7 +19,7 @@ model bookmark {
   browseType String   @default("flow")
   page       Int
   createTime DateTime @default(now())
-  updateTime DateTime @updatedAt @default(now())
+  updateTime DateTime @default(now()) @updatedAt
   pageImage  String?
 
   @@unique([chapterId, page], map: "opage")
@@ -37,7 +37,7 @@ model chapter {
   subTitle      String?
   picNum        Int?
   createTime    DateTime   @default(now())
-  updateTime    DateTime   @updatedAt @default(now())
+  updateTime    DateTime   @default(now()) @updatedAt
   chapterName   String
   chapterPath   String
   chapterType   String     @default("image")
@@ -67,7 +67,7 @@ model collect {
   chapterId   Int?
   chapterName String?
   createTime  DateTime @default(now())
-  updateTime  DateTime @updatedAt @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
 
   @@unique([userId, collectType, mangaId, chapterId], map: "uniqueMangaChapter")
 }
@@ -87,7 +87,7 @@ model compress {
   chapterPath    String
   userId         Int?
   createTime     DateTime @default(now())
-  updateTime     DateTime @updatedAt @default(now())
+  updateTime     DateTime @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -105,7 +105,7 @@ model history {
   chapterPath String?
   browseType  String   @default("flow")
   createTime  DateTime @default(now())
-  updateTime  DateTime @updatedAt @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -120,7 +120,7 @@ model latest {
   chapterId  Int
   userId     Int
   createTime DateTime @default(now())
-  updateTime DateTime @updatedAt @default(now())
+  updateTime DateTime @default(now()) @updatedAt
 
   @@unique([chapterId, userId], map: "uniqueChapterUser")
 }
@@ -139,7 +139,7 @@ model log {
   context     String?
   device      String?
   createTime  DateTime @default(now())
-  updateTime  DateTime @updatedAt @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
   userId      Int?
 }
 
@@ -154,7 +154,7 @@ model login {
   ip         String
   userAgent  String?
   createTime DateTime @default(now())
-  updateTime DateTime @updatedAt @default(now())
+  updateTime DateTime @default(now()) @updatedAt
   token      String?
 }
 
@@ -181,7 +181,7 @@ model manga {
   publishDate  DateTime?
   deleteFlag   Int        @default(0)
   createTime   DateTime   @default(now())
-  updateTime   DateTime   @updatedAt @default(now())
+  updateTime   DateTime   @default(now()) @updatedAt
   latests      latest[]
   historys     history[]
   chapters     chapter[]
@@ -202,7 +202,7 @@ model mangaTag {
   tag        tag      @relation(fields: [tagId], references: [tagId])
   tagId      Int
   createTime DateTime @default(now())
-  updateTime DateTime @updatedAt @default(now())
+  updateTime DateTime @default(now()) @updatedAt
 
   @@unique([mangaId, tagId], map: "uniqueMangaTag")
   @@map("mangaTag")
@@ -222,7 +222,7 @@ model media {
   removeFirst     Int              @default(0)
   deleteFlag      Int              @default(0)
   createTime      DateTime         @default(now())
-  updateTime      DateTime         @updatedAt @default(now())
+  updateTime      DateTime         @default(now()) @updatedAt
   paths           path[]
   mangas          manga[]
   chapters        chapter[]
@@ -237,7 +237,7 @@ model mediaPermisson {
   media            media    @relation(fields: [mediaId], references: [mediaId])
   mediaId          Int
   createTime       DateTime @default(now())
-  updateTime       DateTime @updatedAt @default(now())
+  updateTime       DateTime @default(now()) @updatedAt
 
   @@unique([userId, mediaId], map: "userMedia")
   @@map("mediaPermisson")
@@ -253,7 +253,7 @@ model meta {
   metaContent String?
   description String?
   createTime  DateTime @default(now())
-  updateTime  DateTime @updatedAt @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -268,7 +268,7 @@ model path {
   lastScanTime DateTime?
   deleteFlag   Int       @default(0)
   createTime   DateTime  @default(now())
-  updateTime   DateTime  @updatedAt @default(now())
+  updateTime   DateTime  @default(now()) @updatedAt
   pathContent  String
   mangas       manga[]
 
@@ -284,7 +284,7 @@ model scan {
   scanCount   Int?
   scanIndex   Int?     @default(0)
   createTime  DateTime @default(now())
-  updateTime  DateTime @updatedAt @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
   pathContent String
 }
 
@@ -296,7 +296,7 @@ model tag {
   userId      Int?
   description String?
   createTime  DateTime   @default(now())
-  updateTime  DateTime   @updatedAt @default(now())
+  updateTime  DateTime   @default(now()) @updatedAt
   mangaTags   mangaTag[]
 }
 
@@ -306,7 +306,7 @@ model task {
   taskName   String    @default("")
   command    String
   createTime DateTime  @default(now())
-  updateTime DateTime  @updatedAt @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
   status     String    @default("pending")
   args       String?
   startTime  DateTime?
@@ -326,7 +326,7 @@ model taskFailed {
   endTime    DateTime?
   error      String?
   createTime DateTime  @default(now())
-  updateTime DateTime  @updatedAt @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
 
   @@map("taskFailed")
 }
@@ -341,7 +341,7 @@ model taskSuccess {
   startTime  DateTime?
   endTime    DateTime?
   createTime DateTime  @default(now())
-  updateTime DateTime  @updatedAt @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
 
   @@map("taskSuccess")
 }
@@ -354,7 +354,7 @@ model token {
   token      String
   expires    DateTime?
   createTime DateTime  @default(now())
-  updateTime DateTime  @updatedAt @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -367,7 +367,7 @@ model user {
   role            String?          @default("user")
   mediaPermit     String?          @default("limit")
   createTime      DateTime         @default(now())
-  updateTime      DateTime         @updatedAt @default(now())
+  updateTime      DateTime         @default(now()) @updatedAt
   userConfig      String?
   logins          login[]
   tokens          token[]
@@ -385,7 +385,7 @@ model userPermisson {
   module          String
   operation       String   @default("default")
   createTime      DateTime @default(now())
-  updateTime      DateTime @updatedAt @default(now())
+  updateTime      DateTime @default(now()) @updatedAt
 
   @@unique([userId, module, operation], map: "userModuleOperation")
   @@map("userPermisson")
@@ -394,33 +394,35 @@ model userPermisson {
 model share {
   shareId    Int       @id @default(autoincrement())
   shareType  String    @default("manga")
-  source     String    
-  userId     Int?     
-  mediaId    Int      
-  mangaId    Int?     
-  link       String    
-  secret     String    
-  expires    DateTime? 
+  shareName  String
+  origin     String
+  userId     Int?
+  mediaId    Int
+  mangaId    Int?
+  link       String
+  secret     String
+  expires    DateTime?
   enable     Int       @default(1)
-  whiteList  String?   
-  blackList  String?   
+  whiteList  String?
+  blackList  String?
   createTime DateTime  @default(now())
   updateTime DateTime  @default(now()) @updatedAt
 }
 
 model sync {
-  syncId     Int      @id @default(autoincrement())
-  syncType   String   @default("manga") 
-  source     String   
-  mediaId    Int      
-  userId     Int?     
-  shareId    Int      
-  link       String   
-  secret     String   
-  auto       Int      @default(0) 
-  token      String?  
-  createTime DateTime @default(now())
-  updateTime DateTime @default(now()) @updatedAt
+  syncId       Int      @id @default(autoincrement())
+  syncType     String   @default("manga")
+  syncName     String
+  receivedPath String
+  origin       String
+  userId       Int?
+  shareId      Int
+  link         String
+  secret       String
+  auto         Int      @default(0)
+  token        String?
+  createTime   DateTime @default(now())
+  updateTime   DateTime @default(now()) @updatedAt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -429,5 +431,5 @@ model version {
   version     String   @unique(map: "uniqueVersion")
   description String?
   createTime  DateTime @default(now())
-  updateTime  DateTime @updatedAt @default(now())
+  updateTime  DateTime @default(now()) @updatedAt
 }

@@ -103,7 +103,7 @@ async function download_file(serverUrl: string, filePath: string, savePath: stri
         });
 
     } catch (err) {
-        console.error(`下载请求失败: ${err.message}`, filePath, savePath);
+        console.error(`下载请求失败: ${err.message}`, `${serverUrl}/file`, filePath, savePath);
         throw new Error(`下载请求失败: ${err.message}`);
     }
 }

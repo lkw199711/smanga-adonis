@@ -1,10 +1,3 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-07-15 09:12:16
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-26 16:53:11
- * @FilePath: \smanga-adonis\start\prisma.ts
- */
 import { PrismaClient } from '@prisma/client'
 import { get_config, get_os } from '../app/utils/index.js'
 import * as path from 'node:path'
@@ -23,6 +16,8 @@ function createPrismaClient() {
     const os = get_os()
     if (os === 'Windows') {
       databaseUrl = `file:${path.join(rootDir, 'data', 'db', 'smanga.db')}`
+      console.log(databaseUrl);
+      
     } else {
       databaseUrl = `file:${path.join('/', 'data', 'db', 'smanga.db')}`
     }
