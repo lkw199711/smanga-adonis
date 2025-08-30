@@ -139,6 +139,7 @@ router.post('/path', [PathsController, 'create'])
 router.put('/path/:pathId', [PathsController, 'update'])
 router.delete('/path/:pathId', [PathsController, 'destroy'])
 router.put('/path/scan/:pathId', [PathsController, 'scan'])
+router.put('/path/:pathId/rescan', [PathsController, 're_scan'])
 
 // 标签
 router.get('/tag', [TagsController, 'index'])

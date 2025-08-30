@@ -68,6 +68,13 @@ export default class AuthMiddleware {
       }
     }
 
+    // 检验method为delete
+    if (request.method() === 'DELETE' && user.role !== 'admin') {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 1, message: '无权限操作', status: 'permisson error' }))
+    }
+
     user.mediaLimit = user.mediaPermissons.map((item: any) => item.mediaId)
     user.moduleLimit = user.userPermissons.map((item: any) => item.module)
     request.userId = token.userId

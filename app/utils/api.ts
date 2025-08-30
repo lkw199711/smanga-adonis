@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { ListResponse } from '#interfaces/response'
 import fs from 'fs';
-import path from 'path';
+import { error_log } from './log.js';
+import { s_delete } from './index.js';
 /**
  * 创建默认接口请求设置
  * 传参接收使用json
@@ -160,6 +161,11 @@ async function download_file(
             return;
         } catch (err) {
             if (retryCount === retryOptions.maxRetries) {
+                // 写入错误日志
+                error_log('[download file]', `${filePath} 下载失败，请尝试手动处理, 已重试${retryOptions.maxRetries}次: ${err.message}`);
+                // 删除空文件
+                s_delete(savePath);
+                // 抛出错误 使队列重试
                 throw new Error(`下载失败，已重试${retryOptions.maxRetries}次: ${err.message}`);
             }
             await new Promise(resolve => setTimeout(resolve, currentDelay));
