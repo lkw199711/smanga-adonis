@@ -130,6 +130,7 @@ router.post('/media', [MediaController, 'create'])
 router.put('/media/:mediaId', [MediaController, 'update'])
 router.delete('/media/:mediaId', [MediaController, 'destroy'])
 router.put('/media-cover/:mediaId', [MediaController, 'poster'])
+router.put('/media/:mediaId/scan', [MediaController, 'scan'])
 
 // 路径
 router.get('/path', [PathsController, 'index'])

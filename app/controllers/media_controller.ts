@@ -153,4 +153,23 @@ export default class MediaController {
       return response.status(500).json(new SResponse({ code: 1, message: '生成封面失败' }))
     }
   }
+
+  public async scan({ params, response }: HttpContext) {
+    const { mediaId } = params
+    const paths = await prisma.path.findMany({
+      where: { mediaId: Number(mediaId), deleteFlag: 0 },
+    })
+
+    paths.forEach((path) => { 
+      addTask({
+        taskName: `scan_path_${path.pathId}`,
+        command: 'scanPath',
+        args: { pathId: path.pathId },
+        priority: TaskPriority.scan
+      })
+    })
+    
+    const scanResponse = new SResponse({ code: 0, message: '已加入扫描队列' })
+    return response.json(scanResponse)
+  }
 }

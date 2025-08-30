@@ -47,7 +47,7 @@ function create_sync_cron() {
 
     // 获取配置
     const config = get_config()
-    const scanInterval = config.sync.interval
+    const scanInterval = config.sync?.interval
 
     if (!scanInterval || scanInterval.trim() === '') {
         console.log('未配置同步任务定时策略，跳过部署')
