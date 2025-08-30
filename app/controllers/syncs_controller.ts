@@ -110,17 +110,14 @@ export default class SyncsController {
 
     async update({ params, request, response }: HttpContext) {
         const { syncId } = params
-        const { syncType, source, mediaId, shareId, link, secret, auto, token } = request.only(['syncType', 'source', 'mediaId', 'shareId', 'link', 'secret', 'auto', 'token'])
+        const { syncType, origin, shareId, link, secret, auto, token } = request.only(['syncType', 'origin', 'mediaId', 'shareId', 'link', 'secret', 'auto', 'token'])
 
         // 更新同步任务的逻辑
         const sync = await prisma.sync.update({
             where: { syncId },
             data: {
                 syncType,
-                source,
-                media: {
-                    connect: { mediaId }
-                },
+                origin,
                 shareId,
                 link,
                 secret,
