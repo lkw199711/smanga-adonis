@@ -16,8 +16,6 @@ function createPrismaClient() {
     const os = get_os()
     if (os === 'Windows') {
       databaseUrl = `file:${path.join(rootDir, 'data', 'db', 'smanga.db')}`
-      console.log(databaseUrl);
-      
     } else {
       databaseUrl = `file:${path.join('/', 'data', 'db', 'smanga.db')}`
     }
