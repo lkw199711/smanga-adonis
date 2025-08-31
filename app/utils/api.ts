@@ -63,8 +63,8 @@ const syncApi = {
         return (await res).data;
     },
     async mangas(url: string, mediaId: number): Promise<ListResponse> {
-        const res = sAxios.get(`${url}/analysis/mangas`, { params: { mediaId } });
-        return (await res).data;
+        const res = await sAxios.get(`${url}/analysis/mangas`, { params: { mediaId } });
+        return res.data;
     },
     async file(url: string, filePath: string): Promise<any> {
         const res = sAxios.post(`${url}/file`, { file: filePath });

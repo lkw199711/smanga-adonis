@@ -91,7 +91,7 @@ export default class SyncsController {
             addTask({
                 taskName: 'sync_media_' + sync.syncId,
                 command: 'taskSyncMedia',
-                args: { receivedPath, link, origin },
+                args: { receivedPath, link, origin: origin1 },
                 priority: TaskPriority.syncMedia
             })
         } else {
