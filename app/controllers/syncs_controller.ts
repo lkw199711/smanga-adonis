@@ -61,8 +61,8 @@ export default class SyncsController {
             // return response.status(400).json(new SResponse({ code: 1, message: '该同步链接已存在', status: 'bad request' }))
         }
 
-        let origin1 = origin
-        if (/\/api/.test(link)) origin1 = origin + '/api'
+        let originWithApi = origin
+        if (/\/api/.test(link)) originWithApi = origin + '/api'
         // const fileResponse = await downloadFile('http://127.0.0.1:9798/file', 'A:\\02manga\\04test\\test-8-29\\优香的大屁股2\\00.jpg', './data/temp/tempfile.jpg')
         // console.log('fileResponse', fileResponse)
         // return response.json(new SResponse({ code: 1, message: '下载完成', data: {} }))
@@ -72,7 +72,7 @@ export default class SyncsController {
             data: {
                 syncType,
                 syncName,
-                origin: origin1,
+                origin: originWithApi,
                 receivedPath,
                 shareId,
                 link,
@@ -91,7 +91,7 @@ export default class SyncsController {
             addTask({
                 taskName: 'sync_media_' + sync.syncId,
                 command: 'taskSyncMedia',
-                args: { receivedPath, link, origin: origin1 },
+                args: { receivedPath, link, origin: originWithApi },
                 priority: TaskPriority.syncMedia
             })
         } else {
@@ -99,7 +99,7 @@ export default class SyncsController {
             addTask({
                 taskName: 'sync_manga_' + sync.syncId,
                 command: 'taskSyncManga',
-                args: { receivedPath, link, origin },
+                args: { receivedPath, link, origin: originWithApi },
                 priority: TaskPriority.syncManga
             })
         }
