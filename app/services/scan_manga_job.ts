@@ -25,12 +25,16 @@ export default class ScanMangaJob {
   private cachePath: string = ''
   private nonNumericChapterCounter: number | null = null
   private meta: any = null
+  private ignoreHiddenFiles: boolean
 
   constructor({ pathId, mangaPath, mangaName, parentPath }: { pathId: number, pathInfo: any, mediaInfo: any, mangaPath: string, mangaName: string, parentPath: string }) {
     this.pathId = pathId
     this.mangaPath = mangaPath
     this.mangaName = mangaName
     this.parentPath = parentPath
+
+    const config = get_config()
+    this.ignoreHiddenFiles = config.scan?.ignoreHiddenFiles === 1
   }
 
   async run() {
@@ -512,12 +516,17 @@ export default class ScanMangaJob {
     let folderList = fs.readdirSync(dir)
     let chapterList: any = []
 
-    // 在列表中去除. .. 文件夹
     folderList = folderList.filter((item) => {
-      return item !== '.' && item !== '..'
-    })
+      // 排除. .. 文件夹
+      if (item === '.' || item === '..') { 
+        return false
+      }
 
-    folderList = folderList.filter((item) => {
+      // 排除隐藏文件夹
+      if (this.ignoreHiddenFiles && /^\./.test(item)) { 
+        return false
+      }
+
       // 包含匹配
       if (this.pathInfo?.include) {
         return new RegExp(this.pathInfo.include).test(item)

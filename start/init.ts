@@ -96,6 +96,14 @@ async function check_config_ver() {
   const config = get_config()
   const mediaPosterInterval = config.scan?.mediaPosterInterval
   const syncInterval = config.sync?.interval
+  const ignoreHiddenFiles = config.scan?.ignoreHiddenFiles
+
+  // 如果配置文件没有ignoreHiddenFiles字段，则添加，默认值为1
+  if (ignoreHiddenFiles === undefined) {
+    console.log('配置文件不存在ignoreHiddenFiles字段，使用默认值')
+    config.scan.ignoreHiddenFiles = 1
+    set_config(config)
+  }
 
   if (!mediaPosterInterval) {
     console.log('配置文件不存在mediaPosterInterval字段，使用默认值')
@@ -108,6 +116,8 @@ async function check_config_ver() {
     config.sync = { interval: defaultConfig.sync.interval }
     set_config(config)
   }
+
+
 }
 
 async function create_dir_win() {

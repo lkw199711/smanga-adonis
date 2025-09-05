@@ -41,6 +41,14 @@ export default class ConfigsController {
       config.scan.reloadCover = value
     }
 
+    if (key === 'scan.doNotCopyCover') {
+      config.scan.doNotCopyCover = value
+    }
+
+    if (key === 'scan.ignoreHiddenFiles') { 
+      config.scan.ignoreHiddenFiles = value
+    }
+
     if (key === 'compress.poster') {
       config.compress.poster = value
     }

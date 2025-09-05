@@ -19,6 +19,7 @@
     "auto": 0,
     "reloadCover": 0,
     "doNotCopyCover": 1,
+    "ignoreHiddenFiles": 1,
     "interval": "0 0 0,12 * * *",
     "mediaPosterInterval": "0 0 1 * * *"
   },

@@ -3,6 +3,7 @@ import { TaskPriority } from '../type/index.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { addTask } from './queue_service.js'
+import { get_config } from '#utils/index'
 
 type mangaItem = {
   mangaPath: string
@@ -17,9 +18,12 @@ export default class ScanPathJob {
   private pathInfo: any = null
   // 媒体库信息
   private mediaInfo: any = null
+  private ignoreHiddenFiles: boolean
 
   constructor({ pathId }: { pathId: number }) {
     this.pathId = pathId
+    const config = get_config()
+    this.ignoreHiddenFiles = config.scan?.ignoreHiddenFiles === 1
   }
 
   async run() {
@@ -114,7 +118,15 @@ export default class ScanPathJob {
 
     // 在列表中去除. .. 文件夹
     folderList = folderList.filter((item) => {
-      return item !== '.' && item !== '..'
+      if( item === '.' || item === '..') {
+        return false
+      }
+      // 隐藏文件夹
+      if(this.ignoreHiddenFiles && /^\./.test(item)) {
+        return false
+      }
+
+      return true
     })
 
     mangaList = folderList.map((item: any) => {
@@ -145,7 +157,7 @@ export default class ScanPathJob {
         parentPath: dir,
       }
     })
-   
+
     // 根据正则规则过滤出漫画目录
     mangaList = mangaList.filter((item) => {
       // 排除元数据文件夹
@@ -182,12 +194,16 @@ export default class ScanPathJob {
     let mangaList: mangaItem[] = []
     let folderList = fs.readdirSync(this.pathInfo.pathContent)
 
-    // 在列表中去除. .. 文件夹
     folderList = folderList.filter((item) => {
-      return item !== '.' && item !== '..'
-    })
+      if( item === '.' || item === '..') {
+        return false
+      }
 
-    folderList = folderList.filter((item) => {
+      // 隐藏文件夹
+      if (this.ignoreHiddenFiles && /^\./.test(item)) {
+        return false
+      }
+
       const itemPath = path.join(this.pathInfo.pathContent, item)
 
       // 检查是否为文件夹
