@@ -34,9 +34,9 @@ export default class FilesController {
     }
 
     public async apk({ response }: HttpContext) {
-        let apkPath = '/data/file/smanga1.1.apk'
+        let apkPath = '/data/file/smanga-1.2.apk'
         if (get_os() === 'Windows') {
-            apkPath = './data/file/smanga1.1.apk';
+            apkPath = './data/file/smanga-1.2.apk';
         }
 
         // 检查文件是否存在
