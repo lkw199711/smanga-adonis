@@ -1,11 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-15 01:53:30
- * @FilePath: \smanga-adonis\app\controllers\histories_controller.ts
- */
-
 import type { HttpContext } from '@adonisjs/core/http'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
@@ -14,8 +6,9 @@ export default class HistoriesController {
   public async index({ request, response }: HttpContext) {
     const { userId } = request as any
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
-    const [list, distinct] = await Promise.all([
+    const [list, distinct]: any = await Promise.all([
       prisma.$queryRaw`SELECT 
+          history.historyId,
           history.mangaId,
           MAX(history.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
           MAX(history.userId) AS userId,          -- 使用聚合函数选择 userId
@@ -195,7 +188,7 @@ export default class HistoriesController {
     const { userId } = request as any
     const { mangaId } = params
     await prisma.history.deleteMany({ where: { mangaId, userId } })
-    await prisma.latest.deleteMany({where: {mangaId, userId}})
+    await prisma.latest.deleteMany({ where: { mangaId, userId } })
 
     const saveResponse = new SResponse({ code: 0, message: '操作成功', data: null })
     return response.json(saveResponse)
@@ -206,7 +199,7 @@ export default class HistoriesController {
    * @param param0 
    * @returns 
    */
-  public async chapter_is_read({ request, params, response }: HttpContext) { 
+  public async chapter_is_read({ request, params, response }: HttpContext) {
     const { userId } = request as any
     const { chapterId } = params
     const history = await prisma.history.findFirst({
