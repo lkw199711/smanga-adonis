@@ -7,8 +7,8 @@ export default class HistoriesController {
     const { userId } = request as any
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
     const [list, distinct]: any = await Promise.all([
+      // 使用MAX函数是为了在GROUP BY时选择非聚合列
       prisma.$queryRaw`SELECT 
-          history.historyId,
           history.mangaId,
           MAX(history.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
           MAX(history.userId) AS userId,          -- 使用聚合函数选择 userId
