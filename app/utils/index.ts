@@ -278,3 +278,5 @@ export function is_directory(filePath: string) {
     return false
   }
 }
+
+export const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP'];

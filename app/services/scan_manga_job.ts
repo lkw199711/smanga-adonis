@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
-import { path_poster, path_cache, is_img, get_config, first_image, is_directory } from '#utils/index'
+import { path_poster, path_cache, is_img, get_config, first_image, is_directory, extensions } from '#utils/index'
 import { S } from '../utils/convertText.js'
 import { extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
@@ -28,7 +28,7 @@ export default class ScanMangaJob {
   private nonNumericChapterCounter: number | null = null
   private meta: any = null
   private ignoreHiddenFiles: boolean
-  private tagColor: string = '#a0d911'
+  private tagColor: string
 
   constructor({ pathId, mangaPath, mangaName, parentPath }: { pathId: number, pathInfo: any, mediaInfo: any, mangaPath: string, mangaName: string, parentPath: string }) {
     this.pathId = pathId
@@ -38,6 +38,7 @@ export default class ScanMangaJob {
 
     const config = get_config()
     this.ignoreHiddenFiles = config.scan?.ignoreHiddenFiles === 1
+    this.tagColor = config.scan?.defaultTagColor || '#a0d911'
   }
 
   async run() {
@@ -794,7 +795,6 @@ export default class ScanMangaJob {
     let sourcePoster = ''
     // 检索平级目录封面图片
     const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
-    const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP']
     extensions.some((ext) => {
       const picPath = dirOutExt + ext
       if (fs.existsSync(picPath)) {

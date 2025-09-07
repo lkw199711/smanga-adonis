@@ -2,7 +2,7 @@ import prisma from "#start/prisma";
 import fs from "fs";
 import path from "path";
 import { error_log } from "#utils/log";
-import { is_img, get_config, path_poster, path_cache, first_image, is_directory } from "#utils/index";
+import { is_img, get_config, path_poster, path_cache, first_image, is_directory, extensions } from "#utils/index";
 import { addTask } from "./queue_service.js";
 import { TaskPriority } from "#type/index";
 import { extractFirstImageSyncOrder } from '#utils/unzip'
@@ -16,9 +16,11 @@ export default class ReloadMangaMetaJob {
     private mangaRecord: any;
     private chapterRecord: any;
     private meta: any;
-    private tagColor = '#a0d911' // 默认标签颜色
+    private tagColor // 默认标签颜色
     constructor({ mangaId }: { mangaId: number }) {
         this.mangaId = mangaId;
+        const config = get_config()
+        this.tagColor = config.scan?.defaultTagColor || '#a0d911'
     }
 
     async run() {
@@ -254,7 +256,6 @@ export default class ReloadMangaMetaJob {
         let sourcePoster = ''
         // 检索平级目录封面图片
         const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
-        const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP']
         extensions.some((ext) => {
             const picPath = dirOutExt + ext
             if (fs.existsSync(picPath)) {

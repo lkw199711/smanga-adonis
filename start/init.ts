@@ -97,6 +97,7 @@ async function check_config_ver() {
   const mediaPosterInterval = config.scan?.mediaPosterInterval
   const syncInterval = config.sync?.interval
   const ignoreHiddenFiles = config.scan?.ignoreHiddenFiles
+  const defaultTagColor = config.scan?.defaultTagColor
 
   // 如果配置文件没有ignoreHiddenFiles字段，则添加，默认值为1
   if (ignoreHiddenFiles === undefined) {
@@ -117,7 +118,11 @@ async function check_config_ver() {
     set_config(config)
   }
 
-
+  if (!defaultTagColor) {
+    console.log('配置文件不存在defaultTagColor字段，使用默认值')
+    config.scan.defaultTagColor = '#a0d911'
+    set_config(config)
+  }
 }
 
 async function create_dir_win() {

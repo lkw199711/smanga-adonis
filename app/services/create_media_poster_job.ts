@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2025-02-14 15:49:08
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-15 14:24:42
- * @FilePath: \smanga-adonis\app\services\create_media_poster_job.ts
- */
 import prisma from '#start/prisma';
 import { path_poster } from '#utils/index';
 import sharp from 'sharp';
@@ -52,6 +45,16 @@ export default class CreateMediaPosterJob {
         .catch(err => { error_log('[media poster]', `处理图片 ${imagePath} 时出错:${err}`); })
 
       if (images.length >= 4) break; // 限制最多处理 4 张图片
+    }
+
+    if (images.length === 0) return;
+
+    if (images.length < 4) { 
+      // 如果少于4张图片，复制最后一张图片直到有4张
+      const lastImage = images[images.length - 1];
+      while (images.length < 4) { 
+        images.push(lastImage);
+      }
     }
 
     try {
