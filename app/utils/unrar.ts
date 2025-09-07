@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-04 01:24:52
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-13 19:25:34
- * @FilePath: \smanga-adonis\app\utils\unrar.cjs
- */
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 import * as path from 'path'
@@ -83,6 +76,25 @@ export class Unrar {
     })
 
     let first = false
+    let hasCover = false
+    const exteactorCover: any = extractor.extract({
+      files: (fileHeader: any) => {
+        if (hasCover) return false
+
+        if (/cover/i.test(fileHeader.name) && is_img(fileHeader.name)) {
+          hasCover = true
+          return true
+        }
+
+        return false
+      },
+    })
+
+    if (hasCover) {
+      const abc = [...exteactorCover.files]
+      return abc?.length > 0
+    }
+
     const extractored: any = extractor.extract({
       files: (fileHeader: any) => {
         if (first) return false

@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
-import { path_poster, path_cache, is_img, get_config } from '#utils/index'
+import { path_poster, path_cache, is_img, get_config, first_image, is_directory } from '#utils/index'
 import { S } from '../utils/convertText.js'
 import { extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
@@ -11,8 +11,10 @@ import { TaskPriority } from '../type/index.js'
 import { addTask, scanQueue } from '#services/queue_service'
 import { error_log, insert_manga_scan_log } from '#utils/log'
 import { path as sqlPathType, media as sqlMediaType } from '@prisma/client'
+import { metaType } from '../type/index.js'
 type pathType = sqlPathType & { media: sqlMediaType }
 const logModule = '[manga scan]'
+
 export default class ScanMangaJob {
   private pathId: number
   private pathInfo: pathType | null | void = null
@@ -26,6 +28,7 @@ export default class ScanMangaJob {
   private nonNumericChapterCounter: number | null = null
   private meta: any = null
   private ignoreHiddenFiles: boolean
+  private tagColor: string = '#a0d911'
 
   constructor({ pathId, mangaPath, mangaName, parentPath }: { pathId: number, pathInfo: any, mediaInfo: any, mangaPath: string, mangaName: string, parentPath: string }) {
     this.pathId = pathId
@@ -120,6 +123,7 @@ export default class ScanMangaJob {
 
       // 扫描元数据
       await this.meta_scan()
+      await this.meta_scan_series()
 
       // 更新漫画封面
       if (!this.mangaRecord.mangaCover || reloadCover) {
@@ -195,6 +199,7 @@ export default class ScanMangaJob {
 
       // 扫描元数据
       await this.meta_scan()
+      await this.meta_scan_series()
 
       /** 漫画已存在 更新漫画信息
        * // 实际目录扫描多于数据库章节 (说明新增了章节)
@@ -394,7 +399,7 @@ export default class ScanMangaJob {
       for (let index = 0; index < keys.length; index++) {
         const key = keys[index];
         const value = info[key]
-        if (['title', 'author', 'star', 'describe', 'publishDate', 'classify', 'finished', 'updateDate'].includes(key)) {
+        if (Object.keys(metaType).includes(key)) {
           try {
             await prisma.meta.create({
               data: {
@@ -414,47 +419,8 @@ export default class ScanMangaJob {
       }
 
       // 插入标签
-      const tagColor = '#a0d911'
       const tags: string[] = info?.tags || []
-
-      for (let index = 0; index < tags.length; index++) {
-        const tag: any = tags[index];
-        // 系统标签保持唯一性,用户标签不做唯一性限制
-        // 扫描时确认没有同名系统标签,没有则创建
-        const tagName = typeof tag === 'object' ? tag.name : tag
-        let tagRecord = await prisma.tag.findFirst({
-          where: { tagName: tagName, userId: 0 },
-        })
-        if (!tagRecord) {
-          tagRecord = await prisma.tag.create({
-            data: {
-              tagName: tagName,
-              tagColor,
-              userId: 0,
-            },
-          })
-        }
-
-        const mangaTagRecord = await prisma.mangaTag.findFirst({
-          where: {
-            mangaId: this.mangaRecord.mangaId,
-            tagId: tagRecord.tagId,
-          },
-        })
-
-        if (!mangaTagRecord) {
-          await prisma.mangaTag
-            .create({
-              data: {
-                mangaId: this.mangaRecord.mangaId,
-                tagId: tagRecord.tagId,
-              },
-            })
-            .catch((e) => {
-              console.log('标签插入失败', e)
-            })
-        }
-      }
+      await this.tag_insert(tags)
 
       // 插入角色
       const characters = info?.character || []
@@ -502,6 +468,123 @@ export default class ScanMangaJob {
   }
 
   /**
+   * 扫描 series.json 元数据
+   * @returns 
+   */
+  async meta_scan_series() {
+    const mangaPath = this.mangaRecord.mangaPath
+    if (!is_directory(mangaPath)) return;
+
+    const fils = fs.readdirSync(mangaPath);
+    const series = fils.find(file => file === 'series.json');
+    if (!series) return;
+
+    // 删除原有的元数据
+    await prisma.meta.deleteMany({
+      where: {
+        mangaId: this.mangaRecord.mangaId,
+      },
+    })
+
+    const seriesFile = path.join(mangaPath, series);
+    const rawData = fs.readFileSync(seriesFile, 'utf-8')
+    const jsonParse = JSON.parse(rawData)
+    this.meta = jsonParse?.metadata ? jsonParse.metadata : jsonParse
+
+    if (this.meta?.tags) {
+      const tags: string[] = typeof this.meta.tags === 'string' ? this.meta.tags.split(',') : this.meta.tags
+      await this.tag_insert(tags)
+    }
+
+    if (this.meta?.authors) {
+      await this.prisma_meta_insert('author', this.meta.authors);
+    }
+
+    if (this.meta?.name) {
+      await this.prisma_meta_insert('title', this.meta.name);
+    }
+
+    if (this.meta?.alias) {
+      await this.prisma_meta_insert('subTitle', this.meta.alias);
+    }
+
+    if (this.meta?.description_text) {
+      await this.prisma_meta_insert('describe', this.meta.description_text);
+    }
+
+    if (this.meta?.year) {
+      await this.prisma_meta_insert(metaType.publishDate, String(this.meta.year));
+    }
+
+    if (this.meta?.publisher) {
+      await this.prisma_meta_insert(metaType.publisher, this.meta.publisher);
+    }
+
+    if (this.meta?.status) {
+      await this.prisma_meta_insert(metaType.status, this.meta.status);
+    }
+  }
+
+  async tag_insert(tags: any[]) {
+    for (let tag of tags) {
+      // 系统标签保持唯一性,用户标签不做唯一性限制
+      // 扫描时确认没有同名系统标签,没有则创建
+      const tagName = typeof tag === 'object' ? tag.name : tag
+      let tagRecord = await prisma.tag.findFirst({
+        where: { tagName: tagName, userId: 0 },
+      })
+      if (!tagRecord) {
+        tagRecord = await prisma.tag.create({
+          data: {
+            tagName: tagName,
+            tagColor: this.tagColor,
+            userId: 0,
+          },
+        })
+      }
+
+      const mangaTagRecord = await prisma.mangaTag.findFirst({
+        where: {
+          mangaId: this.mangaRecord.mangaId,
+          tagId: tagRecord.tagId,
+        },
+      })
+
+      if (!mangaTagRecord) {
+        await prisma.mangaTag
+          .create({
+            data: {
+              mangaId: this.mangaRecord.mangaId,
+              tagId: tagRecord.tagId,
+            },
+          })
+          .catch((e) => {
+            console.log('标签插入失败', e)
+          })
+      }
+    }
+  }
+
+  /**
+   * 向数据库中插入元数据
+   * @param key 元数据名称
+   * @param value 元数据值
+   */
+  async prisma_meta_insert(key: string, value: string) {
+    await prisma.meta.create({
+      data: {
+        manga: {
+          connect: {
+            mangaId: this.mangaRecord.mangaId,
+          },
+        },
+        metaName: key,
+        metaContent: value,
+      }
+    })
+  }
+
+  /**
    * 扫描目录获取章节列表
    * @param dir 目录路径
    * @returns 章节列表
@@ -518,12 +601,12 @@ export default class ScanMangaJob {
 
     folderList = folderList.filter((item) => {
       // 排除. .. 文件夹
-      if (item === '.' || item === '..') { 
+      if (item === '.' || item === '..') {
         return false
       }
 
       // 排除隐藏文件夹
-      if (this.ignoreHiddenFiles && /^\./.test(item)) { 
+      if (this.ignoreHiddenFiles && /^\./.test(item)) {
         return false
       }
 
@@ -608,7 +691,7 @@ export default class ScanMangaJob {
 
     // 都没有找到返回空
     if (!sourcePoster && this.chapterRecord.chapterType === 'img') {
-      sourcePoster = this.first_image(dir)
+      sourcePoster = first_image(dir)
     }
 
     if (!sourcePoster && ['zip', 'rar', '7z'].includes(this.chapterRecord.chapterType)) {
@@ -769,27 +852,6 @@ export default class ScanMangaJob {
     } else {
       return ''
     }
-  }
-
-  first_image(dir: string): string {
-    if (!this.isDirectory(dir)) return ''
-    const files = fs.readdirSync(dir, { withFileTypes: true })
-
-    for (const file of files) {
-      const fullPath = path.join(dir, file.name)
-
-      if (file.isDirectory()) {
-        // 递归遍历子目录
-        const found = this.first_image(fullPath)
-        if (found) return found
-      } else if (file.isFile() && is_img(file.name)) {
-        // 如果找到图片，返回路径
-        return fullPath
-      }
-    }
-
-    // 没有找到图片
-    return ''
   }
 
   compress_type(filePath: string) {

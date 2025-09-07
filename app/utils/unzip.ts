@@ -68,6 +68,11 @@ export async function extractFirstImageSyncOrder(
 
     if (imgs.length === 0) return false
 
+    const coverNameImg = imgs.find((file: any) => /cover/i.test(file.path))
+    if(coverNameImg) {
+      imgs = [coverNameImg]
+    }
+
     imgs.sort((a: any, b: any) => a.path.localeCompare(b.path))
 
     const content = await imgs[0].buffer()

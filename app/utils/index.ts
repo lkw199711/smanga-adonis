@@ -141,7 +141,7 @@ export function order_params(order: string = 'asc', model: string = 'chapter'): 
     }
   }
 
-  if (/updateTime/i.test(order)) { 
+  if (/updateTime/i.test(order)) {
     return {
       updateTime: sort,
     }
@@ -236,4 +236,45 @@ export function image_files(dirPath: string, exclude: string | null | undefined 
   }
 
   return imagePaths
+}
+
+export function first_image(dir: string): string {
+  if (!is_directory(dir)) return ''
+  const files = fs.readdirSync(dir, { withFileTypes: true })
+
+  // 优先查找文件名包含 cover 的图片
+  const coverNameImg = files.find((file) => {
+    return /cover/i.test(file.name) && is_img(file.name)
+  })
+
+  if (coverNameImg) {
+    return path.join(dir, coverNameImg.name)
+  }
+
+  for (const file of files) {
+    const fullPath = path.join(dir, file.name)
+
+    if (file.isDirectory()) {
+      // 递归遍历子目录
+      const found = first_image(fullPath)
+      if (found) return found
+    } else if (file.isFile() && is_img(file.name)) {
+      // 如果找到图片，返回路径
+      return fullPath
+    }
+  }
+
+  // 没有找到图片
+  return ''
+}
+
+export function is_directory(filePath: string) {
+  try {
+    const stats = fs.statSync(filePath)
+    return stats.isDirectory()
+  } catch (err) {
+    // 如果路径不存在或其他错误，返回 false
+    // console.error('Error:', err)
+    return false
+  }
 }

@@ -1,12 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-04 01:23:38
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-13 19:24:40
- * @FilePath: \smanga-adonis\app\utils\un7z.cjs
- */
-// import { createRequire } from 'module'
-// const require = createRequire(import.meta.url)
 import Seven from 'node-7z'
 import { is_img } from './index.js'
 import * as path from 'path'
@@ -109,7 +100,14 @@ export class Un7z {
   ) {
     console.log('first_image_7z', filePath, outputDir)
 
-    const fileList = await list7zContents(filePath)
+    let fileList = await list7zContents(filePath)
+
+    // 优先查找文件名包含 cover 的图片
+    const coverNameImg = fileList.find((file: string) => /cover/i.test(file) && is_img(file))
+    if (coverNameImg) {
+      fileList = [coverNameImg]
+    }
+
     let image = fileList.find((file: string) => is_img(file))
 
     if (!image) return false

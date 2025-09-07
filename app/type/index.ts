@@ -12,4 +12,18 @@ enum TaskPriority {
   default = 900000,
 }
 
-export { TaskPriority }
+enum metaType {
+  title = 'title',
+  subTitle = 'subTitle',
+  author = 'author',
+  star = 'star',
+  describe = 'describe',
+  publishDate = 'publishDate',
+  classify = 'classify',
+  finished = 'finished',
+  updateDate = 'updateDate',
+  publisher = 'publisher',
+  status = 'status',
+}
+
+export { TaskPriority, metaType }

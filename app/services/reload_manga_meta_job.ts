@@ -2,18 +2,21 @@ import prisma from "#start/prisma";
 import fs from "fs";
 import path from "path";
 import { error_log } from "#utils/log";
-import { is_img, get_config, path_poster, path_cache } from "#utils/index";
+import { is_img, get_config, path_poster, path_cache, first_image, is_directory } from "#utils/index";
 import { addTask } from "./queue_service.js";
 import { TaskPriority } from "#type/index";
 import { extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
+import { metaType } from "../type/index.js";
 
 
 export default class ReloadMangaMetaJob {
     private mangaId: number;
     private mangaRecord: any;
     private chapterRecord: any;
+    private meta: any;
+    private tagColor = '#a0d911' // 默认标签颜色
     constructor({ mangaId }: { mangaId: number }) {
         this.mangaId = mangaId;
     }
@@ -29,6 +32,7 @@ export default class ReloadMangaMetaJob {
         }
 
         await this.meta_scan();
+        await this.meta_scan_series()
 
         await this.manga_poster();
 
@@ -429,38 +433,121 @@ export default class ReloadMangaMetaJob {
             return ''
         }
     }
-}
 
+    /**
+     * 扫描 series.json 元数据
+     * @returns 
+     */
+    async meta_scan_series() {
+        const mangaPath = this.mangaRecord.mangaPath
+        if (!is_directory(mangaPath)) return;
+        
+        const fils = fs.readdirSync(mangaPath);
+        const series = fils.find(file => file === 'series.json');
+        if (!series) return;
 
-function first_image(dir: string): string {
-    if (!is_directory(dir)) return ''
-    const files = fs.readdirSync(dir, { withFileTypes: true })
+        // 删除原有的元数据
+        await prisma.meta.deleteMany({
+            where: {
+                mangaId: this.mangaRecord.mangaId,
+            },
+        })
 
-    for (const file of files) {
-        const fullPath = path.join(dir, file.name)
+        const seriesFile = path.join(mangaPath, series);
+        const rawData = fs.readFileSync(seriesFile, 'utf-8')
+        const jsonParse = JSON.parse(rawData)
+        this.meta = jsonParse?.metadata ? jsonParse.metadata : jsonParse
 
-        if (file.isDirectory()) {
-            // 递归遍历子目录
-            const found = first_image(fullPath)
-            if (found) return found
-        } else if (file.isFile() && is_img(file.name)) {
-            // 如果找到图片，返回路径
-            return fullPath
+        if (this.meta?.tags) {
+            const tags: string[] = typeof this.meta.tags === 'string' ? this.meta.tags.split(',') : this.meta.tags
+            await this.tag_insert(tags)
+        }
+
+        if (this.meta?.authors) {
+            await this.prisma_meta_insert('author', this.meta.authors);
+        }
+
+        if (this.meta?.name) {
+            await this.prisma_meta_insert('title', this.meta.name);
+        }
+
+        if (this.meta?.alias) {
+            await this.prisma_meta_insert('subTitle', this.meta.alias);
+        }
+
+        if (this.meta?.description_text) {
+            await this.prisma_meta_insert('describe', this.meta.description_text);
+        }
+
+        if (this.meta?.year) {
+            await this.prisma_meta_insert(metaType.publishDate, String(this.meta.year));
+        }
+
+        if (this.meta?.publisher) {
+            await this.prisma_meta_insert(metaType.publisher, this.meta.publisher);
+        }
+
+        if (this.meta?.status) {
+            await this.prisma_meta_insert(metaType.status, this.meta.status);
         }
     }
 
-    // 没有找到图片
-    return ''
-}
+    /**
+     * 向数据库中插入元数据
+     * @param key 元数据名称
+     * @param value 元数据值
+     */
+    async prisma_meta_insert(key: string, value: string) {
+        await prisma.meta.create({
+            data: {
+                manga: {
+                    connect: {
+                        mangaId: this.mangaRecord.mangaId,
+                    },
+                },
+                metaName: key,
+                metaContent: value,
+            }
+        })
+    }
 
+    async tag_insert(tags: any[]) {
+        for (let tag of tags) {
+            // 系统标签保持唯一性,用户标签不做唯一性限制
+            // 扫描时确认没有同名系统标签,没有则创建
+            const tagName = typeof tag === 'object' ? tag.name : tag
+            let tagRecord = await prisma.tag.findFirst({
+                where: { tagName: tagName, userId: 0 },
+            })
+            if (!tagRecord) {
+                tagRecord = await prisma.tag.create({
+                    data: {
+                        tagName: tagName,
+                        tagColor: this.tagColor,
+                        userId: 0,
+                    },
+                })
+            }
 
-function is_directory(filePath: string) {
-    try {
-        const stats = fs.statSync(filePath)
-        return stats.isDirectory()
-    } catch (err) {
-        // 如果路径不存在或其他错误，返回 false
-        // console.error('Error:', err)
-        return false
+            const mangaTagRecord = await prisma.mangaTag.findFirst({
+                where: {
+                    mangaId: this.mangaRecord.mangaId,
+                    tagId: tagRecord.tagId,
+                },
+            })
+
+            if (!mangaTagRecord) {
+                await prisma.mangaTag
+                    .create({
+                        data: {
+                            mangaId: this.mangaRecord.mangaId,
+                            tagId: tagRecord.tagId,
+                        },
+                    })
+                    .catch((e) => {
+                        console.log('标签插入失败', e)
+                    })
+            }
+        }
     }
 }
