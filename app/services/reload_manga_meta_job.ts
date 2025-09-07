@@ -263,6 +263,17 @@ export default class ReloadMangaMetaJob {
             }
         })
 
+        // 检索漫画文件夹内的封面图片
+        if (!sourcePoster && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+            extensions.some((ext) => {
+                const picPath = path.join(dir, 'cover' + ext)
+                if (fs.existsSync(picPath)) {
+                    sourcePoster = picPath
+                    return true
+                }
+            })
+        }
+
         // 检索元数据目录封面图片
         const dirMeta = dirOutExt + '-smanga-info'
         if (!sourcePoster && fs.existsSync(dirMeta)) {
@@ -441,7 +452,7 @@ export default class ReloadMangaMetaJob {
     async meta_scan_series() {
         const mangaPath = this.mangaRecord.mangaPath
         if (!is_directory(mangaPath)) return;
-        
+
         const fils = fs.readdirSync(mangaPath);
         const series = fils.find(file => file === 'series.json');
         if (!series) return;
