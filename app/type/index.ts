@@ -1,3 +1,5 @@
+import { type } from "os"
+
 enum TaskPriority {
   delete = 100000,
   deleteManga = 110000,
@@ -12,7 +14,7 @@ enum TaskPriority {
   default = 900000,
 }
 
-enum metaType {
+enum metaKeyType {
   title = 'title',
   subTitle = 'subTitle',
   author = 'author',
@@ -24,6 +26,22 @@ enum metaType {
   updateDate = 'updateDate',
   publisher = 'publisher',
   status = 'status',
+  tags = 'tags',
 }
 
-export { TaskPriority, metaType }
+export type metaType = {
+  title: string,
+  subTitle: string,
+  author: string,
+  star: number,
+  describe: string,
+  publishDate: string,
+  classify: string,
+  finished: boolean,
+  updateDate: string,
+  publisher: string,
+  status: string,
+  tags: string[],
+}
+
+export { TaskPriority, metaKeyType }

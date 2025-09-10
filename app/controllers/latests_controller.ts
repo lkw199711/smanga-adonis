@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-15 02:16:16
- * @FilePath: \smanga-adonis\app\controllers\latests_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
@@ -81,6 +74,12 @@ export default class LatestsController {
           },
         },
       }
+    })
+
+    const chapters = await prisma.chapter.findMany({
+      where: { mangaId, chapterId: { lte: latest?.chapterId || 0 } },
+      orderBy: { chapterNumber: 'asc' },
+      take: 5,
     })
     const showResponse = new SResponse({ code: 0, message: '', data: latest })
     return response.json(showResponse)

@@ -49,6 +49,7 @@ model chapter {
   history       history[]
   collects      collect[]
   latests       latest[]
+  meta          meta[]
 
   @@unique([mangaId, chapterName], map: "unique-name")
 }
@@ -250,6 +251,8 @@ model meta {
   metaName    String
   manga       manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId     Int
+  chapter     chapter? @relation(fields: [chapterId], references: [chapterId])
+  chapterId   Int?
   metaFile    String?
   metaContent String?
   description String?

@@ -9,9 +9,11 @@ import * as fs from 'fs'
 const unrar = require('node-unrar-js')
 import { is_img, write_log } from '#utils/index'
 import { extract7z, Un7z } from '#utils/un7z'
-import { unzipFile, extractFirstImageSyncOrder } from '#utils/unzip'
+import { unzipFile, extractFirstImageSyncOrder, extract_metadata } from '#utils/unzip'
+const AdmZip = require('adm-zip')
 // import { createCanvas, loadImage } from 'canvas'
 import sharp from 'sharp';
+import { parseStringPromise } from 'xml2js'
 
 export default class TestsController {
   public async index({ response }: HttpContext) {
@@ -154,8 +156,13 @@ export default class TestsController {
 
   public async zip({ response }: HttpContext) {
     const rarFilePath = 'A:\\05temp\\09test\\压缩包\\001 梦想.zip'
-    const outputDir = 'A:\\05temp\\09test\\解压后\\111.jpg'
-    extractFirstImageSyncOrder(rarFilePath, outputDir)
+    // const outputDir = 'A:\\05temp\\09test\\解压后\\111.jpg'
+    const outputDir = 'A:\\05temp\\09test\\解压后'
+    // extractFirstImageSyncOrder(rarFilePath, outputDir)
+    const zip = new AdmZip(rarFilePath)
+    const entries = zip.getEntries()
+    // 解压
+    zip.extractEntryTo(entries[0], outputDir, true)
 
     response.status(200).send(true)
     /*
@@ -192,39 +199,27 @@ export default class TestsController {
     return '123124'
   }
 
+  public async zip2({ response }: HttpContext) {
+    const rarFilePath = 'D:\\第1話.cbz'
+    const rarFilePath1 = 'A:\\06download\\00漫画\\黄金拼图\\乌菈菈迷路帖\\第1话 第一话.cbz'
+    const outputDir = 'A:\\05temp\\09test\\解压后'
+
+    const zip = new AdmZip(rarFilePath1)
+
+    const ComicInfo = zip.readAsText('ComicInfo.xml')
+    const ComicInfoJson = await parseStringPromise(ComicInfo)
+
+    const entries = zip.getEntries()
+    console.log(ComicInfo)
+
+    const json = await extract_metadata(rarFilePath1)
+    
+
+    response.status(200).send(json)
+  }
+
 
 }
-/*
-async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number) {
-  const gap = 2;
-  // 加载图片
-  const images = await Promise.all(imagePaths.map(path => loadImage(path)));
-
-  // 计算合并后的画布宽度和最大高度
-  const totalWidth = images.length * targetWidth + (images.length - 1) * gap; // 每张图片使用目标宽度
-  const maxHeight = targetHeight; // 使用目标高度
-
-  // 创建画布
-  const canvas = createCanvas(totalWidth, maxHeight);
-  const ctx = canvas.getContext('2d');
-
-  // 填充黑色背景
-  ctx.fillStyle = 'black'; // 设置填充颜色为黑色
-  ctx.fillRect(0, 0, totalWidth, maxHeight); // 填充整个画布
-
-  // 绘制图片
-  let xOffset = 0;
-  images.forEach(image => {
-    // 绘制缩放后的图片
-    ctx.drawImage(image, xOffset, 0, targetWidth, targetHeight); // 水平合并
-    xOffset += (targetWidth + gap); // 更新横坐标偏移量
-  });
-
-  // 保存合并后的图片
-  const buffer: any = canvas.toBuffer('image/png');
-  fs.writeFileSync(outputPath, buffer);
-}
-  */
 
 async function mergeImages(imagePaths: string[], outputPath: string, targetWidth: number, targetHeight: number, gap: number = 2) {
   const images = imagePaths.map(imagePath => sharp(imagePath).resize(targetWidth, targetHeight).toBuffer());

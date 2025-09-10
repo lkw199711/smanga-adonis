@@ -50,6 +50,7 @@ router.get('/test/7z2', [TestsController, 'zzz'])
 router.get('/test/log', [TestsController, 'log'])
 router.get('/test/zip', [TestsController, 'zip'])
 router.get('/test/m', [TestsController, 'test'])
+router.get('/test/zip2', [TestsController, 'zip2'])
 
 
 router.any('/image', [ImagesController, 'index'])

@@ -4,14 +4,15 @@ import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import { path_poster, path_cache, is_img, get_config, first_image, is_directory, extensions } from '#utils/index'
 import { S } from '../utils/convertText.js'
-import { extractFirstImageSyncOrder } from '#utils/unzip'
+import { extract_cover, extract_metadata, extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
 import { TaskPriority } from '../type/index.js'
 import { addTask, scanQueue } from '#services/queue_service'
 import { error_log, insert_manga_scan_log } from '#utils/log'
 import { path as sqlPathType, media as sqlMediaType } from '@prisma/client'
-import { metaType } from '../type/index.js'
+import { metaKeyType } from '../type/index.js'
+import { comicinfo_transform } from '#utils/meta'
 type pathType = sqlPathType & { media: sqlMediaType }
 const logModule = '[manga scan]'
 
@@ -161,6 +162,9 @@ export default class ScanMangaJob {
         await this.chapter_poster(mangaPath)
       }
 
+      // 扫描元数据
+      await this.meta_scan_comicinfo()
+
       // 讲漫画扫描成果写入日志
       await insert_manga_scan_log({
         mangaId: this.mangaRecord.mangaId,
@@ -252,6 +256,9 @@ export default class ScanMangaJob {
           if (!this.chapterRecord.chapterCover || reloadCover) {
             await this.chapter_poster(item.chapterPath)
           }
+
+          // 扫描元数据
+          await this.meta_scan_comicinfo()
         }
 
         // 更新漫画更新时间
@@ -326,11 +333,7 @@ export default class ScanMangaJob {
     if (!fs.existsSync(dirMeta)) return false
 
     // 删除原有的元数据
-    await prisma.meta.deleteMany({
-      where: {
-        mangaId: this.mangaRecord.mangaId,
-      },
-    })
+    await this.clear_manga_meta()
 
     // banner,thumbnail,character
     const metaFiles = fs.readdirSync(dirMeta)
@@ -400,7 +403,7 @@ export default class ScanMangaJob {
       for (let index = 0; index < keys.length; index++) {
         const key = keys[index];
         const value = info[key]
-        if (Object.keys(metaType).includes(key)) {
+        if (Object.keys(metaKeyType).includes(key)) {
           try {
             await prisma.meta.create({
               data: {
@@ -481,11 +484,7 @@ export default class ScanMangaJob {
     if (!series) return;
 
     // 删除原有的元数据
-    await prisma.meta.deleteMany({
-      where: {
-        mangaId: this.mangaRecord.mangaId,
-      },
-    })
+    await this.clear_manga_meta()
 
     const seriesFile = path.join(mangaPath, series);
     const rawData = fs.readFileSync(seriesFile, 'utf-8')
@@ -514,16 +513,40 @@ export default class ScanMangaJob {
     }
 
     if (this.meta?.year) {
-      await this.prisma_meta_insert(metaType.publishDate, String(this.meta.year));
+      await this.prisma_meta_insert(metaKeyType.publishDate, String(this.meta.year));
     }
 
     if (this.meta?.publisher) {
-      await this.prisma_meta_insert(metaType.publisher, this.meta.publisher);
+      await this.prisma_meta_insert(metaKeyType.publisher, this.meta.publisher);
     }
 
     if (this.meta?.status) {
-      await this.prisma_meta_insert(metaType.status, this.meta.status);
+      await this.prisma_meta_insert(metaKeyType.status, this.meta.status);
     }
+  }
+
+  /**
+   * 清除漫画元数据
+   */
+  async clear_manga_meta() {
+    await prisma.meta.deleteMany({
+      where: {
+        mangaId: this.mangaRecord.mangaId,
+        chapterId: null,
+      },
+    })
+  }
+
+  /**
+   * 清除章节元数据
+   */
+  async clear_chapter_meta() {
+    await prisma.meta.deleteMany({
+      where: {
+        mangaId: this.mangaRecord.mangaId,
+        chapterId: this.chapterRecord.chapterId,
+      },
+    })
   }
 
   async tag_insert(tags: any[]) {
@@ -700,7 +723,9 @@ export default class ScanMangaJob {
       const cachePoster = `${this.cachePath}/smanga_cache_${this.chapterRecord.chapterId}.jpg`
 
       if (this.chapterRecord.chapterType === 'zip') {
-        hasPosterInZip = await extractFirstImageSyncOrder(dir, cachePoster)
+        console.log('zip文件', dir, cachePoster);
+        
+        hasPosterInZip = await extract_cover(dir, cachePoster)
         if (hasPosterInZip) {
           sourcePoster = cachePoster
         }
@@ -863,6 +888,50 @@ export default class ScanMangaJob {
     } else {
       return ''
     }
+  }
+
+  /**
+     * 扫描comicinfo元数据
+     * @returns 
+     */
+  async meta_scan_comicinfo() {
+    if (this.chapterRecord.chapterType !== 'zip') {
+      return;
+    }
+
+    const comicinfo = await extract_metadata(this.chapterRecord.chapterPath)
+
+    if (!comicinfo) return;
+
+    // 删除原有的元数据
+    await this.clear_chapter_meta()
+
+    const metaData = comicinfo_transform(comicinfo)
+    await this.insert_meta(metaData)
+    await this.tag_insert(metaData.tags)
+  }
+
+  /**
+     * 插入元数据
+     * @param meta 
+     * @param insertChapter 
+     */
+  async insert_meta(meta: any) {
+    const insertData = [];
+
+    for (const key in meta) {
+      const value = meta[key];
+      insertData.push({
+        mangaId: this.mangaRecord.mangaId,
+        chapterId: this.chapterRecord.chapterId,
+        metaName: key,
+        metaContent: String(value),
+      })
+    }
+
+    await prisma.meta.createMany({
+      data: insertData
+    })
   }
 
   compress_type(filePath: string) {

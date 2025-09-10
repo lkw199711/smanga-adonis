@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-04 00:12:16
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-11 02:01:33
- * @FilePath: \smanga-adonis\app\utils\unzip.ts
- */
 import fs from 'fs'
 import path from 'path'
 import { createRequire } from 'module'
@@ -12,6 +5,7 @@ const require = createRequire(import.meta.url)
 const AdmZip = require('adm-zip')
 const unzipper = require('unzipper')
 import { is_img } from './index.js'
+import { parseStringPromise } from 'xml2js'
 
 export function unzipFile(zipFilePath: string, outputDir: string) {
   const zip = new AdmZip(zipFilePath)
@@ -69,7 +63,7 @@ export async function extractFirstImageSyncOrder(
     if (imgs.length === 0) return false
 
     const coverNameImg = imgs.find((file: any) => /cover/i.test(file.path))
-    if(coverNameImg) {
+    if (coverNameImg) {
       imgs = [coverNameImg]
     }
 
@@ -82,5 +76,93 @@ export async function extractFirstImageSyncOrder(
   } catch (error) {
     console.error('Error extracting image:', error)
     return false
+  }
+}
+
+export async function extract_cover(zipFilePath: string, outputDir: string) {
+  const zip = new AdmZip(zipFilePath)
+  const entries = zip.getEntries()
+  if (entries.length === 0) return false;
+
+  let coverEntry = entries.find((entry: any) => /cover/i.test(entry.name))
+  if (!coverEntry) coverEntry = entries.find((entry: any) => is_img(entry.name))
+  // outputDir 是文件则取其路径
+  // const coverFileName = path.basename(outputDir)
+  // outputDir = path.dirname(outputDir)
+  // coverEntry.name = coverFileName;
+
+  const buffer = zip.readFile(coverEntry)
+
+  // zip.extractEntryTo(coverEntry, outputDir, true)
+  fs.writeFileSync(outputDir, buffer)
+
+  return true
+}
+
+export async function extract_metadata(zipFilePath: string) {
+  const zip = new AdmZip(zipFilePath)
+  const entries = zip.getEntries()
+  if (entries.length === 0) return false;
+
+  let coverEntry = entries.find((entry: any) => entry.name === 'ComicInfo.xml')
+  if (!coverEntry) return false;
+
+  const ComicInfo = zip.readAsText(coverEntry.name)
+  const ComicInfoJson = await parseStringPromise(ComicInfo)
+
+  return ComicInfoJson
+}
+
+/**
+ * Extract cover image and metadata from a zip file
+ * @param zipFilePath Path to the zip file
+ * @param outputDir Directory to save the extracted cover image
+ * @returns Object containing cover path and metadata
+ */
+export async function extractCoverAndMetadata(
+  zipFilePath: string,
+  outputDir: string
+): Promise<{ coverPath: string | null, metadata: any }> {
+  try {
+    // Ensure output directory exists
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true })
+    }
+
+    const zip = fs.readFileSync(zipFilePath)
+    const directory = await unzipper.Open.buffer(zip)
+    let coverPath: string | null = null
+    let metadata: any = {}
+
+    // Find and extract cover image
+    let imgs: any = directory.files.filter((file: any) => {
+      return file.type === 'File' && is_img(file.path)
+    })
+
+    if (imgs.length > 0) {
+      const coverNameImg = imgs.find((file: any) => /cover/i.test(file.path))
+      let selectedImg = coverNameImg || imgs.sort((a: any, b: any) => a.path.localeCompare(b.path))[0]
+
+      const coverFileName = path.basename(selectedImg.path)
+      coverPath = path.join(outputDir, coverFileName)
+
+      const content = await selectedImg.buffer()
+      fs.writeFileSync(coverPath, content)
+    }
+
+    // Find and parse ComicInfo.xml
+    const comicInfoFile = directory.files.find((file: any) => {
+      return file.type === 'File' && path.basename(file.path).toLowerCase() === 'comicinfo.xml'
+    })
+
+    if (comicInfoFile) {
+      const xmlContent = await comicInfoFile.buffer()
+      metadata = await parseStringPromise(xmlContent.toString())
+    }
+
+    return { coverPath, metadata }
+  } catch (error) {
+    console.error('Error extracting cover and metadata:', error)
+    return { coverPath: null, metadata: {} }
   }
 }

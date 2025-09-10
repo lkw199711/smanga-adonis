@@ -163,7 +163,7 @@ export default class MediaController {
     paths.forEach((path) => { 
       addTask({
         taskName: `scan_path_${path.pathId}`,
-        command: 'scanPath',
+        command: 'taskScanPath',
         args: { pathId: path.pathId },
         priority: TaskPriority.scan
       })
