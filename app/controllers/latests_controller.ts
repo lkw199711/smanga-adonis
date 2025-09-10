@@ -54,7 +54,7 @@ export default class LatestsController {
   public async show({ request, params, response }: HttpContext) {
     const { userId } = request as any
     let { mangaId } = params
-    const latest = await prisma.latest.findFirst({
+    const latest: any = await prisma.latest.findFirst({
       where: {
         userId,
         mangaId,
@@ -77,10 +77,14 @@ export default class LatestsController {
     })
 
     const chapters = await prisma.chapter.findMany({
-      where: { mangaId, chapterId: { lte: latest?.chapterId || 0 } },
+      where: { mangaId },
       orderBy: { chapterNumber: 'asc' },
-      take: 5,
     })
+    const latestChapterIndex = chapters.findIndex((chapter) => chapter.chapterId === latest?.chapterId)
+    if (latestChapterIndex !== -1 && latestChapterIndex < chapters.length - 1) {
+      latest.nextChapter = chapters[latestChapterIndex + 1]
+    }
+
     const showResponse = new SResponse({ code: 0, message: '', data: latest })
     return response.json(showResponse)
   }
