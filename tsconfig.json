@@ -9,6 +9,8 @@
     "rootDir": "./",
     "outDir": "./build",
     "baseUrl": "./",
+    "sourceMap": true,
+    "inlineSources": true,
     "paths": {
       "#type/*": [
         "./app/type/*"
