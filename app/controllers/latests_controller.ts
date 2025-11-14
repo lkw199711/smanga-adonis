@@ -70,6 +70,8 @@ export default class LatestsController {
         },
         chapter: {
           select: {
+            chapterId: true,
+            chapterNumber: true,
             chapterName: true,
           },
         },

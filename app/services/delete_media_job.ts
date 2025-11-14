@@ -7,7 +7,7 @@
  */
 import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
-import { scanQueue } from '#services/queue_service'
+import { addTask, scanQueue } from '#services/queue_service'
 
 export default class DeleteMediaJob {
   private mediaId: number
@@ -27,12 +27,11 @@ export default class DeleteMediaJob {
     // 删除漫画
     const paths = await prisma.path.findMany({ where: { mediaId } })
     paths.forEach(async (path) => {
-      scanQueue.add({
-        taskName: `delete_path_${path.pathId}`,
-        command: 'deletePath',
-        args: { pathId: path.pathId }
-      }, {
-        priority: TaskPriority.delete
+      addTask({
+        taskName: `delete_paths_${mediaId}`,
+        command: 'deletePaths',
+        args: { pathId: path.pathId },
+        priority: TaskPriority.delete,
       })
     })
   }

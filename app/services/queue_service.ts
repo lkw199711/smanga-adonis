@@ -43,6 +43,7 @@ scanQueue.on('failed', (job, err) => {
     console.error(`Job failed: ${job.id} with error: ${err.message}`);
 });
 
+// 处理扫描任务
 scanQueue.process('scan', queueConfig.concurrency, async (job: any) => {
     const { command, args } = job.data;
 
@@ -125,6 +126,66 @@ scanQueue.process('sync', queueConfig.concurrency, async (job: any) => {
     }
 
     return true;
+});
+
+// 处理默认任务
+scanQueue.process(queueConfig.concurrency, async (job: any) => {
+    const { command, args } = job.data
+
+    switch (command) {
+      case 'taskScanPath':
+        //扫描任务调用
+        console.log('执行扫描任务')
+        await new ScanPathJob(args).run()
+        break
+      case 'taskScanManga':
+        console.log('执行扫描漫画任务')
+        //扫描漫画任务调用
+        await new ScanMangaJob(args).run()
+        break
+      case 'deleteMedia':
+        //删除媒体库
+        console.log('删除媒体库')
+        await new DeleteMediaJob(args).run()
+        break
+      case 'deletePath':
+        //删除路径
+        console.log('删除路径')
+        await new DeletePathJob(args).run()
+        break
+      case 'deleteManga':
+        //删除漫画
+        console.log('删除漫画')
+        await new DeleteMangaJob(args).run()
+        break
+      case 'deleteChapter':
+        //删除章节
+        console.log('删除章节')
+        await new DeleteChapterJob(args).run()
+        break
+      case 'copyPoster':
+        await new CopyPosterJob(args).run()
+        break
+      case 'compressChapter':
+        //压缩章节
+        console.log('压缩章节')
+        // await compress_chapter_job(args)
+        break
+      case 'createMediaPoster':
+        //生成媒体库封面
+        console.log('生成媒体库封面')
+        await new CreateMediaPosterJob(args).run()
+        break
+      case 'reloadMangaMeta':
+        //重新加载漫画元数据
+        console.log('重新加载漫画元数据')
+        await new ReloadMangaMetaJob(args).run()
+        break
+      default:
+        break
+    }
+
+    return true
 });
 
 const deleteQueue = new Bull('smanga', {

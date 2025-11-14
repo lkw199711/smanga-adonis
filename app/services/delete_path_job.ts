@@ -7,7 +7,7 @@
  */
 import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
-import { scanQueue } from '#services/queue_service'
+import { addTask, scanQueue } from '#services/queue_service'
 
 export default class DeletePathJob { 
   private pathId: number
@@ -28,13 +28,11 @@ export default class DeletePathJob {
     const mangas = await prisma.manga.findMany({ where: { pathId } })
     for (let index = 0; index < mangas.length; index++) {
       const manga = mangas[index];
-      scanQueue.add({
+      addTask({
         taskName: `delete_manga_${manga.mangaId}`,
         command: 'deleteManga',
-        args: { mangaId: manga.mangaId }
-      }, {
+        args: { mangaId: manga.mangaId },
         priority: TaskPriority.deleteManga,
-        timeout: 1000 * 60 * 1,
       })
     }
   }

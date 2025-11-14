@@ -723,8 +723,6 @@ export default class ScanMangaJob {
       const cachePoster = `${this.cachePath}/smanga_cache_${this.chapterRecord.chapterId}.jpg`
 
       if (this.chapterRecord.chapterType === 'zip') {
-        console.log('zip文件', dir, cachePoster);
-        
         hasPosterInZip = await extract_cover(dir, cachePoster)
         if (hasPosterInZip) {
           sourcePoster = cachePoster
