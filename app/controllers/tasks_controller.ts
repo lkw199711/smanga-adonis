@@ -1,14 +1,5 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-07-15 19:22:21
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-06 00:24:39
- * @FilePath: \smanga-adonis\app\controllers\tasks_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
-import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
-import { Prisma } from '@prisma/client'
 import { scanQueue } from '#services/queue_service'
 
 export default class TasksController {
@@ -45,6 +36,13 @@ export default class TasksController {
     }
 
     await job.remove()
+    return response.json(new SResponse({ code: 0, message: '任务已删除', status: 'success' }))
+  }
+
+  async destroy_batch({ params, response }: HttpContext) {
+    const { taskIds } = params
+    const taskIdsArray = taskIds.split(',')
+    scanQueue.removeJobs(taskIdsArray)
     return response.json(new SResponse({ code: 0, message: '任务已删除', status: 'success' }))
   }
 

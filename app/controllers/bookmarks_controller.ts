@@ -166,4 +166,35 @@ export default class BookmarksController {
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: bookmarkDelete })
     return response.json(destroyResponse)
   }
+
+  public async destroy_batch({ params, response }: HttpContext) {
+    let { bookmarkIds } = params
+    bookmarkIds = bookmarkIds.split(',')
+    const bookmarks = await prisma.bookmark.findMany({
+      where: {
+        bookmarkId: {
+          in: bookmarkIds.map((id) => Number(id))
+        }
+      }
+    })
+
+    // 删除书签文件
+    bookmarks.forEach(bookmark => {
+      // 删除书签文件
+      if (bookmark.pageImage && /smanga_bookmark/.test(bookmark.pageImage)) {
+        s_delete(bookmark.pageImage)
+      }
+    })
+
+    const deleteResponse = await prisma.bookmark.deleteMany({
+      where: {
+        bookmarkId: {
+          in: bookmarkIds.map((id) => Number(id))
+        }
+      }
+    })
+
+    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: deleteResponse })
+    return response.json(destroyResponse)
+  }
 }

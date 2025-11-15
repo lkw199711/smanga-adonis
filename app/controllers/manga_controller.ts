@@ -1,6 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '#interfaces/response'
+import { ListResponse, SResponse, SResponseCode } from '#interfaces/response'
 import { Prisma } from '@prisma/client'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
@@ -125,7 +125,11 @@ export default class MangaController {
           include: { tag: true },
         },
         media: {
-          select: { sourceWebsite: true },
+          select: {
+            sourceWebsite: true,
+            mediaName: true,
+            mediaId: true,
+           },
         }
       },
     })
@@ -180,6 +184,27 @@ export default class MangaController {
     })
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: manga })
+    return response.json(destroyResponse)
+  }
+
+  public async destroy_batch({ request, response }: HttpContext) {
+    const { mangaIds } = request.only(['mangaIds'])
+    if (!mangaIds || !mangaIds.length) {
+      return response.status(400).json(new SResponse({ code: SResponseCode.Failed, message: '请选择要删除的漫画' }))
+    }
+
+    for (const mangaId of mangaIds) {
+      const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
+      addTask({
+        taskName: `delete_manga_${manga.mangaId}`,
+        command: 'deleteManga',
+        args: { mangaId: manga.mangaId },
+        priority: TaskPriority.deleteManga,
+        timeout: 1000 * 60 * 10,
+      })
+    }
+
+    const destroyResponse = new SResponse({ code: SResponseCode.Success, message: '删除成功', data: mangaIds })
     return response.json(destroyResponse)
   }
 

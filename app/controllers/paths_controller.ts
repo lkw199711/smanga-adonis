@@ -116,6 +116,31 @@ export default class PathsController {
     return response.json(destroyResponse)
   }
 
+  public async destroy_batch({ params, response }: HttpContext) {
+    let { pathIds } = params
+    pathIds = pathIds.split(',')
+    const paths = await prisma.path.updateMany({
+      where: {
+        pathId: {
+          in: pathIds.map((id) => Number(id))
+        }
+      },
+      data: { deleteFlag: 1 }
+    })
+
+    pathIds.forEach(id => {
+      addTask({
+        taskName: `delete_path_${id}`,
+        command: 'deletePath',
+        args: { pathId: Number(id) },
+        priority: TaskPriority.delete
+      })
+    })    
+
+    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: paths })
+    return response.json(destroyResponse)
+  }
+
   public async scan({ params, response }: HttpContext) {
     let { pathId } = params
 

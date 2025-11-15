@@ -1,12 +1,3 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-05-07 20:08:19
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-05-09 11:41:17
- * @FilePath: \smanga-node\src\interfaces\response.interface.ts
- * @Description: 公用返回格式
- */
-
 /**
  * @description: 公共返回格式
  * @return {*}
@@ -18,7 +9,14 @@ export interface ResponseInterface {
   error?: any
 }
 
+// code枚举值
+export enum SResponseCode {
+  Success = 0,
+  Failed = 1,
+}
+
 export class SResponse implements ResponseInterface {
+  // 0: 成功 1: 失败
   code: number
   message: string
   data?: any

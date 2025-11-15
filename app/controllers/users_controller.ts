@@ -1,10 +1,3 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-06-20 20:33:01
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-17 14:43:16
- * @FilePath: \smanga-adonis\app\controllers\users_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'

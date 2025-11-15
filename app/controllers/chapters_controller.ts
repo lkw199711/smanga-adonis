@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-14 20:28:00
- * @FilePath: \smanga-adonis\app\controllers\chapters_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
@@ -304,6 +297,31 @@ export default class ChaptersController {
     })
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapter })
+    return response.json(destroyResponse)
+  }
+
+  public async destroy_batch({ params, response }: HttpContext) {
+    let { chapterIds } = params
+    chapterIds = chapterIds.split(',')
+    const chapters = await prisma.chapter.updateMany({
+      where: {
+        chapterId: {
+          in: chapterIds.map((id) => Number(id))
+        }
+      },
+      data: { deleteFlag: 1 }
+    })
+
+    chapterIds.forEach(id => {
+      addTask({
+        taskName: `delete_chapter_${id}`,
+        command: 'deleteChapter',
+        args: { chapterId: Number(id) },
+        priority: TaskPriority.deleteManga
+      })
+    })    
+
+    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapters })
     return response.json(destroyResponse)
   }
 

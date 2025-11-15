@@ -54,6 +54,7 @@ router.get('/test/zip2', [TestsController, 'zip2'])
 
 
 router.any('/image', [ImagesController, 'index'])
+router.post('/image/upload', [ImagesController, 'upload'])
 
 // 部署
 router.get('/deploy/database-get', [DeploysController, 'database_get'])
@@ -79,6 +80,7 @@ router.get('/bookmark/:bookmarkId', [BookmarksController, 'show'])
 router.post('/bookmark', [BookmarksController, 'create'])
 router.put('/bookmark/:bookmarkId', [BookmarksController, 'update'])
 router.delete('/bookmark/:bookmarkId', [BookmarksController, 'destroy'])
+router.delete('/bookmark/:bookmarkIds/batch', [BookmarksController, 'destroy_batch'])
 
 // 压缩模块 compress
 router.get('/compress', [CompressesController, 'index'])
@@ -86,6 +88,9 @@ router.get('/compress/:compressId', [CompressesController, 'show'])
 router.post('/compress', [CompressesController, 'create'])
 router.put('/compress/:compressId', [CompressesController, 'update'])
 router.delete('/compress/:compressId', [CompressesController, 'destroy'])
+router.delete('/compress/:compressIds/batch', [CompressesController, 'destroy_batch'])
+
+
 
 // 历史记录模块 history
 router.get('/history', [HistoriesController, 'index'])
@@ -123,6 +128,7 @@ router.get('/task', [TasksController, 'select'])
 router.get('/task/:taskId', [TasksController, 'show'])
 router.delete('/task/:taskId', [TasksController, 'destroy'])
 router.delete('/task', [TasksController, 'destroy_all'])
+router.delete('/task/:taskIds/batch', [TasksController, 'destroy_batch'])
 
 // 媒体库
 router.get('/media', [MediaController, 'index'])
@@ -130,6 +136,7 @@ router.get('/media/:mediaId', [MediaController, 'show'])
 router.post('/media', [MediaController, 'create'])
 router.put('/media/:mediaId', [MediaController, 'update'])
 router.delete('/media/:mediaId', [MediaController, 'destroy'])
+router.delete('/media/:mediaIds/batch', [MediaController, 'destroy_batch'])
 router.put('/media-cover/:mediaId', [MediaController, 'poster'])
 router.put('/media/:mediaId/scan', [MediaController, 'scan'])
 
@@ -139,6 +146,7 @@ router.get('/path/:pathId', [PathsController, 'show'])
 router.post('/path', [PathsController, 'create'])
 router.put('/path/:pathId', [PathsController, 'update'])
 router.delete('/path/:pathId', [PathsController, 'destroy'])
+router.delete('/path/:pathIds/batch', [PathsController, 'destroy_batch'])
 router.put('/path/scan/:pathId', [PathsController, 'scan'])
 router.put('/path/:pathId/rescan', [PathsController, 're_scan'])
 
@@ -148,6 +156,8 @@ router.get('/tag/:tagId', [TagsController, 'show'])
 router.post('/tag', [TagsController, 'create'])
 router.put('/tag/:tagId', [TagsController, 'update'])
 router.delete('/tag/:tagId', [TagsController, 'destroy'])
+router.delete('/tag/:tagIds/batch', [TagsController, 'destroy_batch'])
+
 
 router.get('/manga-tag/:mangaId', [TagsController, 'manga_tags'])
 router.post('/manga-tag', [MangaTagController, 'create'])
@@ -161,6 +171,7 @@ router.get('/manga/:mangaId', [MangaController, 'show'])
 router.post('/manga', [MangaController, 'create'])
 router.put('/manga/:mangaId', [MangaController, 'update'])
 router.delete('/manga/:mangaId', [MangaController, 'destroy'])
+router.delete('/manga/:mangaIds/batch', [MangaController, 'destroy_batch'])
 router.put('/manga/:mangaId/scan', [MangaController, 'scan'])
 router.put('/manga/:mangaId/reload-meta', [MangaController, 'reload_meta'])
 router.put('/manga/:mangaId/meta', [MangaController, 'edit_meta'])
@@ -172,6 +183,7 @@ router.get('/chapter/:chapterId', [chaptersController, 'show'])
 router.post('/chapter', [chaptersController, 'create'])
 router.put('/chapter/:chapterId', [chaptersController, 'update'])
 router.delete('/chapter/:chapterId', [chaptersController, 'destroy'])
+router.delete('/chapter/:chapterIds/batch', [chaptersController, 'destroy_batch'])
 router.get('/chapter-images/:chapterId', [chaptersController, 'images'])
 router.get('/chapter-first', [chaptersController, 'first'])
 
@@ -198,6 +210,7 @@ router.get('/share/:shareId', [SharesController, 'show'])
 router.post('/share', [SharesController, 'create'])
 router.put('/share/:shareId', [SharesController, 'update'])
 router.delete('/share/:shareId', [SharesController, 'destroy'])
+router.delete('/share/:shareIds/batch', [SharesController, 'destroy_batch'])
 router.get('/analysis', [SharesController, 'analysis'])
 router.get('/analysis/chapters', [SharesController, 'analysis_chapters'])
 router.get('/analysis/mangas', [SharesController, 'analysis_mangas'])
@@ -208,6 +221,7 @@ router.get('/sync', [SyncsController, 'select'])
 router.post('/sync', [SyncsController, 'create'])
 router.put('/sync/:syncId', [SyncsController, 'update'])
 router.delete('/sync/:syncId', [SyncsController, 'destroy'])
+router.delete('/sync/:syncIds/batch', [SyncsController, 'destroy_batch'])
 router.post('/sync/execute/:syncId', [SyncsController, 'execute'])
 
 // 配置信息

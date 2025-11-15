@@ -1,13 +1,7 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-08-06 00:20:22
- * @FilePath: \smanga-adonis\app\controllers\compresses_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
+import { s_delete } from '#utils/index'
 
 export default class CompressesController {
   public async index({ request, response }: HttpContext) {
@@ -102,7 +96,40 @@ export default class CompressesController {
     let { compressId } = params
     compressId = Number(compressId)
     const compress = await prisma.compress.delete({ where: { compressId } })
+    const compressPath = compress.compressPath
+    // 删除文件
+    await s_delete(compressPath)
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: compress })
+    return response.json(destroyResponse)
+  }
+
+  // 批量删除
+  public async destroy_batch({ params, response }: HttpContext) {
+    let { compressIds } = params
+    compressIds = compressIds.split(',').map((item: string) => Number(item))
+    const compresses = await prisma.compress.findMany({
+      where: {
+        compressId: {
+          in: compressIds,
+        },
+      },
+    })
+    
+    // 删除数据库记录
+    const deleteResponse = await prisma.compress.deleteMany({
+      where: {
+        compressId: {
+          in: compressIds,
+        },
+      },
+    })
+    
+    // 删除文件
+    for (const compress of compresses) {
+      await s_delete(compress.compressPath)
+    }
+
+    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: deleteResponse })
     return response.json(destroyResponse)
   }
 }

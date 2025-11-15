@@ -102,6 +102,19 @@ export default class SharesController {
         return response.json(new SResponse({ code: 0, message: '分享已删除', status: 'success' }))
     }
 
+    async destroy_batch({ params, response }: HttpContext) {
+        const { shareIds } = params
+        const shareIdsArray = shareIds.split(',')
+        await prisma.share.deleteMany({
+            where: {
+                shareId: {
+                    in: shareIdsArray
+                }
+            }
+        })
+        return response.json(new SResponse({ code: 0, message: '分享已删除', status: 'success' }))
+    }
+
     async analysis({ request, response }: HttpContext) {
         const { secret, mangaId, chapterId } = request.only(['secret', 'mangaId', 'chapterId'])
         let media: mediaType & { mangaCount?: number } | null | void = null;

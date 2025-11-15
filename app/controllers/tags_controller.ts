@@ -90,6 +90,29 @@ export default class TagsController {
     return response.json(destroyResponse)
   }
 
+  // 批量删除
+  public async destroy_batch({ params, response }: HttpContext) {
+    let { tagIds } = params
+    tagIds = tagIds.split(',').map((item: string) => Number(item))
+    // 删除关联数据
+    await prisma.mangaTag.deleteMany({
+      where: {
+        tagId: {
+          in: tagIds,
+        },
+      },
+    })
+    const deleteResponse = await prisma.tag.deleteMany({
+      where: {
+        tagId: {
+          in: tagIds,
+        },
+      },
+    })
+    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: deleteResponse })
+    return response.json(destroyResponse)
+  }
+
   public async manga_tags({ params, response }: HttpContext) {
     const { mangaId } = params
     const mangaTags = await prisma.mangaTag.findMany({

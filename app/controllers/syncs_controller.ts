@@ -3,7 +3,6 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
 import { addTask } from '#services/queue_service'
 import { TaskPriority } from '#type/index'
-import { download_file } from '#utils/api'
 import * as fs from 'fs'
 
 export default class SyncsController {
@@ -177,5 +176,18 @@ export default class SyncsController {
         }
 
         return response.json(new SResponse({ code: 0, message: '同步记录删除成功', data: sync }))
+    }
+
+    async destroy_batch({ params, response }: HttpContext) {
+        const { syncIds } = params
+        const syncIdsArray = syncIds.split(',')
+        await prisma.sync.deleteMany({
+            where: {
+                syncId: {
+                    in: syncIdsArray
+                }
+            }
+        })
+        return response.json(new SResponse({ code: 0, message: '同步记录删除成功', status: 'success' }))
     }
 }

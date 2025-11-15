@@ -1,6 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '#interfaces/response'
+import { ListResponse, SResponse, SResponseCode } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import CreateMediaPosterJob from '#services/create_media_poster_job'
@@ -117,6 +117,7 @@ export default class MediaController {
       'directoryFormat',
       'mediaName',
       'mediaType',
+      'mediaCover',
       'removeFirst',
       'sourceWebsite',
     ])
@@ -136,21 +137,48 @@ export default class MediaController {
       taskName: `delete_media_${media.mediaId}`,
       command: 'deleteMedia',
       args: { mediaId: media.mediaId },
-      priority: TaskPriority.deleteManga
+      priority: TaskPriority.deleteManga,
     })
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: media })
     return response.json(destroyResponse)
   }
 
+  public async destroy_batch({ request, response }: HttpContext) {
+    const { mediaIds } = request.only(['mediaIds'])
+    if (!mediaIds || !mediaIds.length) {
+      return response.status(400).json(new SResponse({ code: SResponseCode.Failed, message: '请选择要删除的媒体库' }))
+    }
+
+    for (const mediaId of mediaIds) {
+      const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
+
+      addTask({
+        taskName: `delete_media_${media.mediaId}`,
+        command: 'deleteMedia',
+        args: { mediaId: media.mediaId },
+        priority: TaskPriority.deleteManga,
+      })
+    }
+
+    const destroyResponse = new SResponse({ code: SResponseCode.Success, message: '删除成功' })
+    return response.json(destroyResponse)
+  }
+
   public async poster({ params, response }: HttpContext) {
     const { mediaId } = params
     const posterFile = await new CreateMediaPosterJob({ mediaId: Number(mediaId) }).run()
-    const posterResponse = new SResponse({ code: 0, message: '生成成功', data: posterFile })
+    const posterResponse = new SResponse({
+      code: SResponseCode.Success,
+      message: '生成成功',
+      data: posterFile,
+    })
     if (posterResponse) {
       return response.json(posterResponse)
     } else {
-      return response.status(500).json(new SResponse({ code: 1, message: '生成封面失败' }))
+      return response
+        .status(500)
+        .json(new SResponse({ code: SResponseCode.Failed, message: '生成封面失败' }))
     }
   }
 
@@ -160,15 +188,15 @@ export default class MediaController {
       where: { mediaId: Number(mediaId), deleteFlag: 0 },
     })
 
-    paths.forEach((path) => { 
+    paths.forEach((path) => {
       addTask({
         taskName: `scan_path_${path.pathId}`,
         command: 'taskScanPath',
         args: { pathId: path.pathId },
-        priority: TaskPriority.scan
+        priority: TaskPriority.scan,
       })
     })
-    
+
     const scanResponse = new SResponse({ code: 0, message: '已加入扫描队列' })
     return response.json(scanResponse)
   }

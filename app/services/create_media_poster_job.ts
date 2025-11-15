@@ -35,7 +35,7 @@ export default class CreateMediaPosterJob {
     this.mangaCovers = mangas
       .filter(manga => fs.existsSync(manga.mangaCover || ''))
       .map(manga => manga.mangaCover) as string[] // 图片路径
-    this.outputPath = path.join(path_poster(), `smanga-media-${this.mediaId}.jpg`) // 合并后的图片路径
+    this.outputPath = path.join(path_poster(), `smanga_media_${this.mediaId}.jpg`) // 合并后的图片路径
     // 生成封面
     const images: Buffer[] = []
     for (let i = 0; i < this.mangaCovers.length; i++) {
