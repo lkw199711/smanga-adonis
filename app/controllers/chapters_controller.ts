@@ -38,7 +38,7 @@ export default class ChaptersController {
 
     if (!isAdmin) {
       const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
-      if (!mediaIds.includes(mediaId)) {
+      if (!mediaIds.includes(Number(mediaId))) {
         return response
           .status(403)
           .json(new SResponse({ code: 403, message: '没有权限访问', status: 'token error' }))
@@ -100,15 +100,7 @@ export default class ChaptersController {
   }
 
   // 分页
-  private async paginate({
-    mangaId,
-    mediaId,
-    page,
-    pageSize,
-    keyWord,
-    order,
-    userId,
-  }: any) {
+  private async paginate({ mangaId, mediaId, page, pageSize, keyWord, order, userId }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -320,13 +312,13 @@ export default class ChaptersController {
     const chapters = await prisma.chapter.updateMany({
       where: {
         chapterId: {
-          in: chapterIds.map((id) => Number(id)),
+          in: chapterIds.map((id: any) => Number(id)),
         },
       },
       data: { deleteFlag: 1 },
     })
 
-    chapterIds.forEach((id) => {
+    chapterIds.forEach((id: any) => {
       addTask({
         taskName: `delete_chapter_${id}`,
         command: 'deleteChapter',
