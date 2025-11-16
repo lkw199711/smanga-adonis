@@ -2,7 +2,15 @@ import * as fs from 'fs'
 import * as path from 'path'
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
-import { path_poster, path_cache, is_img, get_config, first_image, is_directory, extensions } from '#utils/index'
+import {
+  path_poster,
+  path_cache,
+  is_img,
+  get_config,
+  first_image,
+  is_directory,
+  extensions,
+} from '#utils/index'
 import { S } from '../utils/convertText.js'
 import { extract_cover, extract_metadata, extractFirstImageSyncOrder } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
@@ -31,7 +39,19 @@ export default class ScanMangaJob {
   private ignoreHiddenFiles: boolean
   private tagColor: string
 
-  constructor({ pathId, mangaPath, mangaName, parentPath }: { pathId: number, pathInfo: any, mediaInfo: any, mangaPath: string, mangaName: string, parentPath: string }) {
+  constructor({
+    pathId,
+    mangaPath,
+    mangaName,
+    parentPath,
+  }: {
+    pathId: number
+    pathInfo: any
+    mediaInfo: any
+    mangaPath: string
+    mangaName: string
+    parentPath: string
+  }) {
     this.pathId = pathId
     this.mangaPath = mangaPath
     this.mangaName = mangaName
@@ -44,7 +64,11 @@ export default class ScanMangaJob {
 
   async run() {
     const pathId = this.pathId
-    this.pathInfo = await prisma.path.findUnique({ where: { pathId }, include: { media: true } }).catch(async (e) => { await error_log(logModule, e.message) })
+    this.pathInfo = await prisma.path
+      .findUnique({ where: { pathId }, include: { media: true } })
+      .catch(async (e) => {
+        await error_log(logModule, e.message)
+      })
     this.mediaInfo = this.pathInfo?.media
     const mangaPath = this.mangaPath
     const mangaName = this.mangaName
@@ -64,7 +88,11 @@ export default class ScanMangaJob {
     this.cachePath = path_cache()
 
     // 更新路径扫描时间
-    await prisma.path.update({ where: { pathId }, data: { lastScanTime: new Date() } }).catch(async (e) => { await error_log(logModule, e.message) })
+    await prisma.path
+      .update({ where: { pathId }, data: { lastScanTime: new Date() } })
+      .catch(async (e) => {
+        await error_log(logModule, e.message)
+      })
 
     let mangaInsert: Prisma.mangaCreateInput
 
@@ -116,7 +144,7 @@ export default class ScanMangaJob {
             data: { deleteFlag: 0 },
           })
         }
-        return;
+        return
       }
 
       mangaInsert.chapterCount = 1
@@ -170,7 +198,7 @@ export default class ScanMangaJob {
         mangaId: this.mangaRecord.mangaId,
         mangaName: this.mangaRecord.mangaName,
         newChapters: 1,
-      });
+      })
     } else {
       /**
        * 当漫画类型为连载漫画
@@ -192,6 +220,14 @@ export default class ScanMangaJob {
         chapterListSql = await prisma.chapter.findMany({
           where: { mangaId: this.mangaRecord.mangaId },
         })
+
+        // 更新章节数量
+        if (this.mangaRecord.chapterCount !== chapterList.length) {
+          await prisma.manga.update({
+            where: { mangaId: this.mangaRecord.mangaId },
+            data: { chapterCount: chapterList.length },
+          })
+        }
       } else {
         // 库中不存在则新增
         mangaInsert.chapterCount = chapterList.length
@@ -217,7 +253,7 @@ export default class ScanMangaJob {
           return !chapterListSql.some((sqlItem: any) => sqlItem.chapterName === item.chapterName)
         })
         for (let index = 0; index < newChapterList.length; index++) {
-          const item = newChapterList[index];
+          const item = newChapterList[index]
           // 将标题繁简体转换后写入副标题,用于检索
           const sName = S.t2s(item.chapterName)
           const tName = S.s2t(item.chapterName)
@@ -247,7 +283,7 @@ export default class ScanMangaJob {
             this.chapterRecord = await prisma.chapter.create({ data: chapterInsert })
           } catch (e) {
             console.log('章节插入失败', item.chapterName)
-            console.log(e);
+            console.log(e)
 
             return
           }
@@ -265,15 +301,14 @@ export default class ScanMangaJob {
         await prisma.manga.update({
           data: { updateTime: new Date() },
           where: { mangaId: this.mangaRecord.mangaId },
-        });
+        })
 
         // 讲漫画扫描成果写入日志
         await insert_manga_scan_log({
           mangaId: this.mangaRecord.mangaId,
           mangaName: this.mangaRecord.mangaName,
           newChapters: newChapterList.length,
-        });
-
+        })
       } else if (chapterList.length === chapterListSql.length) {
         /**
          *  无变更
@@ -283,7 +318,6 @@ export default class ScanMangaJob {
           newChapters: 0,
         });
          */
-
       } else {
         // 删除章节
         const delChapterList = chapterListSql.filter((item: any) => {
@@ -291,7 +325,7 @@ export default class ScanMangaJob {
         })
 
         for (let index = 0; index < delChapterList.length; index++) {
-          const element = delChapterList[index];
+          const element = delChapterList[index]
           await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
         }
 
@@ -300,7 +334,7 @@ export default class ScanMangaJob {
           mangaId: this.mangaRecord.mangaId,
           mangaName: this.mangaRecord.mangaName,
           newChapters: delChapterList.length * -1,
-        });
+        })
       }
 
       const wattingJobs = await scanQueue.getWaiting()
@@ -321,12 +355,15 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 
+   *
    * @param recasn 是否重新扫描元数据
-   * @returns 
+   * @returns
    */
   async meta_scan() {
-    const dirOutExt = this.mangaRecord.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
+    const dirOutExt = this.mangaRecord.mangaPath.replace(
+      /(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i,
+      ''
+    )
     const dirMeta = dirOutExt + '-smanga-info'
 
     // 没有元数据文件
@@ -340,9 +377,9 @@ export default class ScanMangaJob {
     const cahracterPics: string[] = []
 
     for (let index = 0; index < metaFiles.length; index++) {
-      const file = metaFiles[index];
+      const file = metaFiles[index]
       const filePath = path.join(dirMeta, file)
-      if (!is_img(file)) continue;
+      if (!is_img(file)) continue
       if (/banner/i.test(file)) {
         await prisma.meta.create({
           data: {
@@ -387,7 +424,7 @@ export default class ScanMangaJob {
     const infoFile = path.join(dirMeta, 'info.json')
     const metaFile = path.join(dirMeta, 'meta.json')
     // 为兼容老的元数据文件 允许文件名为info
-    let targetMetaFile = '';
+    let targetMetaFile = ''
     if (fs.existsSync(infoFile)) {
       targetMetaFile = infoFile
     } else if (fs.existsSync(metaFile)) {
@@ -401,7 +438,7 @@ export default class ScanMangaJob {
       // 一般性元数据
       const keys = Object.keys(info)
       for (let index = 0; index < keys.length; index++) {
-        const key = keys[index];
+        const key = keys[index]
         const value = info[key]
         if (Object.keys(metaKeyType).includes(key)) {
           try {
@@ -417,7 +454,7 @@ export default class ScanMangaJob {
               },
             })
           } catch (e) {
-            console.log(e);
+            console.log(e)
           }
         }
       }
@@ -429,7 +466,7 @@ export default class ScanMangaJob {
       // 插入角色
       const characters = info?.character || []
       for (let index = 0; index < characters.length; index++) {
-        const char = characters[index];
+        const char = characters[index]
         // 同漫画内角色名唯一
         let charRecord = await prisma.meta.findFirst({
           where: { metaContent: char.name, mangaId: this.mangaRecord.mangaId },
@@ -456,8 +493,8 @@ export default class ScanMangaJob {
       // 更新章节顺序
       const chapters = info?.chapters || []
       for (let index = 0; index < chapters.length; index++) {
-        const chapter: any = chapters[index];
-        const title = chapter.title || chapter.name;
+        const chapter: any = chapters[index]
+        const title = chapter.title || chapter.name
         await prisma.chapter.updateMany({
           where: {
             mangaId: this.mangaRecord.mangaId,
@@ -473,55 +510,56 @@ export default class ScanMangaJob {
 
   /**
    * 扫描 series.json 元数据
-   * @returns 
+   * @returns
    */
   async meta_scan_series() {
     const mangaPath = this.mangaRecord.mangaPath
-    if (!is_directory(mangaPath)) return;
+    if (!is_directory(mangaPath)) return
 
-    const fils = fs.readdirSync(mangaPath);
-    const series = fils.find(file => file === 'series.json');
-    if (!series) return;
+    const fils = fs.readdirSync(mangaPath)
+    const series = fils.find((file) => file === 'series.json')
+    if (!series) return
 
     // 删除原有的元数据
     await this.clear_manga_meta()
 
-    const seriesFile = path.join(mangaPath, series);
+    const seriesFile = path.join(mangaPath, series)
     const rawData = fs.readFileSync(seriesFile, 'utf-8')
     const jsonParse = JSON.parse(rawData)
     this.meta = jsonParse?.metadata ? jsonParse.metadata : jsonParse
 
     if (this.meta?.tags) {
-      const tags: string[] = typeof this.meta.tags === 'string' ? this.meta.tags.split(',') : this.meta.tags
+      const tags: string[] =
+        typeof this.meta.tags === 'string' ? this.meta.tags.split(',') : this.meta.tags
       await this.tag_insert(tags)
     }
 
     if (this.meta?.authors) {
-      await this.prisma_meta_insert('author', this.meta.authors);
+      await this.prisma_meta_insert('author', this.meta.authors)
     }
 
     if (this.meta?.name) {
-      await this.prisma_meta_insert('title', this.meta.name);
+      await this.prisma_meta_insert('title', this.meta.name)
     }
 
     if (this.meta?.alias) {
-      await this.prisma_meta_insert('subTitle', this.meta.alias);
+      await this.prisma_meta_insert('subTitle', this.meta.alias)
     }
 
     if (this.meta?.description_text) {
-      await this.prisma_meta_insert('describe', this.meta.description_text);
+      await this.prisma_meta_insert('describe', this.meta.description_text)
     }
 
     if (this.meta?.year) {
-      await this.prisma_meta_insert(metaKeyType.publishDate, String(this.meta.year));
+      await this.prisma_meta_insert(metaKeyType.publishDate, String(this.meta.year))
     }
 
     if (this.meta?.publisher) {
-      await this.prisma_meta_insert(metaKeyType.publisher, this.meta.publisher);
+      await this.prisma_meta_insert(metaKeyType.publisher, this.meta.publisher)
     }
 
     if (this.meta?.status) {
-      await this.prisma_meta_insert(metaKeyType.status, this.meta.status);
+      await this.prisma_meta_insert(metaKeyType.status, this.meta.status)
     }
   }
 
@@ -604,7 +642,7 @@ export default class ScanMangaJob {
         },
         metaName: key,
         metaContent: value,
-      }
+      },
     })
   }
 
@@ -744,7 +782,12 @@ export default class ScanMangaJob {
     }
 
     // 不复制封面,直接使用源文件
-    if (!hasPosterInZip && sourcePoster && doNotCopyCover && fs.statSync(sourcePoster).size <= maxSizeKB * 1024) {
+    if (
+      !hasPosterInZip &&
+      sourcePoster &&
+      doNotCopyCover &&
+      fs.statSync(sourcePoster).size <= maxSizeKB * 1024
+    ) {
       await prisma.chapter.update({
         where: { chapterId: this.chapterRecord.chapterId },
         data: { chapterCover: sourcePoster },
@@ -790,7 +833,7 @@ export default class ScanMangaJob {
         inputPath: sourcePoster,
         outputPath: posterName,
         maxSizeKB,
-        chapterRecord: this.chapterRecord
+        chapterRecord: this.chapterRecord,
       }
 
       await addTask({
@@ -865,7 +908,7 @@ export default class ScanMangaJob {
         inputPath: sourcePoster,
         outputPath: posterName,
         maxSizeKB,
-        mangaRecord: this.mangaRecord
+        mangaRecord: this.mangaRecord,
       }
 
       await addTask({
@@ -889,17 +932,17 @@ export default class ScanMangaJob {
   }
 
   /**
-     * 扫描comicinfo元数据
-     * @returns 
-     */
+   * 扫描comicinfo元数据
+   * @returns
+   */
   async meta_scan_comicinfo() {
     if (this.chapterRecord.chapterType !== 'zip') {
-      return;
+      return
     }
 
     const comicinfo = await extract_metadata(this.chapterRecord.chapterPath)
 
-    if (!comicinfo) return;
+    if (!comicinfo) return
 
     // 删除原有的元数据
     await this.clear_chapter_meta()
@@ -910,15 +953,15 @@ export default class ScanMangaJob {
   }
 
   /**
-     * 插入元数据
-     * @param meta 
-     * @param insertChapter 
-     */
+   * 插入元数据
+   * @param meta
+   * @param insertChapter
+   */
   async insert_meta(meta: any) {
-    const insertData = [];
+    const insertData = []
 
     for (const key in meta) {
-      const value = meta[key];
+      const value = meta[key]
       insertData.push({
         mangaId: this.mangaRecord.mangaId,
         chapterId: this.chapterRecord.chapterId,
@@ -928,7 +971,7 @@ export default class ScanMangaJob {
     }
 
     await prisma.meta.createMany({
-      data: insertData
+      data: insertData,
     })
   }
 
@@ -1005,10 +1048,14 @@ export default class ScanMangaJob {
   }
 
   chapter_index(chapterName: string) {
-    if (!this.meta?.chapters) return this.chapter_number(chapterName);
+    if (!this.meta?.chapters) return this.chapter_number(chapterName)
 
-    const chapterIndex = this.meta.chapters.findIndex((chapter: any) => [chapter?.chapterName, chapter?.name, chapter.title].includes(chapterName));
+    const chapterIndex = this.meta.chapters.findIndex((chapter: any) =>
+      [chapter?.chapterName, chapter?.name, chapter.title].includes(chapterName)
+    )
 
-    return chapterIndex === -1 ? this.chapter_number(chapterName) : chapterIndex.toString().padStart(5, '0');
+    return chapterIndex === -1
+      ? this.chapter_number(chapterName)
+      : chapterIndex.toString().padStart(5, '0')
   }
 }
