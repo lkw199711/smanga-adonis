@@ -36,6 +36,15 @@ export default class ChaptersController {
         select: { mediaId: true },
       })) || []
 
+    if (!isAdmin) {
+      const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
+      if (!mediaIds.includes(mediaId)) {
+        return response
+          .status(403)
+          .json(new SResponse({ code: 403, message: '没有权限访问', status: 'token error' }))
+      }
+    }
+
     let listResponse = null
     if (page) {
       listResponse = await this.paginate({
@@ -45,9 +54,7 @@ export default class ChaptersController {
         pageSize,
         keyWord,
         order,
-        isAdmin,
-        mediaPermissons,
-        userId
+        userId,
       })
     } else {
       listResponse = await this.no_paginate({ mangaId, mediaId, order, userId })
@@ -74,14 +81,14 @@ export default class ChaptersController {
         },
       },
       orderBy: {
-        ...(order && order_params(order))
+        ...(order && order_params(order)),
       },
     }
 
     const list = await prisma.chapter.findMany(queryParams)
 
     list.forEach((chapter: any) => {
-      chapter.latest = chapter.latests?.length ? chapter.latests[0] : null;
+      chapter.latest = chapter.latests?.length ? chapter.latests[0] : null
     })
 
     return new ListResponse({
@@ -93,7 +100,15 @@ export default class ChaptersController {
   }
 
   // 分页
-  private async paginate({ mangaId, mediaId, page, pageSize, keyWord, order, isAdmin, mediaPermissons, userId }: any) {
+  private async paginate({
+    mangaId,
+    mediaId,
+    page,
+    pageSize,
+    keyWord,
+    order,
+    userId,
+  }: any) {
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -108,7 +123,6 @@ export default class ChaptersController {
         }),
         ...(keyWord && { subTitle: { contains: keyWord } }),
         deleteFlag: 0,
-        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
       },
       include: {
         latests: {
@@ -119,8 +133,8 @@ export default class ChaptersController {
             browseType: true,
             removeFirst: true,
             direction: true,
-          }
-        }
+          },
+        },
       },
       orderBy: { ...(order && order_params(order)) },
     }
@@ -131,7 +145,7 @@ export default class ChaptersController {
     ])
 
     list.forEach((chapter: any) => {
-      chapter.latest = chapter.latests?.length ? chapter.latests[0] : null;
+      chapter.latest = chapter.latests?.length ? chapter.latests[0] : null
       chapter = {
         ...chapter,
         ...chapter.manga,
@@ -175,7 +189,7 @@ export default class ChaptersController {
     }
 
     let images: string[] = []
-    let imagesResponse: SResponse;
+    let imagesResponse: SResponse
     // 查询解压记录
     let compress: any = await prisma.compress.findUnique({ where: { chapterId: chapterId } })
     const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
@@ -293,7 +307,7 @@ export default class ChaptersController {
       taskName: `delete_chapter_${chapter.chapterId}`,
       command: 'deleteChapter',
       args: { chapterId: chapter.chapterId },
-      priority: TaskPriority.deleteManga
+      priority: TaskPriority.deleteManga,
     })
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapter })
@@ -306,20 +320,20 @@ export default class ChaptersController {
     const chapters = await prisma.chapter.updateMany({
       where: {
         chapterId: {
-          in: chapterIds.map((id) => Number(id))
-        }
+          in: chapterIds.map((id) => Number(id)),
+        },
       },
-      data: { deleteFlag: 1 }
+      data: { deleteFlag: 1 },
     })
 
-    chapterIds.forEach(id => {
+    chapterIds.forEach((id) => {
       addTask({
         taskName: `delete_chapter_${id}`,
         command: 'deleteChapter',
         args: { chapterId: Number(id) },
-        priority: TaskPriority.deleteManga
+        priority: TaskPriority.deleteManga,
       })
-    })    
+    })
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapters })
     return response.json(destroyResponse)
@@ -343,7 +357,10 @@ export default class ChaptersController {
       return response.json(imagesResponse)
     } else {
       const fileName = path.basename(chapter.chapterPath)
-      response.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`)
+      response.header(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(fileName)}"`
+      )
 
       // 设置文件的MIME类型，这里假设你要返回ZIP文件
       response.header('Content-Type', 'application/octet-stream')
