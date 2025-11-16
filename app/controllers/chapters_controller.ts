@@ -13,7 +13,7 @@ import { addTask } from '#services/queue_service'
 
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
-    const { mangaId, mediaId, page, pageSize, order, keyWord } = request.only([
+    const { mangaId, page, pageSize, order, keyWord } = request.only([
       'page',
       'pageSize',
       'mangaId',
@@ -23,6 +23,13 @@ export default class ChaptersController {
     ])
 
     const userId = (request as any).userId
+    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    if (!manga) {
+      return response
+        .status(404)
+        .json(new SResponse({ code: 404, message: '漫画不存在', status: 'token error' }))
+    }
+    const mediaId = manga.mediaId
     const user = await prisma.user.findUnique({ where: { userId } })
     if (!user) {
       return response
