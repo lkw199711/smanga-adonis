@@ -218,6 +218,7 @@ model media {
   mediaRating     String           @default("child") @db.VarChar(191)
   mediaCover      String?          @db.VarChar(191)
   sourceWebsite   String?          @db.VarChar(191)
+  isCloudMedia    Int              @default(0) @db.UnsignedInt
   directoryFormat Int              @default(0) @db.UnsignedInt
   browseType      String           @default("flow") @db.VarChar(191)
   direction       Int              @default(1) @db.UnsignedInt

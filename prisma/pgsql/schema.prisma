@@ -217,6 +217,7 @@ model media {
   mediaRating     String           @default("child")
   mediaCover      String?
   sourceWebsite   String?
+  isCloudMedia    Int              @default(0)
   directoryFormat Int              @default(0)
   browseType      String           @default("flow")
   direction       Int              @default(1)

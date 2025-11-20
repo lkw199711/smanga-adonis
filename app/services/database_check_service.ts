@@ -78,7 +78,7 @@ export default async function hanle() {
   * npx prisma migrate deploy --schema=./prisma/mysql/schema.prisma
   * 
   * 生成迁移文件
-  * npx prisma migrate dev --name share --schema=./prisma/mysql/schema.prisma
+  * npx prisma migrate dev --name isCloudMedia --schema=./prisma/mysql/schema.prisma
   * 生成 Prisma Client
   * npx prisma generate --schema=./prisma/mysql/schema.prisma
   * 部署迁移

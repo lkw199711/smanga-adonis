@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `media`
+ADD COLUMN `isCloudMedia` INTEGER UNSIGNED NOT NULL DEFAULT 0;
