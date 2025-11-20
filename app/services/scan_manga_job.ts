@@ -92,15 +92,15 @@ export default class ScanMangaJob {
 
     this.cachePath = path_cache()
 
+    // 检查漫画是否有 smanga 元数据文件夹
+    this.hasSmangaMeta = this.has_smanga_meta()
+
     // 更新路径扫描时间
     await prisma.path
       .update({ where: { pathId }, data: { lastScanTime: new Date() } })
       .catch(async (e) => {
         await error_log(logModule, e.message)
       })
-
-    // 检查漫画是否有 smanga 元数据文件夹
-    this.hasSmangaMeta = this.has_smanga_meta()
 
     let mangaInsert: Prisma.mangaCreateInput
 
@@ -529,13 +529,13 @@ export default class ScanMangaJob {
    * @returns
    */
   has_smanga_meta() {
-    const dirOutExt = this.mangaRecord.mangaPath.replace(
+    const dirOutExt = this.mangaPath.replace(
       /(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i,
       ''
     )
     const dirMeta = dirOutExt + '-smanga-info'
 
-    const metaFolder = path.join(this.mangaRecord.mangaPath, '.smanga')
+    const metaFolder = path.join(this.mangaPath, '.smanga')
 
     return fs.existsSync(dirMeta)
   }

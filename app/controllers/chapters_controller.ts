@@ -13,7 +13,7 @@ import { addTask } from '#services/queue_service'
 
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
-    const { mangaId, page, pageSize, order, keyWord } = request.only([
+    const { mangaId, page, mediaId, pageSize, order, keyWord } = request.only([
       'page',
       'pageSize',
       'mangaId',
@@ -23,13 +23,15 @@ export default class ChaptersController {
     ])
 
     const userId = (request as any).userId
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
-    if (!manga) {
-      return response
-        .status(404)
-        .json(new SResponse({ code: 404, message: '漫画不存在', status: 'token error' }))
+    if (mangaId) {
+      const manga = await prisma.manga.findUnique({ where: { mangaId } })
+      if (!manga) {
+        return response
+          .status(404)
+          .json(new SResponse({ code: 404, message: '漫画不存在', status: 'manga not exist' }))
+      }
     }
-    const mediaId = manga.mediaId
+
     const user = await prisma.user.findUnique({ where: { userId } })
     if (!user) {
       return response
@@ -48,7 +50,7 @@ export default class ChaptersController {
       if (!mediaIds.includes(Number(mediaId))) {
         return response
           .status(403)
-          .json(new SResponse({ code: 403, message: '没有权限访问', status: 'token error' }))
+          .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
       }
     }
 
