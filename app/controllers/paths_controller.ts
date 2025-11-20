@@ -4,6 +4,7 @@ import { ListResponse, SResponse } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { create_scan_cron } from '#services/cron_service'
+import { delay } from '#utils/index'
 
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
@@ -75,9 +76,9 @@ export default class PathsController {
       taskName: `scan_path_${path.pathId}`,
       command: 'taskScanPath',
       args: { pathId: path.pathId },
-      priority: TaskPriority.scan
+      priority: TaskPriority.scan,
     })
-    
+
     const saveResponse = new SResponse({ code: 0, message: '新增成功,扫描任务已提交', data: path })
 
     return response.json(saveResponse)
@@ -109,8 +110,8 @@ export default class PathsController {
       taskName: `delete_path_${path.pathId}`,
       command: 'deletePath',
       args: { pathId: path.pathId },
-      priority: TaskPriority.delete
-    })    
+      priority: TaskPriority.delete,
+    })
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: path })
     return response.json(destroyResponse)
@@ -122,20 +123,20 @@ export default class PathsController {
     const paths = await prisma.path.updateMany({
       where: {
         pathId: {
-          in: pathIds.map((id) => Number(id))
-        }
+          in: pathIds.map((id) => Number(id)),
+        },
       },
-      data: { deleteFlag: 1 }
+      data: { deleteFlag: 1 },
     })
 
-    pathIds.forEach(id => {
+    pathIds.forEach((id) => {
       addTask({
         taskName: `delete_path_${id}`,
         command: 'deletePath',
         args: { pathId: Number(id) },
-        priority: TaskPriority.delete
+        priority: TaskPriority.delete,
       })
-    })    
+    })
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: paths })
     return response.json(destroyResponse)
@@ -148,7 +149,7 @@ export default class PathsController {
       taskName: `scan_path_${pathId}`,
       command: 'taskScanPath',
       args: { pathId },
-      priority: TaskPriority.scan
+      priority: TaskPriority.scan,
     })
 
     const scanResponse = new SResponse({ code: 0, message: '扫描任务已提交', data: { pathId } })
@@ -160,22 +161,25 @@ export default class PathsController {
     const mangas = await prisma.manga.findMany({ where: { pathId } })
     // 删除此路径现有漫画
     for (let index = 0; index < mangas.length; index++) {
-      const manga = mangas[index];
+      const manga = mangas[index]
 
       addTask({
         taskName: `delete_manga_${manga.mangaId}`,
         command: 'deleteManga',
         args: { mangaId: manga.mangaId },
-        priority: TaskPriority.deleteManga
-      })      
+        priority: TaskPriority.deleteManga,
+      })
     }
+
+    // 等待任务添加完毕
+    await delay(1000 * 10)
 
     // 再次扫描路径
     addTask({
       taskName: `scan_path_${pathId}`,
       command: 'taskScanPath',
       args: { pathId },
-      priority: TaskPriority.scan
+      priority: TaskPriority.scan,
     })
 
     const scanResponse = new SResponse({ code: 0, message: '重新扫描任务已提交', data: pathId })

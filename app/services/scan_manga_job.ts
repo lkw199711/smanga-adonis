@@ -771,15 +771,11 @@ export default class ScanMangaJob {
       const sidePoster = dirOutExt + '.jpg'
       // 漫画文件夹内部封面
       const picPath = path.join(dir, 'cover.jpg')
-      // smanga元数据目录封面
-      const smangaMetaCover = path.join(dirOutExt + 'smanga-info', 'cover.jpg')
 
       if (fs.existsSync(sidePoster)) {
         sourcePoster = sidePoster
       } else if (fs.existsSync(picPath)) {
         sourcePoster = picPath
-      } else if (fs.existsSync(smangaMetaCover)) {
-        sourcePoster = smangaMetaCover
       } else {
         // 这几种都没有,网盘库不再检测其他封面
         return ''
@@ -790,18 +786,6 @@ export default class ScanMangaJob {
       const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP']
       extensions.some((ext) => {
         const picPath = dirOutExt + ext
-        if (fs.existsSync(picPath)) {
-          sourcePoster = picPath
-          return true
-        }
-      })
-    }
-
-    // 检索元数据目录封面图片
-    const dirMeta = dirOutExt + '-smanga-info'
-    if (!this.isCloudMedia && fs.existsSync(dirMeta)) {
-      extensions.some((ext) => {
-        const picPath = dirMeta + '/cover' + ext
         if (fs.existsSync(picPath)) {
           sourcePoster = picPath
           return true
@@ -926,7 +910,7 @@ export default class ScanMangaJob {
       // 漫画文件夹内部封面
       const picPath = path.join(dir, 'cover.jpg')
       // smanga元数据目录封面
-      const smangaMetaCover = path.join(dirOutExt + 'smanga-info', 'cover.jpg')
+      const smangaMetaCover = path.join(dirOutExt + '-smanga-info', 'cover.jpg')
       if (fs.existsSync(sidePoster)) {
         sourcePoster = sidePoster
       } else if (fs.existsSync(picPath)) {

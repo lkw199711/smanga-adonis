@@ -50,6 +50,8 @@ export default class DeleteMangaJob {
     await prisma.mangaTag.deleteMany({ where: { mangaId } })
     // 删除元数据
     await prisma.meta.deleteMany({ where: { mangaId } })
+    // 删除分享记录
+    await prisma.share.deleteMany({ where: { mangaId } })
     // 删除章节 先删除章节封面
     const chapters = await prisma.chapter.findMany({ where: { mangaId } })
     for (let index = 0; index < chapters.length; index++) {
@@ -59,6 +61,11 @@ export default class DeleteMangaJob {
       }
     }
     await prisma.chapter.deleteMany({ where: { mangaId } })
+
+    // 删除漫画元数据
+    await prisma.meta.deleteMany({ where: { mangaId } })
+    // 删除漫画标签数据
+    await prisma.mangaTag.deleteMany({ where: { mangaId } })
 
     // 删除漫画封面
     if (manga.mangaCover && /smanga_manga/.test(manga.mangaCover)) {
