@@ -75,7 +75,6 @@ export default class MangaController {
 
   // 分页
   private async paginate({ mediaId, page, pageSize, keyWord, userId, order }: any) {
-
     const queryParams = {
       ...(page && {
         skip: (page - 1) * pageSize,
@@ -96,7 +95,7 @@ export default class MangaController {
 
     // 统计未观看章节数
     for (let i = 0; i < list.length; i++) {
-      const manga: any = list[i];
+      const manga: any = list[i]
       const chapterCount = await prisma.chapter.count({ where: { mangaId: manga.mangaId } })
       const historys = await prisma.history.groupBy({
         by: ['chapterId'],
@@ -129,8 +128,8 @@ export default class MangaController {
             sourceWebsite: true,
             mediaName: true,
             mediaId: true,
-           },
-        }
+          },
+        },
       },
     })
 
@@ -190,7 +189,9 @@ export default class MangaController {
   public async destroy_batch({ request, response }: HttpContext) {
     const { mangaIds } = request.only(['mangaIds'])
     if (!mangaIds || !mangaIds.length) {
-      return response.status(400).json(new SResponse({ code: SResponseCode.Failed, message: '请选择要删除的漫画' }))
+      return response
+        .status(400)
+        .json(new SResponse({ code: SResponseCode.Failed, message: '请选择要删除的漫画' }))
     }
 
     for (const mangaId of mangaIds) {
@@ -204,7 +205,11 @@ export default class MangaController {
       })
     }
 
-    const destroyResponse = new SResponse({ code: SResponseCode.Success, message: '删除成功', data: mangaIds })
+    const destroyResponse = new SResponse({
+      code: SResponseCode.Success,
+      message: '删除成功',
+      data: mangaIds,
+    })
     return response.json(destroyResponse)
   }
 
@@ -217,7 +222,16 @@ export default class MangaController {
         .json(new SResponse({ code: 404, message: '漫画不存在', status: 'not found' }))
     }
 
-    const path = await prisma.path.findUnique({ where: { pathId: manga.pathId } })
+    const path = await prisma.path.findUnique({
+      where: { pathId: manga.pathId },
+      include: {
+        media: {
+          select: {
+            isCloudMedia: true,
+          },
+        },
+      },
+    })
 
     if (!path) {
       return response
@@ -232,7 +246,8 @@ export default class MangaController {
         pathId: path.pathId,
         mangaPath: manga.mangaPath,
         mangaName: manga.mangaName,
-        mangaId: manga.mangaId
+        mangaId: manga.mangaId,
+        isCloudMedia: path.media?.isCloudMedia,
       },
       priority: TaskPriority.scanManga,
       timeout: 1000 * 60 * 60 * 2,
@@ -244,7 +259,17 @@ export default class MangaController {
 
   public async edit_meta({ params, request, response }: HttpContext) {
     let { mangaId } = params
-    let { title, author, publishDate, mangaCover, star, describe, tags, wirteMetaJson } = request.only(['title', 'author', 'publishDate', 'mangaCover', 'star', 'describe', 'tags', 'wirteMetaJson'])
+    let { title, author, publishDate, mangaCover, star, describe, tags, wirteMetaJson } =
+      request.only([
+        'title',
+        'author',
+        'publishDate',
+        'mangaCover',
+        'star',
+        'describe',
+        'tags',
+        'wirteMetaJson',
+      ])
     mangaId = Number(mangaId)
 
     // 修改或新增元数据
@@ -259,21 +284,21 @@ export default class MangaController {
 
     if (wirteMetaJson) {
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
-      const mangaPath = manga?.mangaPath;
+      const mangaPath = manga?.mangaPath
       if (mangaPath) {
-        const metaPath = mangaPath + '-smanga-info';
-        const metaFile = `${metaPath}/meta.json`;
-        let metaData: any = {};
-        if (!fs.existsSync(metaPath)) fs.mkdirSync(metaPath, { recursive: true });
-        if (fs.existsSync(metaFile)) metaData = read_json(metaFile);
-        if (author) metaData['author'] = author;
-        if (publishDate) metaData['publishDate'] = publishDate;
-        if (mangaCover) metaData['mangaCover'] = mangaCover;
-        if (star) metaData['star'] = star;
-        if (describe) metaData['describe'] = describe;
-        if (tags) metaData['tags'] = tags;
+        const metaPath = mangaPath + '-smanga-info'
+        const metaFile = `${metaPath}/meta.json`
+        let metaData: any = {}
+        if (!fs.existsSync(metaPath)) fs.mkdirSync(metaPath, { recursive: true })
+        if (fs.existsSync(metaFile)) metaData = read_json(metaFile)
+        if (author) metaData['author'] = author
+        if (publishDate) metaData['publishDate'] = publishDate
+        if (mangaCover) metaData['mangaCover'] = mangaCover
+        if (star) metaData['star'] = star
+        if (describe) metaData['describe'] = describe
+        if (tags) metaData['tags'] = tags
 
-        fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2), 'utf-8');
+        fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2), 'utf-8')
       }
     }
 
@@ -282,7 +307,7 @@ export default class MangaController {
   }
 
   async meta_update(mangaId: number, metaName: string, metaContent: string) {
-    if (!metaContent) return;
+    if (!metaContent) return
     const meta = await prisma.meta.findFirst({
       where: { mangaId, metaName },
     })
@@ -304,8 +329,8 @@ export default class MangaController {
   }
   /**
    * 重新扫描漫画元数据
-   * @param param0 
-   * @returns 
+   * @param param0
+   * @returns
    */
   public async reload_meta({ params, response }: HttpContext) {
     let { mangaId } = params
@@ -316,7 +341,7 @@ export default class MangaController {
       code: 0,
       message: '元数据更新成功',
       data: res,
-    });
+    })
 
     return response.json(reloadMetaResponse)
   }
@@ -350,17 +375,17 @@ export default class MangaController {
 
     if (metaWriteJson) {
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
-      const mangaPath = manga?.mangaPath;
+      const mangaPath = manga?.mangaPath
       if (mangaPath) {
-        const metaPath = mangaPath + '-smanga-info';
-        const metaFile = `${metaPath}/meta.json`;
-        let metaData: any = {};
-        if (!fs.existsSync(metaPath)) fs.mkdirSync(metaPath, { recursive: true });
-        if (fs.existsSync(metaFile)) metaData = read_json(metaFile);
+        const metaPath = mangaPath + '-smanga-info'
+        const metaFile = `${metaPath}/meta.json`
+        let metaData: any = {}
+        if (!fs.existsSync(metaPath)) fs.mkdirSync(metaPath, { recursive: true })
+        if (fs.existsSync(metaFile)) metaData = read_json(metaFile)
 
-        metaData['tags'] = tags.map((tag: any) => tag.tagName);
+        metaData['tags'] = tags.map((tag: any) => tag.tagName)
 
-        fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2), 'utf-8');
+        fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2), 'utf-8')
       }
     }
 

@@ -94,6 +94,7 @@ export default class ScanPathJob {
         pathId: this.pathId,
         mangaCount: mangaList.length,
         mangaIndex: index,
+        isCloudMedia: this.mediaInfo.isCloudMedia,
         ...item,
       }
 

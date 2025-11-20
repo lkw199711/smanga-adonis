@@ -38,12 +38,15 @@ export default class ScanMangaJob {
   private meta: any = null
   private ignoreHiddenFiles: boolean
   private tagColor: string
+  private isCloudMedia: boolean = false
+  private hasSmangaMeta: boolean = false
 
   constructor({
     pathId,
     mangaPath,
     mangaName,
     parentPath,
+    isCloudMedia,
   }: {
     pathId: number
     pathInfo: any
@@ -51,11 +54,13 @@ export default class ScanMangaJob {
     mangaPath: string
     mangaName: string
     parentPath: string
+    isCloudMedia: boolean
   }) {
     this.pathId = pathId
     this.mangaPath = mangaPath
     this.mangaName = mangaName
     this.parentPath = parentPath
+    this.isCloudMedia = isCloudMedia
 
     const config = get_config()
     this.ignoreHiddenFiles = config.scan?.ignoreHiddenFiles === 1
@@ -94,12 +99,18 @@ export default class ScanMangaJob {
         await error_log(logModule, e.message)
       })
 
+    // 检查漫画是否有 smanga 元数据文件夹
+    this.hasSmangaMeta = this.has_smanga_meta()
+
     let mangaInsert: Prisma.mangaCreateInput
 
-    // 将标题繁简体转换后写入副标题,用于检索
-    const sName = S.t2s(mangaName)
-    const tName = S.s2t(mangaName)
-    const subTitle = `${sName}/${tName}`
+    // 判断名称是否有中文 将标题繁简体转换后写入副标题,用于检索
+    let subTitle = mangaName
+    if (/[\u4e00-\u9fa5]/.test(mangaName)) {
+      const sName = S.t2s(mangaName)
+      const tName = S.s2t(mangaName)
+      subTitle = `${sName}/${tName}`
+    }
 
     // 漫画插入数据
     mangaInsert = {
@@ -254,10 +265,13 @@ export default class ScanMangaJob {
         })
         for (let index = 0; index < newChapterList.length; index++) {
           const item = newChapterList[index]
-          // 将标题繁简体转换后写入副标题,用于检索
-          const sName = S.t2s(item.chapterName)
-          const tName = S.s2t(item.chapterName)
-          const subTitle = `${sName}/${tName}`
+          // 检测有无中文 将标题繁简体转换后写入副标题,用于检索
+          let subTitle = item.chapterName
+          if (/[\u4e00-\u9fa5]/.test(item.chapterName)) {
+            const sName = S.t2s(item.chapterName)
+            const tName = S.s2t(item.chapterName)
+            subTitle = `${sName}/${tName}`
+          }
 
           const chapterInsert: Prisma.chapterCreateInput = {
             manga: {
@@ -360,6 +374,8 @@ export default class ScanMangaJob {
    * @returns
    */
   async meta_scan() {
+    if (!this.hasSmangaMeta) return false
+
     const dirOutExt = this.mangaRecord.mangaPath.replace(
       /(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i,
       ''
@@ -509,10 +525,29 @@ export default class ScanMangaJob {
   }
 
   /**
+   * 检查漫画是否有 smanga 元数据文件夹
+   * @returns
+   */
+  has_smanga_meta() {
+    const dirOutExt = this.mangaRecord.mangaPath.replace(
+      /(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i,
+      ''
+    )
+    const dirMeta = dirOutExt + '-smanga-info'
+
+    const metaFolder = path.join(this.mangaRecord.mangaPath, '.smanga')
+
+    return fs.existsSync(dirMeta)
+  }
+  /**
    * 扫描 series.json 元数据
    * @returns
    */
   async meta_scan_series() {
+    // 漫画为smanga定制格式 不扫描 series.json
+    if (this.hasSmangaMeta) return false
+    // 云漫画不扫描 series.json
+    if (this.isCloudMedia) return
     const mangaPath = this.mangaRecord.mangaPath
     if (!is_directory(mangaPath)) return
 
@@ -730,18 +765,41 @@ export default class ScanMangaJob {
     let sourcePoster = ''
     // 检索平级目录封面图片
     const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
-    const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP']
-    extensions.some((ext) => {
-      const picPath = dirOutExt + ext
-      if (fs.existsSync(picPath)) {
+
+    if (this.isCloudMedia) {
+      // 同级别目录封面
+      const sidePoster = dirOutExt + '.jpg'
+      // 漫画文件夹内部封面
+      const picPath = path.join(dir, 'cover.jpg')
+      // smanga元数据目录封面
+      const smangaMetaCover = path.join(dirOutExt + 'smanga-info', 'cover.jpg')
+
+      if (fs.existsSync(sidePoster)) {
+        sourcePoster = sidePoster
+      } else if (fs.existsSync(picPath)) {
         sourcePoster = picPath
-        return true
+      } else if (fs.existsSync(smangaMetaCover)) {
+        sourcePoster = smangaMetaCover
+      } else {
+        // 这几种都没有,网盘库不再检测其他封面
+        return ''
       }
-    })
+    }
+
+    if (!this.isCloudMedia && !sourcePoster) {
+      const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP']
+      extensions.some((ext) => {
+        const picPath = dirOutExt + ext
+        if (fs.existsSync(picPath)) {
+          sourcePoster = picPath
+          return true
+        }
+      })
+    }
 
     // 检索元数据目录封面图片
     const dirMeta = dirOutExt + '-smanga-info'
-    if (fs.existsSync(dirMeta)) {
+    if (!this.isCloudMedia && fs.existsSync(dirMeta)) {
       extensions.some((ext) => {
         const picPath = dirMeta + '/cover' + ext
         if (fs.existsSync(picPath)) {
@@ -859,15 +917,40 @@ export default class ScanMangaJob {
     const doNotCopyCover = get_config()?.scan?.doNotCopyCover ?? 1
     // 源封面
     let sourcePoster = ''
-    // 检索平级目录封面图片
     const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
-    extensions.some((ext) => {
-      const picPath = dirOutExt + ext
-      if (fs.existsSync(picPath)) {
+
+    // 如果是网盘库 简化封面检索逻辑
+    if (this.isCloudMedia) {
+      // 同级别目录封面
+      const sidePoster = dirOutExt + '.jpg'
+      // 漫画文件夹内部封面
+      const picPath = path.join(dir, 'cover.jpg')
+      // smanga元数据目录封面
+      const smangaMetaCover = path.join(dirOutExt + 'smanga-info', 'cover.jpg')
+      if (fs.existsSync(sidePoster)) {
+        sourcePoster = sidePoster
+      } else if (fs.existsSync(picPath)) {
+        // 漫画文件夹内部封面
         sourcePoster = picPath
-        return true
+      } else if (fs.existsSync(smangaMetaCover)) {
+        // 漫画文件夹内有smanga-info目录
+        sourcePoster = smangaMetaCover
+      } else {
+        // 这几样都没有 网盘库不再检测其他类型的封面
+        return ''
       }
-    })
+    }
+
+    // 检索平级目录封面图片
+    if (!this.isCloudMedia && !sourcePoster) {
+      extensions.some((ext) => {
+        const picPath = dirOutExt + ext
+        if (fs.existsSync(picPath)) {
+          sourcePoster = picPath
+          return true
+        }
+      })
+    }
 
     // 检索漫画文件夹内的封面图片
     if (!sourcePoster && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
@@ -936,6 +1019,10 @@ export default class ScanMangaJob {
    * @returns
    */
   async meta_scan_comicinfo() {
+    // 漫画为smanga定制格式 不扫描 comicinfo
+    if (this.hasSmangaMeta) return false
+    // 云漫画不扫描 comicinfo
+    if (this.isCloudMedia) return
     if (this.chapterRecord.chapterType !== 'zip') {
       return
     }

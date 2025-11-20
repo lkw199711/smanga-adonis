@@ -84,6 +84,7 @@ export default class MediaController {
       'mediaType',
       'removeFirst',
       'sourceWebsite',
+      'isCloudMedia',
     ])
 
     let media = null
@@ -120,6 +121,7 @@ export default class MediaController {
       'mediaCover',
       'removeFirst',
       'sourceWebsite',
+      'isCloudMedia',
     ])
     const media = await prisma.media.update({
       where: { mediaId },
