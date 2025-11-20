@@ -106,6 +106,14 @@ export default class ScanPathJob {
         timeout: 1000 * 60 * 5,
       })
     }
+
+    // 生产媒体库封面
+    await addTask({
+      taskName: `create_media_poster_${this.pathInfo.mediaId}`,
+      command: 'createMediaPoster',
+      args: { mediaId: this.pathInfo.mediaId },
+      priority: TaskPriority.createMediaPoster,
+    })
   }
 
   /**

@@ -350,21 +350,6 @@ export default class ScanMangaJob {
           newChapters: delChapterList.length * -1,
         })
       }
-
-      const wattingJobs = await scanQueue.getWaiting()
-      const activeJobs = await scanQueue.getActive()
-      const jobs = wattingJobs.concat(activeJobs)
-      const thisPathJobs = jobs.filter((job: any) => job.data.taskName === `scan_path_${pathId}`)
-
-      // 当扫描未进行到最后一步时,不再重复提交生成媒体库封面任务
-      if (thisPathJobs.length <= 1) {
-        await addTask({
-          taskName: `create_media_poster_${this.pathInfo.mediaId}`,
-          command: 'createMediaPoster',
-          args: { mediaId: this.pathInfo.mediaId },
-          priority: TaskPriority.createMediaPoster,
-        })
-      }
     }
   }
 
@@ -375,6 +360,9 @@ export default class ScanMangaJob {
    */
   async meta_scan() {
     if (!this.hasSmangaMeta) return false
+
+    // 压缩目标图片大小
+    const maxSizeKB = get_config()?.compress?.poster || 100
 
     const dirOutExt = this.mangaRecord.mangaPath.replace(
       /(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i,
@@ -396,8 +384,13 @@ export default class ScanMangaJob {
       const file = metaFiles[index]
       const filePath = path.join(dirMeta, file)
       if (!is_img(file)) continue
+      let meta = null
+      const copyMeta = path.join(
+        path_poster(),
+        `smanga_manga_${this.mangaRecord.mangaId}_meta_${index}.jpg`
+      )
       if (/banner/i.test(file)) {
-        await prisma.meta.create({
+        meta = await prisma.meta.create({
           data: {
             manga: {
               connect: {
@@ -405,11 +398,11 @@ export default class ScanMangaJob {
               },
             },
             metaName: 'banner',
-            metaFile: filePath,
+            metaFile: this.isCloudMedia ? copyMeta : filePath,
           },
         })
       } else if (/thumbnail/i.test(file)) {
-        await prisma.meta.create({
+        meta = await prisma.meta.create({
           data: {
             manga: {
               connect: {
@@ -421,7 +414,7 @@ export default class ScanMangaJob {
           },
         })
       } else if (/cover/i.test(file)) {
-        await prisma.meta.create({
+        meta = await prisma.meta.create({
           data: {
             manga: {
               connect: {
@@ -434,6 +427,21 @@ export default class ScanMangaJob {
         })
       } else {
         cahracterPics.push(filePath)
+      }
+
+      // 复制元数据到poster目录
+      if (this.isCloudMedia && meta) {
+        addTask({
+          taskName: `copy_meta_${meta.metaId}`,
+          command: 'copyPoster',
+          args: {
+            inputPath: filePath,
+            outputPath: copyMeta,
+            maxSizeKB,
+          },
+          priority: TaskPriority.copyPoster,
+          timeout: 1000 * 6,
+        })
       }
     }
 
@@ -490,6 +498,10 @@ export default class ScanMangaJob {
         if (!charRecord) {
           // 头像图片
           const header = cahracterPics.find((pic) => pic.includes(char.name))
+          const copyMeta = path.join(
+            path_poster(),
+            `smanga_manga_${this.mangaRecord.mangaId}_characters_${index}.jpg`
+          )
           charRecord = await prisma.meta.create({
             data: {
               manga: {
@@ -500,9 +512,24 @@ export default class ScanMangaJob {
               metaName: 'character',
               metaContent: char.name,
               description: char.description,
-              metaFile: header,
+              metaFile: this.isCloudMedia ? copyMeta : header,
             },
           })
+
+          // 复制角色图到封面目录
+          if (this.isCloudMedia && charRecord) {
+            addTask({
+              taskName: `copy_meta_${charRecord.metaId}`,
+              command: 'copyPoster',
+              args: {
+                inputPath: header,
+                outputPath: copyMeta,
+                maxSizeKB,
+              },
+              priority: TaskPriority.copyPoster,
+              timeout: 1000 * 6,
+            })
+          }
         }
       }
 
@@ -529,10 +556,7 @@ export default class ScanMangaJob {
    * @returns
    */
   has_smanga_meta() {
-    const dirOutExt = this.mangaPath.replace(
-      /(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i,
-      ''
-    )
+    const dirOutExt = this.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
     const dirMeta = dirOutExt + '-smanga-info'
 
     const metaFolder = path.join(this.mangaPath, '.smanga')
@@ -794,11 +818,15 @@ export default class ScanMangaJob {
     }
 
     // 都没有找到返回空
-    if (!sourcePoster && this.chapterRecord.chapterType === 'img') {
+    if (!this.isCloudMedia && !sourcePoster && this.chapterRecord.chapterType === 'img') {
       sourcePoster = first_image(dir)
     }
 
-    if (!sourcePoster && ['zip', 'rar', '7z'].includes(this.chapterRecord.chapterType)) {
+    if (
+      !this.isCloudMedia &&
+      !sourcePoster &&
+      ['zip', 'rar', '7z'].includes(this.chapterRecord.chapterType)
+    ) {
       // 解压缩获取封面
       const cachePoster = `${this.cachePath}/smanga_cache_${this.chapterRecord.chapterId}.jpg`
 
@@ -823,8 +851,9 @@ export default class ScanMangaJob {
       }
     }
 
-    // 不复制封面,直接使用源文件
+    // 不复制封面,直接使用源文件 网盘库必须copy封面
     if (
+      !this.isCloudMedia &&
       !hasPosterInZip &&
       sourcePoster &&
       doNotCopyCover &&
@@ -937,7 +966,12 @@ export default class ScanMangaJob {
     }
 
     // 检索漫画文件夹内的封面图片
-    if (!sourcePoster && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+    if (
+      !this.isCloudMedia &&
+      !sourcePoster &&
+      fs.existsSync(dir) &&
+      fs.statSync(dir).isDirectory()
+    ) {
       extensions.some((ext) => {
         const picPath = path.join(dir, 'cover' + ext)
         if (fs.existsSync(picPath)) {
@@ -949,7 +983,7 @@ export default class ScanMangaJob {
 
     // 检索元数据目录封面图片
     const dirMeta = dirOutExt + '-smanga-info'
-    if (!sourcePoster && fs.existsSync(dirMeta)) {
+    if (!this.isCloudMedia && !sourcePoster && fs.existsSync(dirMeta)) {
       extensions.some((ext) => {
         const picPath = dirMeta + '/cover' + ext
         if (fs.existsSync(picPath)) {
@@ -959,8 +993,13 @@ export default class ScanMangaJob {
       })
     }
 
-    // 不复制封面,直接使用源文件
-    if (sourcePoster && doNotCopyCover && fs.statSync(sourcePoster).size <= maxSizeKB * 1024) {
+    // 不复制封面,直接使用源文件 网盘库必须copy封面
+    if (
+      !this.isCloudMedia &&
+      sourcePoster &&
+      doNotCopyCover &&
+      fs.statSync(sourcePoster).size <= maxSizeKB * 1024
+    ) {
       await prisma.manga.update({
         where: { mangaId: this.mangaRecord.mangaId },
         data: { mangaCover: sourcePoster },
@@ -983,7 +1022,7 @@ export default class ScanMangaJob {
         command: 'copyPoster',
         args,
         priority: TaskPriority.copyPoster,
-        timeout: 1000 * 6,
+        timeout: 1000 * 60,
       })
 
       await prisma.manga.update({
