@@ -428,7 +428,9 @@ export default class ScanMangaJob {
         const filePath = path.join(dirMeta, file)
         if (!is_img(file)) continue
 
-        let metaName = file.replace(/\d/g, '')
+        // 获取不带扩展名的基础名称
+        const baseName = path.basename(file, path.extname(file))
+        let metaName = baseName.replace(/\d/g, '')
         let metaContent = null
         let description = null
         if (!metaImgKeys.includes(metaName)) {
