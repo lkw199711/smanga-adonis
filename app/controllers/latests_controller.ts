@@ -7,28 +7,28 @@ export default class LatestsController {
     const { userId } = request as any
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
     const list: any = await prisma.$queryRaw`SELECT 
-          latest.mangaId,
-          MAX(latest.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
-          MAX(latest.mangaId) AS mangaId,  -- 使用聚合函数选择 mangaId
-          MAX(latest.userId) AS userId,          -- 使用聚合函数选择 userId
-          MAX(manga.mediaId) AS mediaId, -- 使用聚合函数选择 mediaId
-          MAX(manga.mangaName) AS mangaName, -- 使用聚合函数选择 mangaName
-          MAX(manga.mangaCover) AS mangaCover,   -- 使用聚合函数选择 mangaCover
-          MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType
+          "latest"."mangaId",
+          MAX("latest"."chapterId") AS "chapterId",  -- 使用聚合函数选择 chapterId
+          MAX("latest"."mangaId") AS "mangaId",  -- 使用聚合函数选择 mangaId
+          MAX("latest"."userId") AS "userId",          -- 使用聚合函数选择 userId
+          MAX("manga"."mediaId") AS "mediaId", -- 使用聚合函数选择 mediaId
+          MAX("manga"."mangaName") AS "mangaName", -- 使用聚合函数选择 mangaName
+          MAX("manga"."mangaCover") AS "mangaCover",   -- 使用聚合函数选择 mangaCover
+          MAX("manga"."browseType") AS "browseType"      -- 使用聚合函数选择 browseType
       FROM 
-          latest
+          "latest"
       JOIN 
-          manga ON latest.mangaId = manga.mangaId
+          "manga" ON "latest"."mangaId" = "manga"."mangaId"
       WHERE 
-          latest.userId = ${userId}
+          "latest"."userId" = ${userId}
       GROUP BY 
-          latest.mangaId
+          "latest"."mangaId"
       ORDER BY 
-          MAX(latest.updateTime) DESC  -- 根据 updateTime 排序
+          MAX("latest"."updateTime") DESC  -- 根据 updateTime 排序
       LIMIT 
           ${pageSize ? pageSize : 10};
       `;
-
+    
     // 统计未观看章节数
     for (let i = 0; i < list.length; i++) {
       const manga: any = list[i];
