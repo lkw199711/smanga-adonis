@@ -162,7 +162,7 @@ export function sql_parse_json(jsonVal: string | object | number | true) {
   }
 
   if (config.sql.client === 'sqlite') {
-    return jsonStr;
+    return jsonStr
   } else {
     return parseVal
   }
@@ -189,32 +189,32 @@ export function write_log(logMessage: string) {
 }
 
 /**
- * 
+ *
  * @param ms 延迟的时间，单位为毫秒
  * @description: 延迟函数，使用Promise实现
- * @returns 
+ * @returns
  */
 export async function delay(ms: number) {
-  return new Promise(resolve => {
-    const now = new Date().getTime();
-    const target = now + ms;
+  return new Promise((resolve) => {
+    const now = new Date().getTime()
+    const target = now + ms
 
     while (new Date().getTime() < target) {
-      continue;
+      continue
     }
 
-    resolve(true); // 延时结束，返回结果
-  });
-};
+    resolve(true) // 延时结束，返回结果
+  })
+}
 
 export function read_json(file: string) {
   return JSON.parse(fs.readFileSync(file, 'utf-8'))
 }
 
 export function extract_numbers(str: string) {
-  const numbers = str.match(/\d+/g);
-  const joinedNumbersString = numbers?.join('');
-  return joinedNumbersString ? parseInt(joinedNumbersString, 10) : 0;
+  const numbers = str.match(/\d+/g)
+  const joinedNumbersString = numbers?.join('')
+  return joinedNumbersString ? parseInt(joinedNumbersString, 10) : 0
 }
 
 // 定义支持的图片文件扩展名
@@ -287,4 +287,13 @@ export function is_directory(filePath: string) {
   }
 }
 
-export const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP'];
+export const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP']
+
+export const metaImgKeys = [
+  'banner',
+  'thumbnail',
+  'cover',
+  'bannerBackground',
+  'banner-background',
+  'other',
+]
