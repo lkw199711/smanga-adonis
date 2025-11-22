@@ -724,7 +724,7 @@ export default class ScanMangaJob {
     // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
     let posterName = `${posterPath}/smanga_chapter_${this.chapterRecord.chapterId}.jpg`
     // 压缩目标图片大小
-    const maxSizeKB = get_config()?.compress?.poster || 100
+    const maxSizeKB = get_config()?.compress?.poster || 300
     // 是否在压缩包内找到封面
     let hasPosterInZip = false
     let hasMetaChapterCover = false
@@ -803,13 +803,17 @@ export default class ScanMangaJob {
       }
     }
 
-    // 未找到封面
-    if (!sourcePoster) return ''
-
     // 不复制封面,直接使用源文件 网盘库必须copy封面
     const copyPoster =
       // 压缩包内有封面
-      hasPosterInZip
+      hasPosterInZip ||
+      // 云盘库 且没有移植元数据
+      (this.isCloudMedia && !hasMetaChapterCover) ||
+      // 封面过大需要压缩
+      fs.statSync(sourcePoster).size > maxSizeKB * 1024
+
+    // 未找到封面
+    if (!sourcePoster) return ''
 
     // 写入漫画与章节封面
     await prisma.chapter.update({
@@ -829,20 +833,7 @@ export default class ScanMangaJob {
 
     // 复制封面到poster目录 使用单独任务队列
     if (copyPoster) {
-      const args = {
-        inputPath: sourcePoster,
-        outputPath: posterName,
-        maxSizeKB,
-        chapterRecord: this.chapterRecord,
-      }
-
-      await addTask({
-        taskName: `scan_path_${this.pathId}`,
-        command: 'copyPoster',
-        args,
-        priority: TaskPriority.copyPoster,
-        timeout: 1000 * 6,
-      })
+      this.copy_poster(sourcePoster, posterName, maxSizeKB)
     }
 
     return copyPoster ? posterName : sourcePoster
@@ -853,7 +844,7 @@ export default class ScanMangaJob {
     // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
     const posterName = `${posterPath}/smanga_manga_${this.mangaRecord.mangaId}.jpg`
     // 压缩目标图片大小
-    const maxSizeKB = get_config()?.compress?.poster ?? 100
+    const maxSizeKB = get_config()?.compress?.poster ?? 300
     const doNotCopyCover = get_config()?.scan?.doNotCopyCover ?? 1
     // 源封面
     let sourcePoster = ''
@@ -919,10 +910,13 @@ export default class ScanMangaJob {
       })
     }
 
-    // 不复制封面,直接使用源文件 网盘库必须copy封面
-    const copyPoster = false
-
     if (!sourcePoster) return ''
+
+    // 不复制封面,直接使用源文件
+    // 网盘库必须copy封面
+    // 或者封面太大需要压缩
+    const copyPoster =
+      (this.isCloudMedia && !this.hasDataMeta) || fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
     await prisma.manga.update({
       where: { mangaId: this.mangaRecord.mangaId },
@@ -931,22 +925,31 @@ export default class ScanMangaJob {
     this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
 
     // 复制封面到poster目录 使用单独任务队列
-    const args = {
-      inputPath: sourcePoster,
-      outputPath: posterName,
-      maxSizeKB,
-      mangaRecord: this.mangaRecord,
+    if (copyPoster) {
+      this.copy_poster(sourcePoster, posterName, maxSizeKB)
     }
 
-    await addTask({
+    return copyPoster ? posterName : sourcePoster
+  }
+
+  /**
+   * 复制封面到poster目录 使用单独任务队列
+   * @param inputPath 源封面路径
+   * @param outputPath 目标封面路径
+   * @param maxSizeKB 压缩目标图片大小
+   */
+  copy_poster(inputPath: string, outputPath: string, maxSizeKB: number) {
+    addTask({
       taskName: `scan_path_${this.pathId}`,
       command: 'copyPoster',
-      args,
+      args: {
+        inputPath,
+        outputPath,
+        maxSizeKB,
+      },
       priority: TaskPriority.copyPoster,
-      timeout: 1000 * 60,
+      timeout: 1000 * 6,
     })
-
-    return copyPoster ? posterName : sourcePoster
   }
 
   /**
