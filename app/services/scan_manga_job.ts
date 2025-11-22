@@ -482,7 +482,11 @@ export default class ScanMangaJob {
     const dirOutExt = this.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
     const baseName = path.basename(dirOutExt)
 
-    const dataMeta = path.join('/data/meta', this.mediaInfo?.mediaName || '', baseName + '-smanga-info')
+    const dataMeta = path.join(
+      '/data/meta',
+      this.mediaInfo?.mediaName || '',
+      baseName + '-smanga-info'
+    )
     if (fs.existsSync(dataMeta)) {
       this.hasDataMeta = true
       return dataMeta
@@ -805,11 +809,7 @@ export default class ScanMangaJob {
     // 不复制封面,直接使用源文件 网盘库必须copy封面
     const copyPoster =
       // 压缩包内有封面
-      hasPosterInZip ||
-      // 云盘库 且没有移植元数据
-      (this.isCloudMedia && !hasMetaChapterCover) ||
-      // 封面过大需要压缩
-      (sourcePoster && fs.statSync(sourcePoster).size > maxSizeKB * 1024)
+      hasPosterInZip
 
     // 写入漫画与章节封面
     await prisma.chapter.update({
@@ -919,10 +919,8 @@ export default class ScanMangaJob {
       })
     }
 
-    // 不复制封面,直接使用源文件 网盘库必须copy封面\
-    const copyPoster =
-      (this.isCloudMedia && !this.hasDataMeta) ||
-      (sourcePoster && fs.statSync(sourcePoster).size > maxSizeKB * 1024)
+    // 不复制封面,直接使用源文件 网盘库必须copy封面
+    const copyPoster = false
 
     if (!sourcePoster) return ''
 
