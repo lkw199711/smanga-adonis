@@ -189,6 +189,12 @@ export default class ChaptersController {
       )
     }
 
+    if(!fs.existsSync(chapter.chapterPath)){
+      return response.json(
+        new SResponse({ code: 1, message: '章节文件不存在', data: [], status: 'compressed' })
+      )
+    }
+
     let images: string[] = []
     let imagesResponse: SResponse
     // 查询解压记录
@@ -205,6 +211,11 @@ export default class ChaptersController {
         data: images,
         status: 'compressed',
       })
+    } else if (compress && !fs.existsSync(compress.compressPath)) {
+      prisma.compress.delete({ where: { chapterId: chapterId } });
+      return response.json(
+        new SResponse({ code: 1, message: '章节解压缩目录不存在', data: [], status: 'compressed' })
+      )
     } else if (compress) {
       // 已完成解压缩的章节
       images = image_files(compress.compressPath, exclude)
