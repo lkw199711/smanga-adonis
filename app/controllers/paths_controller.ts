@@ -4,7 +4,6 @@ import { ListResponse, SResponse } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { create_scan_cron } from '#services/cron_service'
-import { delay } from '#utils/index'
 
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
@@ -170,9 +169,6 @@ export default class PathsController {
         priority: TaskPriority.deleteManga,
       })
     }
-
-    // 等待任务添加完毕
-    await delay(1000 * 10)
 
     // 再次扫描路径
     addTask({

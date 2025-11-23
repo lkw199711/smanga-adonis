@@ -4,11 +4,8 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
-import { unzipFile } from '../utils/unzip.js'
-import { extractRar } from '../utils/unrar.js'
 import { path_compress, order_params, extract_numbers } from '#utils/index'
 import { TaskPriority } from '#type/index'
-import { extract7z } from '#utils/un7z'
 import { addTask } from '#services/queue_service'
 
 export default class ChaptersController {
@@ -181,7 +178,7 @@ export default class ChaptersController {
 
   public async images({ params, request, response }: HttpContext) {
     let { chapterId } = params
-    const { orderChapterByNumber } = request.only(['orderChapterByNumber'])
+    const { orderChapterByNumber, reTry } = request.only(['orderChapterByNumber', 'reTry'])
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
       return response.json(
@@ -189,7 +186,7 @@ export default class ChaptersController {
       )
     }
 
-    if(!fs.existsSync(chapter.chapterPath)){
+    if (!fs.existsSync(chapter.chapterPath)) {
       return response.json(
         new SResponse({ code: 1, message: '章节文件不存在', data: [], status: 'compressed' })
       )
@@ -202,8 +199,9 @@ export default class ChaptersController {
     const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
     const exclude = pathInfo?.exclude
 
-    //  纯图片章节
+    const compressPathExists = compress && fs.existsSync(compress.compressPath)
     if (chapter.chapterType === 'img') {
+      // 纯图片章节
       images = image_files(chapter.chapterPath, exclude)
       imagesResponse = new SResponse({
         code: 0,
@@ -211,24 +209,9 @@ export default class ChaptersController {
         data: images,
         status: 'compressed',
       })
-    } else if (compress && !fs.existsSync(compress.compressPath)) {
-      prisma.compress.delete({ where: { chapterId: chapterId } });
-      return response.json(
-        new SResponse({ code: 1, message: '章节解压缩目录不存在', data: [], status: 'compressed' })
-      )
-    } else if (compress) {
-      // 已完成解压缩的章节
-      images = image_files(compress.compressPath, exclude)
-      imagesResponse = new SResponse({
-        code: 0,
-        message: '',
-        data: images,
-        status: 'compressed',
-      })
-    } else {
-      const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
-
+    } else if (!compress) {
       // 创建解压缩任务
+      const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
       compress = await prisma.compress.create({
         data: {
           chapter: {
@@ -250,35 +233,51 @@ export default class ChaptersController {
       })
 
       // 执行解压缩任务
-      switch (chapter.chapterType) {
-        case 'zip':
-          await unzipFile(chapter.chapterPath, compressPath)
-          break
-        case 'rar':
-          await extractRar(chapter.chapterPath, compressPath)
-          break
-        case '7z':
-          await extract7z(chapter.chapterPath, compressPath)
-          break
-        default:
-      }
-
-      // 更新解压缩任务状态
-      compress = await prisma.compress.update({
-        where: {
-          chapterId: chapter.chapterId,
-        },
-        data: {
-          compressStatus: 'compressed',
-        },
+      await addTask({
+        taskName: `compress_chapter_${chapter.chapterId}`,
+        command: 'compressChapter',
+        args: { chapterType: chapter.chapterType, chapterPath: chapter.chapterPath, compressPath },
+        priority: TaskPriority.compress,
+        timeout: 1000 * 60 * 10,
       })
 
+      imagesResponse = new SResponse({
+        code: 0,
+        message: '',
+        data: images,
+        status: 'compressing',
+      })
+    } else if (!compressPathExists && reTry < 10) {
+      // 等待解压任务
+      imagesResponse = new SResponse({ code: 1, message: '', data: [], status: 'compressing' })
+    } else if (compressPathExists) {
+      // 已完成解压缩的章节
       images = image_files(compress.compressPath, exclude)
+      // 更新解压缩任务状态
+      if (compress.compressStatus === 'compressing') {
+        compress = await prisma.compress.update({
+          where: {
+            chapterId: chapter.chapterId,
+          },
+          data: {
+            compressStatus: 'compressed',
+          },
+        })
+      }
       imagesResponse = new SResponse({
         code: 0,
         message: '',
         data: images,
         status: 'compressed',
+      })
+    } else {
+      // 解压任务超时，删除任务记录
+      await prisma.compress.delete({ where: { chapterId: chapterId } })
+      imagesResponse = new SResponse({
+        code: 1,
+        message: '章节解压超时',
+        data: [],
+        status: 'failed',
       })
     }
 
