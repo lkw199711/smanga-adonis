@@ -36,7 +36,7 @@ export default class CompressChapterJob {
 
     console.log(this.chapterPath, '解压完成')
   }
-  catch(error) {
+  catch(error: any) {
     console.error('解压失败:', this.chapterPath, error)
     throw error // 重新抛出错误，让Bull.js知道任务失败
   }

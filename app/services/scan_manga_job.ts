@@ -28,7 +28,7 @@ const logModule = '[manga scan]'
 export default class ScanMangaJob {
   private pathId: number
   private pathInfo: pathType | null | void = null
-  private mediaInfo: sqlMediaType | null | void = null
+  private mediaRecord: sqlMediaType | null | void = null
   private mangaRecord: any
   private chapterRecord: any
   private mangaPath: string
@@ -53,7 +53,7 @@ export default class ScanMangaJob {
   }: {
     pathId: number
     pathInfo: any
-    mediaInfo: any
+    mediaRecord: any
     mangaPath: string
     mangaName: string
     parentPath: string
@@ -77,7 +77,7 @@ export default class ScanMangaJob {
       .catch(async (e) => {
         await error_log(logModule, e.message)
       })
-    this.mediaInfo = this.pathInfo?.media
+    this.mediaRecord = this.pathInfo?.media
     const mangaPath = this.mangaPath
     const mangaName = this.mangaName
     const parentPath = this.parentPath
@@ -88,7 +88,7 @@ export default class ScanMangaJob {
       return
     }
 
-    if (!this.mediaInfo) {
+    if (!this.mediaRecord) {
       error_log(logModule, `pathId ${pathId}媒体库不存在`)
       return
     }
@@ -119,7 +119,7 @@ export default class ScanMangaJob {
     mangaInsert = {
       media: {
         connect: {
-          mediaId: this.mediaInfo.mediaId,
+          mediaId: this.mediaRecord.mediaId,
         },
       },
       path: {
@@ -132,7 +132,7 @@ export default class ScanMangaJob {
       parentPath,
       mangaPath,
       mangaCover: '',
-      browseType: this.mediaInfo.browseType,
+      browseType: this.mediaRecord.browseType,
       chapterCount: 1,
       mangaNumber: this.manga_number(mangaName),
     }
@@ -148,7 +148,7 @@ export default class ScanMangaJob {
       this.alreadyExistManga = true
     }
 
-    if (this.mediaInfo.mediaType == 1) {
+    if (this.mediaRecord.mediaType == 1) {
       /**
        * 当漫画类型为单本漫画
        */
@@ -186,13 +186,13 @@ export default class ScanMangaJob {
         },
         media: {
           connect: {
-            mediaId: this.mediaInfo.mediaId,
+            mediaId: this.mediaRecord.mediaId,
           },
         },
         pathId,
         chapterName: mangaName,
         chapterPath: mangaPath,
-        browseType: this.mediaInfo.browseType,
+        browseType: this.mediaRecord.browseType,
         subTitle: subTitle,
         chapterType: this.compress_type(mangaPath),
       }
@@ -288,13 +288,13 @@ export default class ScanMangaJob {
             },
             media: {
               connect: {
-                mediaId: this.mediaInfo.mediaId,
+                mediaId: this.mediaRecord.mediaId,
               },
             },
             pathId,
             chapterName: item.chapterName,
             chapterPath: item.chapterPath,
-            browseType: this.mediaInfo.browseType,
+            browseType: this.mediaRecord.browseType,
             subTitle: subTitle,
             chapterType: this.compress_type(item.chapterPath),
             chapterNumber: this.chapter_index(item.chapterName),
@@ -366,8 +366,8 @@ export default class ScanMangaJob {
    * @returns
    */
   async meta_scan() {
-    // 漫画已存在 跳过元数据扫描
-    if (this.alreadyExistManga && !this.isCloudMedia) return false
+    // 云盘库必须扫描既有缓存元数据 否则不执行
+    if (this.alreadyExistManga && !this.isCloudMedia && !this.hasDataMeta) return false
 
     // 没有元数据文件
     if (!this.smangaMetaFolder) return false
@@ -484,7 +484,7 @@ export default class ScanMangaJob {
 
     const dataMeta = path.join(
       '/data/meta',
-      this.mediaInfo?.mediaName || '',
+      this.mediaRecord?.mediaName || '',
       baseName + '-smanga-info'
     )
     if (fs.existsSync(dataMeta)) {
@@ -719,6 +719,11 @@ export default class ScanMangaJob {
     return chapterList
   }
 
+  /**
+   * 扫描章节封面
+   * @param dir 章节目录
+   * @returns 封面路径
+   */
   async chapter_poster(dir: string) {
     const posterPath = path_poster()
     // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
@@ -736,7 +741,7 @@ export default class ScanMangaJob {
     if (this.isCloudMedia) {
       const metaChapterCover = path.join(
         '/data/meta',
-        this.mediaInfo?.mediaName || '',
+        this.mediaRecord?.mediaName || '',
         this.mangaName,
         this.chapterRecord.chapterName + '.jpg'
       )
@@ -839,6 +844,11 @@ export default class ScanMangaJob {
     return copyPoster ? posterName : sourcePoster
   }
 
+  /**
+   * 扫描漫画封面
+   * @param dir 漫画目录
+   * @returns 封面路径
+   */
   async manga_poster(dir: string) {
     const posterPath = path_poster()
     // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
