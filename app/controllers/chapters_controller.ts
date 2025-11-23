@@ -4,7 +4,7 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
-import { path_compress, order_params, extract_numbers } from '#utils/index'
+import { path_compress, order_params, extract_numbers, delay } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 
@@ -287,6 +287,7 @@ export default class ChaptersController {
     } else {
       images.sort()
     }
+
     return response.json(imagesResponse)
   }
 
