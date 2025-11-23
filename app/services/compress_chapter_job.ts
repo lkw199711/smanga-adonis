@@ -20,19 +20,24 @@ export default class CompressChapterJob {
     this.compressPath = compressPath
   }
   public async run() {
-    switch (this.chapterType) {
-      case 'zip':
-        await unzipFile(this.chapterPath, this.compressPath)
-        break
-      case 'rar':
-        await extractRar(this.chapterPath, this.compressPath)
-        break
-      case '7z':
-        await extract7z(this.chapterPath, this.compressPath)
-        break
-      default:
-    }
+      switch (this.chapterType) {
+        case 'zip':
+          await unzipFile(this.chapterPath, this.compressPath)
+          break
+        case 'rar':
+          await extractRar(this.chapterPath, this.compressPath)
+          break
+        case '7z':
+          await extract7z(this.chapterPath, this.compressPath)
+          break
+        default:
+          console.log('未知的压缩类型:', this.chapterType)
+      }
 
-    console.log(this.chapterPath, '解压完成')
+      console.log(this.chapterPath, '解压完成')
+    } catch (error) {
+      console.error('解压失败:', this.chapterPath, error)
+      throw error // 重新抛出错误，让Bull.js知道任务失败
+    }
   }
 }
