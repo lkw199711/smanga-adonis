@@ -44,6 +44,7 @@ export default class ScanMangaJob {
   private smangaMetaFolder: string = ''
   private hasDataMeta: boolean = false
   private alreadyExistManga: boolean = false
+  private shouldSmangaMetaUpdate: boolean = false
 
   constructor({
     pathId,
@@ -147,6 +148,7 @@ export default class ScanMangaJob {
 
     if (this.mangaRecord) {
       this.alreadyExistManga = true
+      this.shouldSmangaMetaUpdate = await this.should_smanga_meta_update()
     }
 
     if (this.mediaRecord.mediaType == 1) {
@@ -175,7 +177,7 @@ export default class ScanMangaJob {
       await this.meta_scan_series()
 
       // 更新漫画封面
-      if (!this.mangaRecord.mangaCover || reloadCover) {
+      if (!this.mangaRecord.mangaCover || this.shouldSmangaMetaUpdate || reloadCover) {
         await this.manga_poster(mangaPath)
       }
 
@@ -365,7 +367,7 @@ export default class ScanMangaJob {
    * 判断是否需要更新元数据
    * @returns 是否需要更新元数据
    */
-  async shouldMetaUpdate() {
+  async should_smanga_meta_update() {
     // 获取最新meta的更新时间
     const latestMeta = await prisma.meta.findFirst({
       where: {
@@ -401,8 +403,7 @@ export default class ScanMangaJob {
     if (!this.smangaMetaFolder) return false
 
     // 判断是否需要更新元数据
-    const shouldUpdate = await this.shouldMetaUpdate()
-    if (!shouldUpdate) return false
+    if (!this.shouldSmangaMetaUpdate) return false
 
     const dirMeta = this.smangaMetaFolder
 
