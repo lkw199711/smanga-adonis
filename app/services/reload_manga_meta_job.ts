@@ -11,6 +11,7 @@ import {
   is_directory,
   extensions,
   metaImgKeys,
+  path_meta,
 } from '#utils/index'
 import { addTask } from './queue_service.js'
 import { TaskPriority } from '#type/index'
@@ -65,6 +66,8 @@ export default class ReloadMangaMetaJob {
         )
         return null
       })
+    
+    this.isCloudMedia = this.mediaRecord.isCloudMedia;
 
     // 检查漫画是否有 smanga 元数据文件夹
     this.smangaMetaFolder = this.smanga_meta_folder()
@@ -95,7 +98,7 @@ export default class ReloadMangaMetaJob {
    */
   async meta_scan() {
     // 云盘库必须扫描既有缓存元数据 否则不执行
-    if (this.alreadyExistManga && !this.isCloudMedia && !this.hasDataMeta) return false
+    if (this.alreadyExistManga && this.isCloudMedia && !this.hasDataMeta) return false
 
     // 没有元数据文件
     if (!this.smangaMetaFolder) return false
@@ -460,6 +463,9 @@ export default class ReloadMangaMetaJob {
       }
     }
 
+    // 未找到封面
+    if (!sourcePoster) return ''
+
     // 不复制封面,直接使用源文件 网盘库必须copy封面
     const copyPoster =
       // 压缩包内有封面
@@ -468,9 +474,6 @@ export default class ReloadMangaMetaJob {
       (this.isCloudMedia && !hasMetaChapterCover) ||
       // 封面过大需要压缩
       fs.statSync(sourcePoster).size > maxSizeKB * 1024
-
-    // 未找到封面
-    if (!sourcePoster) return ''
 
     // 写入漫画与章节封面
     await prisma.chapter.update({
@@ -628,9 +631,10 @@ export default class ReloadMangaMetaJob {
       ''
     )
     const baseName = path.basename(dirOutExt)
+    const metaDir = path_meta()
 
     const dataMeta = path.join(
-      '/data/meta',
+      metaDir,
       this.mangaRecord?.mediaName || '',
       baseName + '-smanga-info'
     )

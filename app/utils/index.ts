@@ -31,6 +31,16 @@ export function get_env() {
   return process.env.NODE_ENV
 }
 
+export function path_meta(): string {
+  if (platform === 'win32') {
+    return path.join(rootDir, 'data', 'meta')
+  } else if (platform === 'linux') {
+    return '/data/meta'
+  } else {
+    return '/data/meta'
+  }
+}
+
 export function path_poster(): string {
   if (platform === 'win32') {
     return path.join(rootDir, 'data', 'poster')
