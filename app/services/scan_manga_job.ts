@@ -45,6 +45,7 @@ export default class ScanMangaJob {
   private hasDataMeta: boolean = false
   private alreadyExistManga: boolean = false
   private shouldSmangaMetaUpdate: boolean = false
+  private shouldChapterUpdate: boolean = false
 
   constructor({
     pathId,
@@ -149,6 +150,7 @@ export default class ScanMangaJob {
     if (this.mangaRecord) {
       this.alreadyExistManga = true
       this.shouldSmangaMetaUpdate = await this.should_smanga_meta_update()
+      this.shouldChapterUpdate = await this.should_chapter_update()
     }
 
     if (this.mediaRecord.mediaType == 1) {
@@ -225,43 +227,37 @@ export default class ScanMangaJob {
        * 当漫画类型为连载漫画
        */
 
-      // 扫描目录结构获取章节列表
-      let chapterList = await this.scan_path(mangaPath)
-      let chapterListSql: any = []
-
-      if (this.mangaRecord) {
-        // 如果漫画已被标记为删除,则恢复漫画
-        if (this.mangaRecord.deleteFlag) {
-          await prisma.manga.update({
-            where: { mangaId: this.mangaRecord.mangaId },
-            data: { deleteFlag: 0 },
-          })
-        }
-        // 库中章节列表
-        chapterListSql = await prisma.chapter.findMany({
-          where: { mangaId: this.mangaRecord.mangaId },
-        })
-
-        // 更新章节数量
-        if (this.mangaRecord.chapterCount !== chapterList.length) {
-          await prisma.manga.update({
-            where: { mangaId: this.mangaRecord.mangaId },
-            data: { chapterCount: chapterList.length },
-          })
-        }
-      } else {
-        // 库中不存在则新增
-        mangaInsert.chapterCount = chapterList.length
+      // 库中不存在则新增
+      if (!this.mangaRecord) {
         this.mangaRecord = await prisma.manga.create({ data: mangaInsert })
-      }
-
-      if (!this.mangaRecord.mangaCover || reloadCover) {
-        await this.manga_poster(mangaPath)
       }
 
       // 扫描元数据
       await this.meta_scan()
       await this.meta_scan_series()
+
+      // 漫画未更新
+      if (!this.shouldChapterUpdate) {
+        return
+      }
+
+      // 扫描目录结构获取章节列表
+      let chapterList = await this.scan_path(mangaPath)
+      let chapterListSql: any = await prisma.chapter.findMany({
+        where: { mangaId: this.mangaRecord.mangaId },
+      })
+
+      // 如果漫画已被标记为删除,则恢复漫画
+      if (this.mangaRecord.deleteFlag) {
+        await prisma.manga.update({
+          where: { mangaId: this.mangaRecord.mangaId },
+          data: { deleteFlag: 0 },
+        })
+      }
+
+      if (!this.mangaRecord.mangaCover || this.shouldSmangaMetaUpdate || reloadCover) {
+        await this.manga_poster(mangaPath)
+      }
 
       /** 漫画已存在 更新漫画信息
        * // 实际目录扫描多于数据库章节 (说明新增了章节)
@@ -333,15 +329,6 @@ export default class ScanMangaJob {
           mangaName: this.mangaRecord.mangaName,
           newChapters: newChapterList.length,
         })
-      } else if (chapterList.length === chapterListSql.length) {
-        /**
-         *  无变更
-          insert_manga_scan_log({
-          mangaId: mangaRecord.mangaId,
-          mangaName: mangaRecord.mangaName,
-          newChapters: 0,
-        });
-         */
       } else {
         // 删除章节
         const delChapterList = chapterListSql.filter((item: any) => {
@@ -360,6 +347,11 @@ export default class ScanMangaJob {
           newChapters: delChapterList.length * -1,
         })
       }
+      // 更新章节数量
+      await prisma.manga.update({
+        where: { mangaId: this.mangaRecord.mangaId },
+        data: { chapterCount: chapterList.length },
+      })
     }
   }
 
@@ -387,6 +379,35 @@ export default class ScanMangaJob {
     }
 
     // 没有最新meta 则需要重新扫描
+    return true
+  }
+
+  /**
+   * 判断是否需要更新章节
+   * @returns 是否需要更新章节
+   */
+  async should_chapter_update() {
+    // 获取最新章节的更新时间
+    const latestChapter = await prisma.chapter.findFirst({
+      where: {
+        mangaId: this.mangaRecord.mangaId,
+      },
+      orderBy: {
+        updateTime: 'desc',
+      },
+    })
+
+    // 如果最新章节的更新时间 大于 章节文件夹更新时间 则不需要重新扫描
+    if (latestChapter) {
+      const latestChapterUpdateTime = latestChapter.updateTime
+      if (!fs.existsSync(this.mangaRecord.mangaPath)) {
+        throw new Error('漫画路径不存在')
+      }
+      const mangaFolderUpdateTime = fs.statSync(this.mangaRecord.mangaPath).mtime
+      return mangaFolderUpdateTime > latestChapterUpdateTime
+    }
+
+    // 没有最新章节 则需要重新扫描
     return true
   }
 
