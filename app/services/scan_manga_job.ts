@@ -362,6 +362,33 @@ export default class ScanMangaJob {
   }
 
   /**
+   * 判断是否需要更新元数据
+   * @returns 是否需要更新元数据
+   */
+  async shouldMetaUpdate() {
+    // 获取最新meta的更新时间
+    const latestMeta = await prisma.meta.findFirst({
+      where: {
+        mangaId: this.mangaRecord.mangaId,
+        metaName: 'updateTime',
+      },
+      orderBy: {
+        updateTime: 'desc',
+      },
+    })
+
+    // 如果最新meta的更新时间 大于 meta文件夹更新时间 则不需要重新扫描
+    if (latestMeta) {
+      const latestMetaUpdateTime = latestMeta.updateTime
+      const smangaMetaFolderUpdateTime = fs.statSync(this.smangaMetaFolder).mtime
+      return smangaMetaFolderUpdateTime > latestMetaUpdateTime
+    }
+
+    // 没有最新meta 则需要重新扫描
+    return true
+  }
+
+  /**
    *
    * @param recasn 是否重新扫描元数据
    * @returns
@@ -372,6 +399,10 @@ export default class ScanMangaJob {
 
     // 没有元数据文件
     if (!this.smangaMetaFolder) return false
+
+    // 判断是否需要更新元数据
+    const shouldUpdate = await this.shouldMetaUpdate()
+    if (!shouldUpdate) return false
 
     const dirMeta = this.smangaMetaFolder
 

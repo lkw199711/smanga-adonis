@@ -18,7 +18,10 @@ import { parseStringPromise } from 'xml2js'
 export default class TestsController {
   public async index({ response }: HttpContext) {
     const config = get_config()
-    const res = new SResponse({ code: 0, data: config, message: '操作成功' })
+    const str = 'A:\\06download\\02韩漫'
+    const fsStat = fs.statSync(str)
+    const mtimeMs = fsStat.mtime
+    const res = new SResponse({ code: 0, data: mtimeMs, message: '操作成功' })
     return response.status(200).send(res)
   }
 
