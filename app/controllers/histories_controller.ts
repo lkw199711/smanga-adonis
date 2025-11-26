@@ -9,30 +9,30 @@ export default class HistoriesController {
     const [list, distinct]: any = await Promise.all([
       // 使用MAX函数是为了在GROUP BY时选择非聚合列
       prisma.$queryRaw`SELECT 
-          history.mangaId,
-          MAX(history.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
-          MAX(history.userId) AS userId,          -- 使用聚合函数选择 userId
-          MAX(chapter.chapterName) AS chapterName, -- 使用聚合函数选择 chapterName
-          MAX(manga.mangaCover) AS chapterCover,   -- 使用聚合函数选择 mangaCover
-          MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType
+          "history"."mangaId",
+          MAX("history"."chapterId") AS "chapterId",  -- 使用聚合函数选择 chapterId
+          MAX("history"."userId") AS "userId",          -- 使用聚合函数选择 userId
+          MAX("chapter"."chapterName") AS "chapterName", -- 使用聚合函数选择 chapterName
+          MAX("manga"."mangaCover") AS "chapterCover",   -- 使用聚合函数选择 mangaCover
+          MAX("manga"."browseType") AS "browseType"      -- 使用聚合函数选择 browseType
       FROM 
-          history
+          "history"
       JOIN 
-          manga ON history.mangaId = manga.mangaId
+          "manga" ON "history"."mangaId" = "manga"."mangaId"
       JOIN 
-          chapter ON history.chapterId = chapter.chapterId
+          "chapter" ON "history"."chapterId" = "chapter"."chapterId"
       WHERE 
-          history.userId = ${userId}
+          "history"."userId" = ${userId}
       GROUP BY 
-          history.mangaId
+          "history"."mangaId"
       ORDER BY 
-          MAX(history.createTime) DESC  -- 根据 createTime 排序
+          MAX("history"."createTime") DESC  -- 根据 createTime 排序
       LIMIT
         ${pageSize} 
       OFFSET
         ${(page - 1) * pageSize}
       `,
-      prisma.$queryRaw`SELECT COUNT(DISTINCT mangaId) AS count FROM history WHERE userId = ${userId}`,
+      prisma.$queryRaw`SELECT COUNT(DISTINCT "mangaId") AS "count" FROM "history" WHERE "userId" = ${userId}`,
     ])
 
     for (let i = 0; i < list.length; i++) {
