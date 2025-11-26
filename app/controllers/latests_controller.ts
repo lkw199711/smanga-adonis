@@ -1,12 +1,41 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
+import { get_config } from '#utils/index'
+const isPgsql = ['pgsql', 'postgresql'].includes(get_config().sql.client)
 
 export default class LatestsController {
   public async index({ request, response }: HttpContext) {
     const { userId } = request as any
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
-    const list: any = await prisma.$queryRaw`SELECT 
+    const list: any = isPgsql
+      ? await this.raw_sql_select_postgres({ userId, page, pageSize })
+      : await this.raw_sql_select_mysql({ userId, page, pageSize })
+
+    // 统计未观看章节数
+    for (let i = 0; i < list.length; i++) {
+      const manga: any = list[i]
+      const mangaId = Number(manga.mangaId)
+      const chapterCount = await prisma.chapter.count({ where: { mangaId } })
+      const historys = await prisma.history.groupBy({
+        by: ['chapterId'],
+        where: { mangaId, userId },
+      })
+
+      manga.unWatched = chapterCount - historys.length
+    }
+
+    const listResponse = new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count: list?.length,
+    })
+    return response.json(listResponse)
+  }
+
+  private async raw_sql_select_postgres({ userId, page, pageSize }: any) {
+    return await prisma.$queryRaw`SELECT 
           "latest"."mangaId",
           MAX("latest"."chapterId") AS "chapterId",  -- 使用聚合函数选择 chapterId
           MAX("latest"."mangaId") AS "mangaId",  -- 使用聚合函数选择 mangaId
@@ -26,29 +55,37 @@ export default class LatestsController {
       ORDER BY 
           MAX("latest"."updateTime") DESC  -- 根据 updateTime 排序
       LIMIT 
-          ${pageSize ? pageSize : 10};
-      `;
-    
-    // 统计未观看章节数
-    for (let i = 0; i < list.length; i++) {
-      const manga: any = list[i];
-      const mangaId = Number(manga.mangaId);
-      const chapterCount = await prisma.chapter.count({ where: { mangaId } })
-      const historys = await prisma.history.groupBy({
-        by: ['chapterId'],
-        where: { mangaId, userId },
-      })
+          ${pageSize ? pageSize : 10}
+      OFFSET
+        ${(page - 1) * pageSize}
+      `
+  }
 
-      manga.unWatched = chapterCount - historys.length
-    }
-
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list?.length,
-    })
-    return response.json(listResponse)
+  private async raw_sql_select_mysql({ userId, page, pageSize }: any) {
+    return await prisma.$queryRaw`SELECT 
+          latest.mangaId,
+          MAX(latest.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
+          MAX(latest.mangaId) AS mangaId,  -- 使用聚合函数选择 mangaId
+          MAX(latest.userId) AS userId,          -- 使用聚合函数选择 userId
+          MAX(manga.mediaId) AS mediaId, -- 使用聚合函数选择 mediaId
+          MAX(manga.mangaName) AS mangaName, -- 使用聚合函数选择 mangaName
+          MAX(manga.mangaCover) AS mangaCover,   -- 使用聚合函数选择 mangaCover
+          MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType
+      FROM 
+          latest
+      JOIN 
+          manga ON latest.mangaId = manga.mangaId
+      WHERE 
+          latest.userId = ${userId}
+      GROUP BY 
+          latest.mangaId
+      ORDER BY 
+          MAX(latest.updateTime) DESC  -- 根据 updateTime 排序
+      LIMIT 
+          ${pageSize ? pageSize : 10}
+      OFFSET    
+        ${(page - 1) * pageSize};
+      `
   }
 
   public async show({ request, params, response }: HttpContext) {
@@ -75,14 +112,16 @@ export default class LatestsController {
             chapterName: true,
           },
         },
-      }
+      },
     })
 
     const chapters = await prisma.chapter.findMany({
       where: { mangaId },
       orderBy: { chapterNumber: 'asc' },
     })
-    const latestChapterIndex = chapters.findIndex((chapter) => chapter.chapterId === latest?.chapterId)
+    const latestChapterIndex = chapters.findIndex(
+      (chapter) => chapter.chapterId === latest?.chapterId
+    )
     if (latestChapterIndex !== -1 && latestChapterIndex < chapters.length - 1) {
       latest.nextChapter = chapters[latestChapterIndex + 1]
     }
