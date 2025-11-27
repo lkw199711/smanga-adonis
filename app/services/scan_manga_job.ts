@@ -44,8 +44,8 @@ export default class ScanMangaJob {
   private smangaMetaFolder: string = ''
   private hasDataMeta: boolean = false
   private alreadyExistManga: boolean = false
-  private shouldSmangaMetaUpdate: boolean = false
-  private shouldChapterUpdate: boolean = false
+  private shouldSmangaMetaUpdate: boolean = true
+  private shouldChapterUpdate: boolean = true
 
   constructor({
     pathId,
@@ -235,6 +235,10 @@ export default class ScanMangaJob {
       // 扫描元数据
       await this.meta_scan()
       await this.meta_scan_series()
+      
+       if (!this.mangaRecord.mangaCover || this.shouldSmangaMetaUpdate || reloadCover) {
+         await this.manga_poster(mangaPath)
+       }
 
       // 漫画未更新
       if (!this.shouldChapterUpdate) {
@@ -253,10 +257,6 @@ export default class ScanMangaJob {
           where: { mangaId: this.mangaRecord.mangaId },
           data: { deleteFlag: 0 },
         })
-      }
-
-      if (!this.mangaRecord.mangaCover || this.shouldSmangaMetaUpdate || reloadCover) {
-        await this.manga_poster(mangaPath)
       }
 
       /** 漫画已存在 更新漫画信息
@@ -360,16 +360,21 @@ export default class ScanMangaJob {
    * @returns 是否需要更新元数据
    */
   async should_smanga_meta_update() {
+    // 没有元数据文件夹 则不需要更新元数据
+    if (!this.smangaMetaFolder) return false
+
     // 获取最新meta的更新时间
     const latestMeta = await prisma.meta.findFirst({
       where: {
         mangaId: this.mangaRecord.mangaId,
-        metaName: 'updateTime',
       },
       orderBy: {
         updateTime: 'desc',
       },
     })
+
+    // 没有最新meta 则需要重新扫描
+    if (!latestMeta) return true
 
     // 如果最新meta的更新时间 大于 meta文件夹更新时间 则不需要重新扫描
     if (latestMeta) {

@@ -17,6 +17,7 @@
   },
   "scan": {
     "auto": 0,
+    "concurrency": 1,
     "reloadCover": 0,
     "doNotCopyCover": 1,
     "ignoreHiddenFiles": 1,
