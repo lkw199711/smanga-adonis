@@ -4,6 +4,8 @@ import { ListResponse, SResponse } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { create_scan_cron } from '#services/cron_service'
+import { delay } from '#utils/index'
+import fs from 'fs'
 
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
@@ -44,6 +46,13 @@ export default class PathsController {
   public async create({ request, response }: HttpContext) {
     let path = null
     const insertData = request.only(['pathContent', 'mediaId', 'autoScan', 'include', 'exclude'])
+
+    // 检查路径是否存在
+    if (!fs.existsSync(insertData.pathContent)) {
+      const saveResponse = new SResponse({ code: 1, message: '路径不存在', data: null })
+      return response.json(saveResponse)
+    }
+
     path = await prisma.path.findFirst({
       where: {
         pathContent: insertData.pathContent,
@@ -122,13 +131,13 @@ export default class PathsController {
     const paths = await prisma.path.updateMany({
       where: {
         pathId: {
-          in: pathIds.map((id) => Number(id)),
+          in: pathIds.map((id: number) => Number(id)),
         },
       },
       data: { deleteFlag: 1 },
     })
 
-    pathIds.forEach((id) => {
+    pathIds.forEach((id: number) => {
       addTask({
         taskName: `delete_path_${id}`,
         command: 'deletePath',
