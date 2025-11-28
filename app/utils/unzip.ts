@@ -7,26 +7,9 @@ const unzipper = require('unzipper')
 import { is_img } from './index.js'
 import { parseStringPromise } from 'xml2js'
 
-export async function unzipFile(zipFilePath: string, outputDir: string) {
-  // 使用Promise包装同步操作，并通过setImmediate避免阻塞主线程
-  return new Promise<void>((resolve, reject) => {
-    try {
-      // 使用setImmediate将同步操作放入事件循环的下一个阶段
-      setImmediate(() => {
-        try {
-          const zip = new AdmZip(zipFilePath)
-          zip.extractAllTo(outputDir, true)
-          resolve()
-        } catch (error) {
-          console.error('Unzip error:', error)
-          reject(error)
-        }
-      })
-    } catch (error) {
-      console.error('Unzip setup error:', error)
-      reject(error)
-    }
-  })
+export function unzipFile(zipFilePath: string, outputDir: string) {
+  const zip = new AdmZip(zipFilePath)
+  zip.extractAllTo(outputDir, true)
 }
 
 // unzipFile('path/to/file.zip', 'output/directory')
