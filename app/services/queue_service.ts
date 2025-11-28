@@ -494,7 +494,7 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
       )
 
       // 在主进程中跟踪任务状态
-      if (cluster.isMaster) {
+      if (cluster.isPrimary) {
         const taskKey = `${command}-${JSON.stringify(args)}`
         activeTasks.set(taskKey, {
           taskId: job.id,

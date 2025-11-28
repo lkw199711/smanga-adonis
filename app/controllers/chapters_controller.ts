@@ -230,6 +230,15 @@ export default class ChaptersController {
           compressPath,
           compressStatus: 'compressing',
         },
+      }).catch((error: any) => {
+        imagesResponse = new SResponse({
+          code: 0,
+          message: '',
+          data: images,
+          status: 'compressing',
+        })
+
+        return response.json(imagesResponse)
       })
 
       // 执行解压缩任务
