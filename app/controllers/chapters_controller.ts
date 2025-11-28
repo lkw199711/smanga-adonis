@@ -236,7 +236,12 @@ export default class ChaptersController {
       await addTask({
         taskName: `compress_chapter_${chapter.chapterId}`,
         command: 'compressChapter',
-        args: { chapterType: chapter.chapterType, chapterPath: chapter.chapterPath, compressPath },
+        args: {
+          chapterType: chapter.chapterType,
+          chapterPath: chapter.chapterPath,
+          compressPath,
+          chapterId: chapter.chapterId,
+        },
         priority: TaskPriority.compress,
         timeout: 1000 * 60 * 10,
       })
@@ -253,22 +258,11 @@ export default class ChaptersController {
     } else if (compressPathExists) {
       // 已完成解压缩的章节
       images = image_files(compress.compressPath, exclude)
-      // 更新解压缩任务状态
-      if (compress.compressStatus === 'compressing') {
-        compress = await prisma.compress.update({
-          where: {
-            chapterId: chapter.chapterId,
-          },
-          data: {
-            compressStatus: 'compressed',
-          },
-        })
-      }
       imagesResponse = new SResponse({
         code: 0,
         message: '',
         data: images,
-        status: 'compressed',
+        status: compress.compressStatus,
       })
     } else {
       // 解压任务超时，删除任务记录
