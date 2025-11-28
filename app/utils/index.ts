@@ -31,6 +31,16 @@ export function get_env() {
   return process.env.NODE_ENV
 }
 
+export function path_meta(): string {
+  if (platform === 'win32') {
+    return path.join(rootDir, 'data', 'meta')
+  } else if (platform === 'linux') {
+    return '/data/meta'
+  } else {
+    return '/data/meta'
+  }
+}
+
 export function path_poster(): string {
   if (platform === 'win32') {
     return path.join(rootDir, 'data', 'poster')
@@ -193,6 +203,9 @@ export function write_log(logMessage: string) {
  * @param ms 延迟的时间，单位为毫秒
  * @description: 延迟函数，使用Promise实现
  * @returns
+ * @example
+ * await delay(1000 * 5)
+ * @remark 该函数会阻塞当前线程，慎用
  */
 export async function delay(ms: number) {
   return new Promise((resolve) => {

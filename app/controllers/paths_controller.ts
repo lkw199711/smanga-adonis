@@ -179,9 +179,6 @@ export default class PathsController {
       })
     }
 
-    // 等待任务添加完毕
-    await delay(1000 * 10)
-
     // 再次扫描路径
     addTask({
       taskName: `scan_path_${pathId}`,

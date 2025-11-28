@@ -1,16 +1,16 @@
 import { type } from "os"
 
 enum TaskPriority {
-  delete = 100000,
-  deleteManga = 110000,
-  scan = 200000,
-  scanManga = 210000,
-  copyPoster = 220000,
-  createMediaPoster = 230000,
-  compress = 300000,
-  syncMedia = 400000,
-  syncManga = 410000,
-  syncChapter = 420000,
+  compress = 100000,
+  delete = 200000,
+  deleteManga = 210000,
+  scan = 300000,
+  scanManga = 310000,
+  copyPoster = 320000,
+  createMediaPoster = 330000,
+  syncMedia = 500000,
+  syncManga = 510000,
+  syncChapter = 520000,
   default = 900000,
 }
 

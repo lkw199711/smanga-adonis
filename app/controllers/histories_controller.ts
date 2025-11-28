@@ -1,43 +1,20 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
+import { get_config } from '#utils/index'
+const isPgsql = ['pgsql', 'postgresql'].includes(get_config().sql.client)
 
 export default class HistoriesController {
   public async index({ request, response }: HttpContext) {
     const { userId } = request as any
     const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
-    const [list, distinct]: any = await Promise.all([
-      // 使用MAX函数是为了在GROUP BY时选择非聚合列
-      prisma.$queryRaw`SELECT 
-          history.mangaId,
-          MAX(history.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
-          MAX(history.userId) AS userId,          -- 使用聚合函数选择 userId
-          MAX(chapter.chapterName) AS chapterName, -- 使用聚合函数选择 chapterName
-          MAX(manga.mangaCover) AS chapterCover,   -- 使用聚合函数选择 mangaCover
-          MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType
-      FROM 
-          history
-      JOIN 
-          manga ON history.mangaId = manga.mangaId
-      JOIN 
-          chapter ON history.chapterId = chapter.chapterId
-      WHERE 
-          history.userId = ${userId}
-      GROUP BY 
-          history.mangaId
-      ORDER BY 
-          MAX(history.createTime) DESC  -- 根据 createTime 排序
-      LIMIT
-        ${pageSize} 
-      OFFSET
-        ${(page - 1) * pageSize}
-      `,
-      prisma.$queryRaw`SELECT COUNT(DISTINCT mangaId) AS count FROM history WHERE userId = ${userId}`,
-    ])
+    const [list, distinct]: any = isPgsql
+      ? await this.raw_sql_select_postgres({ userId, page, pageSize })
+      : await this.raw_sql_select_mysql({ userId, page, pageSize })
 
     for (let i = 0; i < list.length; i++) {
-      const chapter: any = list[i];
-      const chapterId = Number(chapter.chapterId);
+      const chapter: any = list[i]
+      const chapterId = Number(chapter.chapterId)
       if (chapterId) {
         chapter.latest = await prisma.latest.findFirst({
           where: { userId, chapterId },
@@ -66,6 +43,84 @@ export default class HistoriesController {
         ORDER BY history.createTime DESC
         LIMIT ${page ? pageSize : 100}`,
      */
+  }
+
+  private async raw_sql_select_postgres({
+    userId,
+    page,
+    pageSize,
+  }: {
+    userId: number
+    page: number
+    pageSize: number
+  }) {
+    return await Promise.all([
+      // 使用MAX函数是为了在GROUP BY时选择非聚合列
+      prisma.$queryRaw`SELECT 
+          "history"."mangaId",
+          MAX("history"."chapterId") AS "chapterId",  -- 使用聚合函数选择 chapterId
+          MAX("history"."userId") AS "userId",          -- 使用聚合函数选择 userId
+          MAX("chapter"."chapterName") AS "chapterName", -- 使用聚合函数选择 chapterName
+          MAX("manga"."mangaCover") AS "chapterCover",   -- 使用聚合函数选择 mangaCover
+          MAX("manga"."browseType") AS "browseType"      -- 使用聚合函数选择 browseType
+      FROM 
+          "history"
+      JOIN 
+          "manga" ON "history"."mangaId" = "manga"."mangaId"
+      JOIN 
+          "chapter" ON "history"."chapterId" = "chapter"."chapterId"
+      WHERE 
+          "history"."userId" = ${userId}
+      GROUP BY 
+          "history"."mangaId"
+      ORDER BY 
+          MAX("history"."createTime") DESC  -- 根据 createTime 排序
+      LIMIT
+        ${pageSize} 
+      OFFSET
+        ${(page - 1) * pageSize}
+      `,
+      prisma.$queryRaw`SELECT COUNT(DISTINCT "mangaId") AS "count" FROM "history" WHERE "userId" = ${userId}`,
+    ])
+  }
+
+  private async raw_sql_select_mysql({
+    userId,
+    page,
+    pageSize,
+  }: {
+    userId: number
+    page: number
+    pageSize: number
+  }) {
+    return await Promise.all([
+      // 使用MAX函数是为了在GROUP BY时选择非聚合列
+      prisma.$queryRaw`SELECT 
+          history.mangaId,
+          MAX(history.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
+          MAX(history.userId) AS userId,          -- 使用聚合函数选择 userId
+          MAX(chapter.chapterName) AS chapterName, -- 使用聚合函数选择 chapterName
+          MAX(manga.mangaCover) AS chapterCover,   -- 使用聚合函数选择 mangaCover
+          MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType
+      FROM 
+          history
+      JOIN 
+          manga ON history.mangaId = manga.mangaId
+      JOIN 
+          chapter ON history.chapterId = chapter.chapterId
+      WHERE 
+          history.userId = ${userId}
+      GROUP BY 
+          history.mangaId
+      ORDER BY 
+          MAX(history.createTime) DESC  -- 根据 createTime 排序
+      LIMIT
+        ${pageSize} 
+      OFFSET
+        ${(page - 1) * pageSize}
+      `,
+      prisma.$queryRaw`SELECT COUNT(DISTINCT mangaId) AS count FROM history WHERE userId = ${userId}`,
+    ])
   }
 
   public async create({ request, response }: HttpContext) {
@@ -196,8 +251,8 @@ export default class HistoriesController {
 
   /**
    * 判断章节是否已阅读
-   * @param param0 
-   * @returns 
+   * @param param0
+   * @returns
    */
   public async chapter_is_read({ request, params, response }: HttpContext) {
     const { userId } = request as any

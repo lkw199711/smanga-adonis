@@ -1,12 +1,5 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-10-08 15:36:23
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2024-10-12 17:50:51
- * @FilePath: \smanga-adonis\app\controllers\deploys_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
-import { get_config, delay } from '#utils/index'
+import { get_config } from '#utils/index'
 import { SResponse } from '#interfaces/response'
 import { runNpxCommand } from '#utils/npxShell'
 import { stopTimer } from '#services/timer_service'
@@ -36,7 +29,6 @@ export default class DeploysController {
     // 停止守护进程定时器
     stopTimer()
     prisma?.$disconnect()
-    delay(2000)
     if (client === 'sqlite') {
       const schemaPath = path.join(rootDir, 'prisma', 'sqlite', 'schema.prisma')
       runNpxCommand('npx prisma generate --schema=' + schemaPath)

@@ -1,10 +1,3 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 07:42:48
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-07 15:54:57
- * @FilePath: \smanga-adonis\app\middleware\params_middleware.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 export default class ParamsMiddleware {
