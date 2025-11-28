@@ -20,8 +20,6 @@ const numCPUs = os.cpus().length
 
 // 主进程负责创建子进程, 子进程负责处理任务
 if (cluster.isPrimary) {
-  console.log(`主进程 ${process.pid} 正在运行`)
-
   // 根据 CPU 核心数创建工作进程
   // 这里我们使用较少的工作进程来避免资源过度消耗
   const workerCount = Math.max(1, Math.min(numCPUs, 4)) // 限制最大4个工作进程
@@ -31,12 +29,12 @@ if (cluster.isPrimary) {
 
     // 监听子进程消息
     worker.on('message', (message) => {
-      console.log(`从工作进程 ${worker.process.pid} 收到消息:`, message)
+      // console.log(`从工作进程 ${worker.process.pid} 收到消息:`, message)
     })
   }
 
   cluster.on('exit', (worker, code, signal) => {
-    console.log(`工作进程 ${worker.process.pid} 已退出，状态码: ${code}, 信号: ${signal}`)
+    // console.log(`工作进程 ${worker.process.pid} 已退出，状态码: ${code}, 信号: ${signal}`)
 
     // 检查是否是正常退出
     if (code !== 0 && !signal) {
@@ -132,15 +130,8 @@ if (!cluster.isPrimary) {
         })
       }
 
-      switch (command) {
-        case 'compressChapter':
-          //压缩章节
-          console.log('压缩章节')
-          await new CompressChapterJob(args).run()
-          break
-        default:
-          break
-      }
+      // 处理任务
+      await task_process(command, args)
 
       // 向主进程报告任务完成
       if (process.send) {
@@ -183,58 +174,8 @@ if (!cluster.isPrimary) {
         })
       }
 
-      switch (command) {
-        case 'taskScanPath':
-          //扫描任务调用
-          console.log('执行扫描任务')
-          await new ScanPathJob(args).run()
-          break
-        case 'taskScanManga':
-          console.log('执行扫描漫画任务')
-          //扫描漫画任务调用
-          await new ScanMangaJob(args).run()
-          break
-        case 'deleteMedia':
-          //删除媒体库
-          console.log('删除媒体库')
-          await new DeleteMediaJob(args).run()
-          break
-        case 'deletePath':
-          //删除路径
-          console.log('删除路径')
-          await new DeletePathJob(args).run()
-          break
-        case 'deleteManga':
-          //删除漫画
-          console.log('删除漫画')
-          await new DeleteMangaJob(args).run()
-          break
-        case 'deleteChapter':
-          //删除章节
-          console.log('删除章节')
-          await new DeleteChapterJob(args).run()
-          break
-        case 'copyPoster':
-          await new CopyPosterJob(args).run()
-          break
-        case 'compressChapter':
-          //压缩章节
-          console.log('压缩章节')
-          // await compress_chapter_job(args)
-          break
-        case 'createMediaPoster':
-          //生成媒体库封面
-          console.log('生成媒体库封面')
-          await new CreateMediaPosterJob(args).run()
-          break
-        case 'reloadMangaMeta':
-          //重新加载漫画元数据
-          console.log('重新加载漫画元数据')
-          await new ReloadMangaMetaJob(args).run()
-          break
-        default:
-          break
-      }
+      // 处理任务
+      await task_process(command, args)
 
       // 向主进程报告任务完成
       if (process.send) {
@@ -278,18 +219,12 @@ if (!cluster.isPrimary) {
 
       switch (command) {
         case 'taskSyncMedia':
-          //媒体库同步任务调用
-          console.log('执行媒体库同步任务')
           await new SyncMediaJob(args).run()
           break
         case 'taskSyncManga':
-          console.log('执行漫画同步任务')
-          //漫画同步任务调用
           await new SyncMangaJob(args).run()
           break
         case 'taskSyncChapter':
-          console.log('执行章节同步任务')
-          //章节同步任务调用
           await new SyncChapterJob(args).run()
         default:
           break
@@ -336,58 +271,8 @@ if (!cluster.isPrimary) {
         })
       }
 
-      switch (command) {
-        case 'taskScanPath':
-          //扫描任务调用
-          console.log('执行扫描任务')
-          await new ScanPathJob(args).run()
-          break
-        case 'taskScanManga':
-          console.log('执行扫描漫画任务')
-          //扫描漫画任务调用
-          await new ScanMangaJob(args).run()
-          break
-        case 'deleteMedia':
-          //删除媒体库
-          console.log('删除媒体库')
-          await new DeleteMediaJob(args).run()
-          break
-        case 'deletePath':
-          //删除路径
-          console.log('删除路径')
-          await new DeletePathJob(args).run()
-          break
-        case 'deleteManga':
-          //删除漫画
-          console.log('删除漫画')
-          await new DeleteMangaJob(args).run()
-          break
-        case 'deleteChapter':
-          //删除章节
-          console.log('删除章节')
-          await new DeleteChapterJob(args).run()
-          break
-        case 'copyPoster':
-          await new CopyPosterJob(args).run()
-          break
-        case 'compressChapter':
-          //压缩章节
-          console.log('压缩章节')
-          await new CompressChapterJob(args).run()
-          break
-        case 'createMediaPoster':
-          //生成媒体库封面
-          console.log('生成媒体库封面')
-          await new CreateMediaPosterJob(args).run()
-          break
-        case 'reloadMangaMeta':
-          //重新加载漫画元数据
-          console.log('重新加载漫画元数据')
-          await new ReloadMangaMetaJob(args).run()
-          break
-        default:
-          break
-      }
+      // 处理任务
+      await task_process(command, args)
 
       // 向主进程报告任务完成
       if (process.send) {
@@ -418,11 +303,11 @@ if (!cluster.isPrimary) {
 
   // 监听队列事件
   scanQueue.on('failed', (job, error) => {
-    console.error(`任务 ${job.id} 失败`, error)
+    // console.error(`任务 ${job.id} 失败`, error)
   })
 
   scanQueue.on('completed', (job, result) => {
-    console.log(`任务 ${job.id} 完成`, result)
+    // console.log(`任务 ${job.id} 完成`, result)
   })
 }
 
@@ -439,6 +324,43 @@ const compressQueue = new Bull('smanga', {
     port: 6379,
   },
 })
+
+async function task_process(command: string, args: any) {
+  switch (command) {
+    case 'taskScanPath':
+      await new ScanPathJob(args).run()
+      break
+    case 'taskScanManga':
+      await new ScanMangaJob(args).run()
+      break
+    case 'deleteMedia':
+      await new DeleteMediaJob(args).run()
+      break
+    case 'deletePath':
+      await new DeletePathJob(args).run()
+      break
+    case 'deleteManga':
+      await new DeleteMangaJob(args).run()
+      break
+    case 'deleteChapter':
+      await new DeleteChapterJob(args).run()
+      break
+    case 'copyPoster':
+      await new CopyPosterJob(args).run()
+      break
+    case 'compressChapter':
+      await new CompressChapterJob(args).run()
+      break
+    case 'createMediaPoster':
+      await new CreateMediaPosterJob(args).run()
+      break
+    case 'reloadMangaMeta':
+      await new ReloadMangaMetaJob(args).run()
+      break
+    default:
+      break
+  }
+}
 
 async function path_scanning(pathId: number) {
   const wattingJobs = await scanQueue.getWaiting()
@@ -465,7 +387,15 @@ async function path_deleting(pathId: number) {
 }
 
 // 任务状态跟踪（仅在主进程中使用）
-const activeTasks = new Map<string, { taskId: string; command: string; status: 'pending' | 'processing' | 'completed' | 'failed'; workerId?: number }>()
+const activeTasks = new Map<
+  string,
+  {
+    taskId: string
+    command: string
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    workerId?: number
+  }
+>()
 
 type addTaskType = {
   taskName: string
@@ -562,17 +492,17 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
           },
         }
       )
-      
+
       // 在主进程中跟踪任务状态
       if (cluster.isMaster) {
         const taskKey = `${command}-${JSON.stringify(args)}`
         activeTasks.set(taskKey, {
           taskId: job.id,
           command,
-          status: 'pending'
+          status: 'pending',
         })
       }
-      
+
       return { status: 'success', taskId: job.id }
     } catch (error) {
       console.error(`添加任务 ${taskName} 到队列失败`, error)
@@ -615,4 +545,13 @@ async function stopTask(taskId: string) {
   }
 }
 
-export { scanQueue, deleteQueue, compressQueue, addTask, path_scanning, path_deleting, getTaskStatus, stopTask }
+export {
+  scanQueue,
+  deleteQueue,
+  compressQueue,
+  addTask,
+  path_scanning,
+  path_deleting,
+  getTaskStatus,
+  stopTask,
+}
