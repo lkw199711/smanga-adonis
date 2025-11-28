@@ -117,7 +117,7 @@ scanQueue.on('failed', (job, err) => {
 // 只有工作进程才处理任务
 if (!cluster.isPrimary) {
   // 处理压缩任务
-  scanQueue.process('compress', queueConfig.concurrency, async (job: any) => {
+  scanQueue.process('compress', 1, async (job: any) => {
     const { command, args } = job.data
     try {
       // 向主进程报告任务开始
@@ -161,7 +161,7 @@ if (!cluster.isPrimary) {
   })
 
   // 处理扫描任务
-  scanQueue.process('scan', queueConfig.concurrency, async (job: any) => {
+  scanQueue.process('scan', 1, async (job: any) => {
     const { command, args } = job.data
     try {
       // 向主进程报告任务开始
@@ -204,7 +204,7 @@ if (!cluster.isPrimary) {
     }
   })
 
-  scanQueue.process('sync', queueConfig.concurrency, async (job: any) => {
+  scanQueue.process('sync', 1, async (job: any) => {
     const { command, args } = job.data
     try {
       // 向主进程报告任务开始
@@ -258,7 +258,7 @@ if (!cluster.isPrimary) {
   })
 
   // 处理默认任务
-  scanQueue.process(queueConfig.concurrency, async (job: any) => {
+  scanQueue.process(1, async (job: any) => {
     const { command, args } = job.data
     try {
       // 向主进程报告任务开始
