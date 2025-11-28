@@ -18,11 +18,27 @@ import cluster from 'cluster'
 import * as os from 'os'
 const numCPUs = os.cpus().length
 
+type queueConfigType = {
+  concurrency: number // 并发数
+  attempts: number // 最大重试次数
+  timeout: number // 超时时间（毫秒）
+}
+
+const queueConfig: queueConfigType = get_config()?.queue || {
+  concurrency: 1, // 默认并发数
+  attempts: 3, // 默认重试次数
+  timeout: 120000, // 默认超时时间为2分钟
+}
+
+const concurrency = queueConfig?.concurrency ?? 1 // 并发数
+const attempts = queueConfig?.attempts ?? 3 // 最大重试次数
+const timeout = queueConfig?.timeout ?? 120000 // 超时时间（毫秒）
+
 // 主进程负责创建子进程, 子进程负责处理任务
 if (cluster.isPrimary) {
   // 根据 CPU 核心数创建工作进程
   // 这里我们使用较少的工作进程来避免资源过度消耗
-  const workerCount = Math.max(1, Math.min(numCPUs, 4)) // 限制最大4个工作进程
+  const workerCount = Math.max(1, Math.min(numCPUs, concurrency)) // 限制最大4个工作进程
 
   for (let i = 0; i < workerCount; i++) {
     const worker = cluster.fork()
@@ -84,22 +100,6 @@ if (cluster.isPrimary) {
     process.send({ type: 'WORKER_READY', workerId: process.pid })
   }
 }
-
-type queueConfigType = {
-  concurrency: number // 并发数
-  attempts: number // 最大重试次数
-  timeout: number // 超时时间（毫秒）
-}
-
-const queueConfig: queueConfigType = get_config()?.queue || {
-  concurrency: 1, // 默认并发数
-  attempts: 3, // 默认重试次数
-  timeout: 120000, // 默认超时时间为2分钟
-}
-
-const concurrency = queueConfig?.concurrency ?? 1 // 并发数
-const attempts = queueConfig?.attempts ?? 3 // 最大重试次数
-const timeout = queueConfig?.timeout ?? 120000 // 超时时间（毫秒）
 
 const scanQueue = new Bull('smanga', {
   redis: {
