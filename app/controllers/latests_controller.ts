@@ -23,6 +23,9 @@ export default class LatestsController {
       })
 
       manga.unWatched = chapterCount - historys.length
+      if (manga.unWatched < 0) {
+        manga.unWatched = 0
+      }
     }
 
     const listResponse = new ListResponse({
