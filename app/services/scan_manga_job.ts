@@ -542,6 +542,17 @@ export default class ScanMangaJob {
     const baseName = path.basename(dirOutExt)
     const metaDir = path_meta()
 
+    const dataMetaHidden = path.join(
+      metaDir,
+      this.mediaRecord?.mediaName || '',
+      baseName,
+      '.smanga'
+    )
+    if (fs.existsSync(dataMetaHidden)) {
+      this.hasDataMeta = true
+      return dataMetaHidden
+    }
+
     const dataMeta = path.join(
       metaDir,
       this.mediaRecord?.mediaName || '',
@@ -805,6 +816,10 @@ export default class ScanMangaJob {
         this.mangaName,
         this.chapterRecord.chapterName + '.jpg'
       )
+      const metaChapterCover2 = path.join(
+        this.smangaMetaFolder,
+        'chapter-cover.jpg'
+      )
       // 同级别目录封面
       const sidePoster = dirOutExt + '.jpg'
       // 漫画文件夹内部封面
@@ -813,6 +828,9 @@ export default class ScanMangaJob {
       if (fs.existsSync(metaChapterCover)) {
         hasMetaChapterCover = true
         sourcePoster = metaChapterCover
+      } else if (fs.existsSync(metaChapterCover2)) {
+        hasMetaChapterCover = true
+        sourcePoster = metaChapterCover2
       } else if (fs.existsSync(sidePoster)) {
         sourcePoster = sidePoster
       } else if (fs.existsSync(picPath)) {
