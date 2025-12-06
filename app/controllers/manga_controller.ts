@@ -7,6 +7,7 @@ import { addTask } from '#services/queue_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 import fs from 'fs'
 import { order_params, read_json } from '#utils/index'
+import path from 'path'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
@@ -286,8 +287,8 @@ export default class MangaController {
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
       const mangaPath = manga?.mangaPath
       if (mangaPath) {
-        const metaPath = mangaPath + '-smanga-info'
-        const metaFile = `${metaPath}/meta.json`
+        const metaPath = path.join(mangaPath, '.smanga')
+        const metaFile = path.join(metaPath, 'meta.json')
         let metaData: any = {}
         if (!fs.existsSync(metaPath)) fs.mkdirSync(metaPath, { recursive: true })
         if (fs.existsSync(metaFile)) metaData = read_json(metaFile)
