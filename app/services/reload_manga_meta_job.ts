@@ -266,8 +266,19 @@ export default class ReloadMangaMetaJob {
       }
     }
 
+    // 检索元数据目录封面图片
+    if (!sourcePoster && fs.existsSync(this.smangaMetaFolder)) {
+      extensions.some((ext) => {
+        const picPath = path.join(this.smangaMetaFolder, 'cover' + ext)
+        if (fs.existsSync(picPath)) {
+          sourcePoster = picPath
+          return true
+        }
+      })
+    }
+
     // 检索平级目录封面图片
-    if (!this.isCloudMedia && !sourcePoster) {
+    if (!sourcePoster) {
       extensions.some((ext) => {
         const picPath = dirOutExt + ext
         if (fs.existsSync(picPath)) {
@@ -279,25 +290,12 @@ export default class ReloadMangaMetaJob {
 
     // 检索漫画文件夹内的封面图片
     if (
-      !this.isCloudMedia &&
       !sourcePoster &&
       fs.existsSync(dir) &&
       fs.statSync(dir).isDirectory()
     ) {
       extensions.some((ext) => {
         const picPath = path.join(dir, 'cover' + ext)
-        if (fs.existsSync(picPath)) {
-          sourcePoster = picPath
-          return true
-        }
-      })
-    }
-
-    // 检索元数据目录封面图片
-    const dirMeta = dirOutExt + '-smanga-info'
-    if (!this.isCloudMedia && !sourcePoster && fs.existsSync(dirMeta)) {
-      extensions.some((ext) => {
-        const picPath = dirMeta + '/cover' + ext
         if (fs.existsSync(picPath)) {
           sourcePoster = picPath
           return true
