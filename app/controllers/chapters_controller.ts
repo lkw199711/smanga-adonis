@@ -4,9 +4,10 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
-import { path_compress, order_params, extract_numbers, delay } from '#utils/index'
+import { path_compress, order_params, extract_numbers, delay, get_config } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
+import { unzipFile } from '#utils/unzip'
 
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
@@ -209,37 +210,82 @@ export default class ChaptersController {
         data: images,
         status: 'compressed',
       })
+    } else if (!compress && get_config().compress.sync) {
+      console.log('同步任务')
+      // 创建解压缩任务
+      const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
+      compress = await prisma.compress
+        .create({
+          data: {
+            chapter: {
+              connect: {
+                chapterId: chapter.chapterId,
+              },
+            },
+            chapterPath: chapter.chapterPath,
+            manga: {
+              connect: {
+                mangaId: chapter.mangaId,
+              },
+            },
+            mediaId: chapter.mediaId,
+            compressType: chapter.chapterType,
+            compressPath,
+            compressStatus: 'compressed',
+          },
+        })
+        .catch((error: any) => {
+          imagesResponse = new SResponse({
+            code: 0,
+            message: '',
+            data: images,
+            status: 'compressed',
+          })
+
+          return response.json(imagesResponse)
+        })
+      await unzipFile(chapter.chapterPath, compressPath)
+      images = image_files(compressPath, exclude)
+      imagesResponse = new SResponse({
+        code: 0,
+        message: '',
+        data: images,
+        status: 'compressed',
+      })
+      console.log('同步任务', imagesResponse)
     } else if (!compress) {
       // 创建解压缩任务
       const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
-      compress = await prisma.compress.create({
-        data: {
-          chapter: {
-            connect: {
-              chapterId: chapter.chapterId,
+      compress = await prisma.compress
+        .create({
+          data: {
+            chapter: {
+              connect: {
+                chapterId: chapter.chapterId,
+              },
             },
-          },
-          chapterPath: chapter.chapterPath,
-          manga: {
-            connect: {
-              mangaId: chapter.mangaId,
+            chapterPath: chapter.chapterPath,
+            manga: {
+              connect: {
+                mangaId: chapter.mangaId,
+              },
             },
+            mediaId: chapter.mediaId,
+            compressType: chapter.chapterType,
+            compressPath,
+            compressStatus: 'compressing',
           },
-          mediaId: chapter.mediaId,
-          compressType: chapter.chapterType,
-          compressPath,
-          compressStatus: 'compressing',
-        },
-      }).catch((error: any) => {
-        imagesResponse = new SResponse({
-          code: 0,
-          message: '',
-          data: images,
-          status: 'compressing',
         })
+        .catch((error: any) => {
+          imagesResponse = new SResponse({
+            code: 0,
+            message: '',
+            data: images,
+            status: 'compressing',
+          })
 
-        return response.json(imagesResponse)
-      })
+          return response.json(imagesResponse)
+        })
 
       // 执行解压缩任务
       await addTask({
