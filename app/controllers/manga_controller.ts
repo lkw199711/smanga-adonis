@@ -6,7 +6,7 @@ import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 import fs from 'fs'
-import { order_params, read_json } from '#utils/index'
+import { order_params, path_compress, read_json, s_delete } from '#utils/index'
 import path from 'path'
 
 export default class MangaController {
@@ -391,5 +391,69 @@ export default class MangaController {
     }
 
     return response.json(addTagsResponse)
+  }
+
+  public async compress_all({ params, response }: HttpContext) {
+    let { mangaId } = params
+    mangaId = Number(mangaId)
+
+    // 获取漫画所有章节
+    const chapters = await prisma.chapter.findMany({
+      where: { mangaId },
+    })
+
+    // 获取所有章节的压缩记录
+    const compresses = await prisma.compress.findMany({
+      where: { mangaId},
+    })
+
+    // 过滤出未压缩的章节
+    const haveNotCompressChapters = chapters.filter((chapter) => !compresses.find((compress) => compress.chapterId === chapter.chapterId))
+
+    if (!haveNotCompressChapters.length) {
+      const compressResponse = new SResponse({ code: 1, message: '此漫画章节已全部压缩' })
+      return response.json(compressResponse)
+    }
+
+    haveNotCompressChapters.forEach((chapter) => {
+      // 压缩章节
+      addTask({
+        taskName: `compress_chapter_${chapter.chapterId}`,
+        command: 'compressChapter',
+        args: {
+          chapterType: chapter.chapterType,
+          chapterPath: chapter.chapterPath,
+          chapterInfo: chapter,
+          compressPath: path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`),
+          chapterId: chapter.chapterId,
+        },
+        priority: TaskPriority.compress,
+        timeout: 1000 * 60 * 10,
+      })
+    })
+
+    const compressResponse = new SResponse({ code: 0, message: '压缩任务已添加' })
+    return response.json(compressResponse)
+  }
+
+  public async compress_delete({ params, response }: HttpContext) {
+    let { mangaId } = params
+    mangaId = Number(mangaId)
+
+    // 获取漫画所有章节的压缩记录
+    const compresses = await prisma.compress.findMany({
+      where: { mangaId },
+    })
+
+    // 删除压缩文件
+    compresses.forEach((compress) => {
+      s_delete(compress.compressPath)
+    })
+
+    // 删除漫画所有章节的压缩记录
+    await prisma.compress.deleteMany({ where: { mangaId } })
+
+    const compressResponse = new SResponse({ code: 0, message: '压缩记录删除成功' })
+    return response.json(compressResponse)
   }
 }

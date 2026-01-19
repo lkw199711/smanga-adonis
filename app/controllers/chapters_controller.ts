@@ -211,7 +211,6 @@ export default class ChaptersController {
         status: 'compressed',
       })
     } else if (!compress && get_config().compress.sync) {
-      console.log('同步任务')
       // 创建解压缩任务
       const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
       compress = await prisma.compress
@@ -252,7 +251,6 @@ export default class ChaptersController {
         data: images,
         status: 'compressed',
       })
-      console.log('同步任务', imagesResponse)
     } else if (!compress) {
       // 创建解压缩任务
       const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
