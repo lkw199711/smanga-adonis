@@ -4,7 +4,7 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
-import { path_compress, order_params, extract_numbers, delay, get_config } from '#utils/index'
+import { path_compress, order_params, extract_numbers, delay, get_config, s_delete } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { unzipFile } from '#utils/unzip'
@@ -439,6 +439,17 @@ export default class ChaptersController {
           }
         }
     */
+  }
+
+  public async compress_delete({ params, response }: HttpContext) {
+    let { chapterId } = params
+    const compress = await prisma.compress.findUnique({ where: { chapterId } })
+    if (!compress) {
+      return response.json(new SResponse({ code: 1, message: '章节解压记录不存在' }))
+    }
+    s_delete(compress.compressPath)
+    await prisma.compress.delete({ where: { compressId: compress.compressId } })
+    return response.json(new SResponse({ code: 0, message: '删除成功' }))
   }
 }
 

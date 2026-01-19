@@ -188,6 +188,7 @@ router.delete('/chapter/:chapterId', [chaptersController, 'destroy'])
 router.delete('/chapter/:chapterIds/batch', [chaptersController, 'destroy_batch'])
 router.get('/chapter-images/:chapterId', [chaptersController, 'images'])
 router.get('/chapter-first', [chaptersController, 'first'])
+router.delete('/chapter/:chapterId/compress', [chaptersController, 'compress_delete'])
 
 // 用户
 router.get('/user', [UsersController, 'index'])
