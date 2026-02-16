@@ -210,6 +210,15 @@ export default class ChaptersController {
         data: images,
         status: 'compressed',
       })
+    } else if (chapter.chapterType === 'pdf') {
+      // PDF章节，直接返回PDF文件路径
+      images = [chapter.chapterPath]
+      imagesResponse = new SResponse({
+        code: 0,
+        message: '',
+        data: images,
+        status: 'compressed',
+      })
     } else if (!compress && get_config().compress.sync) {
       // 创建解压缩任务
       const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
