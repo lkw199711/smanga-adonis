@@ -23,7 +23,8 @@
     "ignoreHiddenFiles": 1,
     "defaultTagColor": "#a0d911",
     "interval": "0 0 0,12 * * *",
-    "mediaPosterInterval": "0 0 1 * * *"
+    "mediaPosterInterval": "0 0 1 * * *",
+    "createMediaPoster": 1
   },
   "debug": {
     "dispatchSync": 0

@@ -49,6 +49,10 @@ export default class ConfigsController {
       config.scan.ignoreHiddenFiles = value
     }
 
+    if (key === 'scan.createMediaPoster') {
+      config.scan.createMediaPoster = value
+    }
+
     if (key === 'compress.poster') {
       config.compress.poster = value
     }
@@ -59,6 +63,10 @@ export default class ConfigsController {
 
     if (key === 'compress.saveDuration') {
       config.compress.saveDuration = value
+    }
+
+    if (key === 'compress.sync') {
+      config.compress.sync = value
     }
 
     // 检查并创建配置文件

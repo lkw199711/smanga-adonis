@@ -25,7 +25,8 @@ const defaultConfig = {
     reloadCover: 1,
     doNotCopyCover: 1,
     interval: "0 0 0,12 * * *",
-    mediaPosterInterval: "0 0 1 * * *"
+    mediaPosterInterval: "0 0 1 * * *",
+    createMediaPoster: 1,
   },
   sync: {
     interval: "0 0 23,11 * * *"
@@ -138,6 +139,12 @@ async function check_config_ver() {
   if (compressSync === undefined) {
     console.log('配置文件不存在compress.sync字段，使用默认值')
     config.compress.sync = defaultConfig.compress.sync
+    set_config(config)
+  }
+
+  if (config.scan?.createMediaPoster === undefined) {
+    console.log('配置文件不存在createMediaPoster字段，使用默认值')
+    config.scan.createMediaPoster = defaultConfig.scan.createMediaPoster
     set_config(config)
   }
 }
