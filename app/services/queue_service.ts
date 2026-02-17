@@ -11,6 +11,7 @@ import SyncMediaJob from './sync_media_job.js'
 import SyncMangaJob from './sync_manga_job.js'
 import SyncChapterJob from './sync_chapter_job.js'
 import CompressChapterJob from './compress_chapter_job.js'
+import ClearCompressJob from './clear_compress_job.js'
 import { get_config } from '#utils/index'
 
 import Bull from 'bull'
@@ -52,9 +53,11 @@ scanQueue.process('compress', queueConfig.concurrency, async (job: any) => {
   switch (command) {
     case 'compressChapter':
       //压缩章节
-      console.log('解压章节')
       new CompressChapterJob(args).run()
       break
+    case 'clearCompressCache':
+      await new ClearCompressJob().run()
+        break
     default:
       break
   }
@@ -128,6 +131,9 @@ async function task_process(command: string, args: any) {
       break
     case 'reloadMangaMeta':
       await new ReloadMangaMetaJob(args).run()
+      break
+    case 'clearCompressCache':
+      await new ClearCompressJob().run()
       break
     default:
       break
@@ -205,6 +211,9 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
         break
       case 'reloadMangaMeta':
         await new ReloadMangaMetaJob(args).run()
+        break
+      case 'clearCompressCache':
+        await new ClearCompressJob().run()
         break
       default:
         break

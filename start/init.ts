@@ -1,51 +1,11 @@
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
-import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config } from '#utils/index'
-import { create_scan_cron, create_sync_cron, create_media_poster_cron } from '#services/cron_service'
+import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config, read_json } from '#utils/index'
+import { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron } from '#services/cron_service'
 
 // 默认配置
-const defaultConfig = {
-  sql: {
-    client: 'sqlite',
-    host: '127.0.0.1',
-    port: 3306,
-    username: 'smanga',
-    password: 'smanga',
-    database: 'smanga',
-  },
-  imagick: {
-    memory: '1gb',
-    map: '1gb',
-    density: 300,
-    quality: 100,
-  },
-  scan: {
-    concurrency: 1,
-    reloadCover: 1,
-    doNotCopyCover: 1,
-    interval: "0 0 0,12 * * *",
-    mediaPosterInterval: "0 0 1 * * *",
-    createMediaPoster: 1,
-  },
-  sync: {
-    interval: "0 0 23,11 * * *"
-  },
-  debug: {
-    dispatchSync: 0,
-  },
-  ssl: {
-    pem: '',
-    key: '',
-  },
-  compress: {
-    sync: 1,
-    auto: 0,
-    saveDuration: 100,
-    poster: 300,
-    bookmark: 300,
-  },
-}
+const defaultConfig  = read_json('./data-example/config/smanga.json')
 
 export default async function boot() {
   const os = get_os()
@@ -93,6 +53,7 @@ export default async function boot() {
   create_scan_cron()
   create_sync_cron()
   create_media_poster_cron()
+  create_clear_compress_cron()
 }
 
 async function check_config_ver() {
@@ -145,6 +106,25 @@ async function check_config_ver() {
   if (config.scan?.createMediaPoster === undefined) {
     console.log('配置文件不存在createMediaPoster字段，使用默认值')
     config.scan.createMediaPoster = defaultConfig.scan.createMediaPoster
+    set_config(config)
+  }
+
+  // 如果配置文件不存在compress.limit字段，则添加，默认值为1000
+  if (config.compress?.limit === undefined) {
+    console.log('配置文件不存在compress.limit字段，使用默认值')
+    config.compress.limit = defaultConfig.compress.limit
+    set_config(config)
+  }
+
+  if (config.compress?.clearCron === undefined) {
+    console.log('配置文件不存在clearCron字段，使用默认值')
+    config.compress.clearCron = defaultConfig.compress.clearCron
+    set_config(config)
+  }
+
+  if (config.compress?.autoClear === undefined) {
+    console.log('配置文件不存在autoClear字段，使用默认值')
+    config.compress.autoClear = defaultConfig.compress.autoClear
     set_config(config)
   }
 }

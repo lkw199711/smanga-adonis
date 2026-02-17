@@ -11,6 +11,7 @@ enum TaskPriority {
   syncMedia = 500000,
   syncManga = 510000,
   syncChapter = 520000,
+  clearCompress = 1000000,
   default = 900000,
 }
 

@@ -260,6 +260,16 @@ export default class ChaptersController {
         data: images,
         status: 'compressed',
       })
+
+      // 清理解压缓存
+      if (get_config().compress.autoClear === 1) {
+        await addTask({
+          taskName: `clear_compress_cache_${chapter.chapterId}`,
+          command: 'clearCompressCache',
+          args: {},
+          priority: TaskPriority.clearCompress,
+        })
+      }
     } else if (!compress) {
       // 创建解压缩任务
       const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
@@ -327,6 +337,16 @@ export default class ChaptersController {
         data: images,
         status: compress.compressStatus,
       })
+
+      // 清理解压缓存
+      if (get_config().compress.autoClear === 1) {
+        await addTask({
+          taskName: `clear_compress_cache_${chapter.chapterId}`,
+          command: 'clearCompressCache',
+          args: {},
+          priority: TaskPriority.clearCompress,
+        })
+      }
     } else {
       // 解压任务超时，删除任务记录
       await prisma.compress.delete({ where: { chapterId: chapterId } })

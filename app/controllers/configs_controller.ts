@@ -45,7 +45,7 @@ export default class ConfigsController {
       config.scan.doNotCopyCover = value
     }
 
-    if (key === 'scan.ignoreHiddenFiles') { 
+    if (key === 'scan.ignoreHiddenFiles') {
       config.scan.ignoreHiddenFiles = value
     }
 
@@ -69,6 +69,18 @@ export default class ConfigsController {
       config.compress.sync = value
     }
 
+    if (key === 'compress.autoClear') {
+      config.compress.autoClear = value
+    }
+
+    if (key === 'compress.clearCron') {
+      config.compress.clearCron = value
+    }
+
+    if (key === 'compress.limit') {
+      config.compress.limit = Number(value)
+    }
+
     // 检查并创建配置文件
     const configFile = join(path_config(), 'smanga.json')
     await fs.writeFile(configFile, JSON.stringify(config, null, 2))
@@ -90,6 +102,7 @@ export default class ConfigsController {
     const user = await prisma.user.update({
       where: { userId },
       data: {
+        // @ts-ignore
         userConfig: sql_parse_json(userConfig),
       },
     })

@@ -89,6 +89,7 @@ router.post('/compress', [CompressesController, 'create'])
 router.put('/compress/:compressId', [CompressesController, 'update'])
 router.delete('/compress/:compressId', [CompressesController, 'destroy'])
 router.delete('/compress/:compressIds/batch', [CompressesController, 'destroy_batch'])
+router.delete('/compress-clear', [CompressesController, 'clear'])
 
 
 

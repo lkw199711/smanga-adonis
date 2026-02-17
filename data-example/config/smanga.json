@@ -38,7 +38,10 @@
     "auto": 0,
     "saveDuration": 100,
     "poster": 300,
-    "bookmark": 300
+    "bookmark": 300,
+    "autoClear": 2,
+    "limit": 1000,
+    "clearCron": "0 0 0 1 * *"
   },
   "queue": {
     "concurrency": 1,
