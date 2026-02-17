@@ -33,6 +33,7 @@
     "key": ""
   },
   "compress": {
+    "sync": 1,
     "auto": 0,
     "saveDuration": 100,
     "poster": 300,

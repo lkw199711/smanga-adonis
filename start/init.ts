@@ -38,6 +38,7 @@ const defaultConfig = {
     key: '',
   },
   compress: {
+    sync: 1,
     auto: 0,
     saveDuration: 100,
     poster: 300,
@@ -99,6 +100,7 @@ async function check_config_ver() {
   const syncInterval = config.sync?.interval
   const ignoreHiddenFiles = config.scan?.ignoreHiddenFiles
   const defaultTagColor = config.scan?.defaultTagColor
+  const compressSync = config.compress?.sync
 
   // 如果配置文件没有ignoreHiddenFiles字段，则添加，默认值为1
   if (ignoreHiddenFiles === undefined) {
@@ -129,6 +131,13 @@ async function check_config_ver() {
   if (config.scan?.concurrency === undefined) {
     console.log('配置文件不存在concurrency字段，使用默认值')
     config.scan.concurrency = defaultConfig.scan.concurrency
+    set_config(config)
+  }
+
+  // 如果配置文件不存在compress.sync字段，则添加，默认值为0
+  if (compressSync === undefined) {
+    console.log('配置文件不存在compress.sync字段，使用默认值')
+    config.compress.sync = defaultConfig.compress.sync
     set_config(config)
   }
 }

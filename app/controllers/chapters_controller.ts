@@ -301,6 +301,7 @@ export default class ChaptersController {
         args: {
           chapterType: chapter.chapterType,
           chapterPath: chapter.chapterPath,
+          chapterInfo: chapter,
           compressPath,
           chapterId: chapter.chapterId,
         },
