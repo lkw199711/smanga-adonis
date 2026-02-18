@@ -5,7 +5,60 @@ import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os
 import { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron } from '#services/cron_service'
 
 // 默认配置
-const defaultConfig  = read_json('./data-example/config/smanga.json')
+const defaultConfig = {
+  "sql": {
+    "client": "sqlite",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "username": "smanga",
+    "password": "smanga",
+    "database": "smanga",
+    "file": "./data/smanga.db",
+    "deploy": true
+  },
+  "imagick": {
+    "memory": "1gb",
+    "map": "1gb",
+    "density": 300,
+    "quality": 100
+  },
+  "scan": {
+    "auto": 0,
+    "concurrency": 1,
+    "reloadCover": 0,
+    "doNotCopyCover": 1,
+    "ignoreHiddenFiles": 1,
+    "defaultTagColor": "#a0d911",
+    "interval": "0 0 0,12 * * *",
+    "mediaPosterInterval": "0 0 1 * * *",
+    "createMediaPoster": 1
+  },
+  "debug": {
+    "dispatchSync": 0
+  },
+  "ssl": {
+    "pem": "",
+    "key": ""
+  },
+  "compress": {
+    "sync": 1,
+    "auto": 0,
+    "saveDuration": 100,
+    "poster": 300,
+    "bookmark": 300,
+    "autoClear": 2,
+    "limit": 1000,
+    "clearCron": "0 0 0 1 * *"
+  },
+  "queue": {
+    "concurrency": 1,
+    "attempts": 3,
+    "timeout": 120000
+  },
+  "sync": {
+    "interval": "0 0 23,10 * * *"
+  }
+}
 
 export default async function boot() {
   const os = get_os()

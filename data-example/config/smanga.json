@@ -47,5 +47,8 @@
     "concurrency": 1,
     "attempts": 3,
     "timeout": 120000
+  },
+  "sync": {
+    "interval": "0 0 23,10 * * *"
   }
 }
