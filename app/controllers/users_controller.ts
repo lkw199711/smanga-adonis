@@ -139,9 +139,30 @@ export default class UsersController {
 
   public async destroy({ params, response }: HttpContext) {
     let { userId } = params
-    const user = await prisma.user.delete({ where: { userId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: user })
-    return response.json(destroyResponse)
+    
+    try {
+      // 使用事务确保所有删除操作要么全部成功，要么全部失败
+      const user = await prisma.$transaction(async (prisma) => {
+        // 先删除与用户关联的所有记录
+        await prisma.login.deleteMany({ where: { userId } })
+        await prisma.token.deleteMany({ where: { userId } })
+        await prisma.userPermisson.deleteMany({ where: { userId } })
+        await prisma.mediaPermisson.deleteMany({ where: { userId } })
+        await prisma.history.deleteMany({ where: { userId } })
+        await prisma.collect.deleteMany({ where: { userId } })
+        await prisma.share.deleteMany({ where: { userId } })
+        
+        // 最后删除用户本身
+        return await prisma.user.delete({ where: { userId } })
+      })
+      
+      const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: user })
+      return response.json(destroyResponse)
+    } catch (error) {
+      console.error('删除用户失败:', error)
+      const errorResponse = new SResponse({ code: 1, message: '删除用户失败，请检查用户是否存在或有其他关联记录' })
+      return response.json(errorResponse)
+    }
   }
 
   public async config({ request, response }: HttpContext) {
