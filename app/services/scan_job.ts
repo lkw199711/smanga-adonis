@@ -107,13 +107,15 @@ export default class ScanPathJob {
       })
     }
 
-    // 生产媒体库封面
-    await addTask({
-      taskName: `create_media_poster_${this.pathInfo.mediaId}`,
-      command: 'createMediaPoster',
-      args: { mediaId: this.pathInfo.mediaId },
-      priority: TaskPriority.createMediaPoster,
-    })
+    // 生成媒体库封面
+    if(get_config().scan?.createMediaPoster) {
+      await addTask({
+        taskName: `create_media_poster_${this.pathInfo.mediaId}`,
+        command: 'createMediaPoster',
+        args: { mediaId: this.pathInfo.mediaId },
+        priority: TaskPriority.createMediaPoster,
+      })
+    }
   }
 
   /**

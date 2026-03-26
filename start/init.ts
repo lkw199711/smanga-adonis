@@ -1,48 +1,63 @@
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
-import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config } from '#utils/index'
-import { create_scan_cron, create_sync_cron, create_media_poster_cron } from '#services/cron_service'
+import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config, read_json } from '#utils/index'
+import { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron } from '#services/cron_service'
 
 // 默认配置
 const defaultConfig = {
-  sql: {
-    client: 'sqlite',
-    host: '127.0.0.1',
-    port: 3306,
-    username: 'smanga',
-    password: 'smanga',
-    database: 'smanga',
+  "sql": {
+    "client": "sqlite",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "username": "smanga",
+    "password": "smanga",
+    "database": "smanga",
+    "file": "./data/smanga.db",
+    "deploy": true
   },
-  imagick: {
-    memory: '1gb',
-    map: '1gb',
-    density: 300,
-    quality: 100,
+  "imagick": {
+    "memory": "1gb",
+    "map": "1gb",
+    "density": 300,
+    "quality": 100
   },
-  scan: {
-    concurrency: 1,
-    reloadCover: 1,
-    doNotCopyCover: 1,
-    interval: "0 0 0,12 * * *",
-    mediaPosterInterval: "0 0 1 * * *"
+  "scan": {
+    "auto": 0,
+    "concurrency": 1,
+    "reloadCover": 0,
+    "doNotCopyCover": 1,
+    "ignoreHiddenFiles": 1,
+    "defaultTagColor": "#a0d911",
+    "interval": "0 0 0,12 * * *",
+    "mediaPosterInterval": "0 0 1 * * *",
+    "createMediaPoster": 1
   },
-  sync: {
-    interval: "0 0 23,11 * * *"
+  "debug": {
+    "dispatchSync": 0
   },
-  debug: {
-    dispatchSync: 0,
+  "ssl": {
+    "pem": "",
+    "key": ""
   },
-  ssl: {
-    pem: '',
-    key: '',
+  "compress": {
+    "sync": 1,
+    "auto": 0,
+    "saveDuration": 100,
+    "poster": 300,
+    "bookmark": 300,
+    "autoClear": 2,
+    "limit": 1000,
+    "clearCron": "0 0 0 1 * *"
   },
-  compress: {
-    auto: 0,
-    saveDuration: 100,
-    poster: 300,
-    bookmark: 300,
+  "queue": {
+    "concurrency": 1,
+    "attempts": 3,
+    "timeout": 120000
   },
+  "sync": {
+    "interval": "0 0 23,10 * * *"
+  }
 }
 
 export default async function boot() {
@@ -91,6 +106,7 @@ export default async function boot() {
   create_scan_cron()
   create_sync_cron()
   create_media_poster_cron()
+  create_clear_compress_cron()
 }
 
 async function check_config_ver() {
@@ -99,6 +115,7 @@ async function check_config_ver() {
   const syncInterval = config.sync?.interval
   const ignoreHiddenFiles = config.scan?.ignoreHiddenFiles
   const defaultTagColor = config.scan?.defaultTagColor
+  const compressSync = config.compress?.sync
 
   // 如果配置文件没有ignoreHiddenFiles字段，则添加，默认值为1
   if (ignoreHiddenFiles === undefined) {
@@ -129,6 +146,38 @@ async function check_config_ver() {
   if (config.scan?.concurrency === undefined) {
     console.log('配置文件不存在concurrency字段，使用默认值')
     config.scan.concurrency = defaultConfig.scan.concurrency
+    set_config(config)
+  }
+
+  // 如果配置文件不存在compress.sync字段，则添加，默认值为0
+  if (compressSync === undefined) {
+    console.log('配置文件不存在compress.sync字段，使用默认值')
+    config.compress.sync = defaultConfig.compress.sync
+    set_config(config)
+  }
+
+  if (config.scan?.createMediaPoster === undefined) {
+    console.log('配置文件不存在createMediaPoster字段，使用默认值')
+    config.scan.createMediaPoster = defaultConfig.scan.createMediaPoster
+    set_config(config)
+  }
+
+  // 如果配置文件不存在compress.limit字段，则添加，默认值为1000
+  if (config.compress?.limit === undefined) {
+    console.log('配置文件不存在compress.limit字段，使用默认值')
+    config.compress.limit = defaultConfig.compress.limit
+    set_config(config)
+  }
+
+  if (config.compress?.clearCron === undefined) {
+    console.log('配置文件不存在clearCron字段，使用默认值')
+    config.compress.clearCron = defaultConfig.compress.clearCron
+    set_config(config)
+  }
+
+  if (config.compress?.autoClear === undefined) {
+    console.log('配置文件不存在autoClear字段，使用默认值')
+    config.compress.autoClear = defaultConfig.compress.autoClear
     set_config(config)
   }
 }

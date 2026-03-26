@@ -89,6 +89,7 @@ router.post('/compress', [CompressesController, 'create'])
 router.put('/compress/:compressId', [CompressesController, 'update'])
 router.delete('/compress/:compressId', [CompressesController, 'destroy'])
 router.delete('/compress/:compressIds/batch', [CompressesController, 'destroy_batch'])
+router.delete('/compress-clear', [CompressesController, 'clear'])
 
 
 
@@ -176,6 +177,8 @@ router.put('/manga/:mangaId/scan', [MangaController, 'scan'])
 router.put('/manga/:mangaId/reload-meta', [MangaController, 'reload_meta'])
 router.put('/manga/:mangaId/meta', [MangaController, 'edit_meta'])
 router.put('/manga/:mangaId/tags', [MangaController, 'add_tags'])
+router.put('/manga/:mangaId/compress', [MangaController, 'compress_all'])
+router.delete('/manga/:mangaId/compress', [MangaController, 'compress_delete'])
 
 // 章节
 router.get('/chapter', [chaptersController, 'index'])
@@ -186,6 +189,7 @@ router.delete('/chapter/:chapterId', [chaptersController, 'destroy'])
 router.delete('/chapter/:chapterIds/batch', [chaptersController, 'destroy_batch'])
 router.get('/chapter-images/:chapterId', [chaptersController, 'images'])
 router.get('/chapter-first', [chaptersController, 'first'])
+router.delete('/chapter/:chapterId/compress', [chaptersController, 'compress_delete'])
 
 // 用户
 router.get('/user', [UsersController, 'index'])

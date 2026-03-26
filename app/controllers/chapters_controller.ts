@@ -4,9 +4,10 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
-import { path_compress, order_params, extract_numbers, delay } from '#utils/index'
+import { path_compress, order_params, extract_numbers, delay, get_config, s_delete } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
+import { unzipFile } from '#utils/unzip'
 
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
@@ -209,34 +210,111 @@ export default class ChaptersController {
         data: images,
         status: 'compressed',
       })
+    } else if (chapter.chapterType === 'pdf') {
+      // PDF章节，直接返回PDF文件路径
+      images = [chapter.chapterPath]
+      imagesResponse = new SResponse({
+        code: 0,
+        message: '',
+        data: images,
+        status: 'compressed',
+      })
+    } else if (!compress && get_config().compress.sync) {
+      // 创建解压缩任务
+      const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
+      compress = await prisma.compress
+        .create({
+          data: {
+            chapter: {
+              connect: {
+                chapterId: chapter.chapterId,
+              },
+            },
+            chapterPath: chapter.chapterPath,
+            manga: {
+              connect: {
+                mangaId: chapter.mangaId,
+              },
+            },
+            mediaId: chapter.mediaId,
+            compressType: chapter.chapterType,
+            compressPath,
+            compressStatus: 'compressed',
+          },
+        })
+        .catch((error: any) => {
+          imagesResponse = new SResponse({
+            code: 0,
+            message: '',
+            data: images,
+            status: 'compressed',
+          })
+
+          return response.json(imagesResponse)
+        })
+      await unzipFile(chapter.chapterPath, compressPath)
+      images = image_files(compressPath, exclude)
+      imagesResponse = new SResponse({
+        code: 0,
+        message: '',
+        data: images,
+        status: 'compressed',
+      })
+
+      // 清理解压缓存
+      if (get_config().compress.autoClear === 1) {
+        await addTask({
+          taskName: `clear_compress_cache_${chapter.chapterId}`,
+          command: 'clearCompressCache',
+          args: {},
+          priority: TaskPriority.clearCompress,
+        })
+      }
     } else if (!compress) {
       // 创建解压缩任务
       const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
-      compress = await prisma.compress.create({
-        data: {
-          chapter: {
-            connect: {
-              chapterId: chapter.chapterId,
+      compress = await prisma.compress
+        .create({
+          data: {
+            chapter: {
+              connect: {
+                chapterId: chapter.chapterId,
+              },
             },
-          },
-          chapterPath: chapter.chapterPath,
-          manga: {
-            connect: {
-              mangaId: chapter.mangaId,
+            chapterPath: chapter.chapterPath,
+            manga: {
+              connect: {
+                mangaId: chapter.mangaId,
+              },
             },
+            mediaId: chapter.mediaId,
+            compressType: chapter.chapterType,
+            compressPath,
+            compressStatus: 'compressing',
           },
-          mediaId: chapter.mediaId,
-          compressType: chapter.chapterType,
-          compressPath,
-          compressStatus: 'compressing',
-        },
-      })
+        })
+        .catch((error: any) => {
+          imagesResponse = new SResponse({
+            code: 0,
+            message: '',
+            data: images,
+            status: 'compressing',
+          })
+
+          return response.json(imagesResponse)
+        })
 
       // 执行解压缩任务
       await addTask({
         taskName: `compress_chapter_${chapter.chapterId}`,
         command: 'compressChapter',
-        args: { chapterType: chapter.chapterType, chapterPath: chapter.chapterPath, compressPath },
+        args: {
+          chapterType: chapter.chapterType,
+          chapterPath: chapter.chapterPath,
+          chapterInfo: chapter,
+          compressPath,
+          chapterId: chapter.chapterId,
+        },
         priority: TaskPriority.compress,
         timeout: 1000 * 60 * 10,
       })
@@ -253,23 +331,22 @@ export default class ChaptersController {
     } else if (compressPathExists) {
       // 已完成解压缩的章节
       images = image_files(compress.compressPath, exclude)
-      // 更新解压缩任务状态
-      if (compress.compressStatus === 'compressing') {
-        compress = await prisma.compress.update({
-          where: {
-            chapterId: chapter.chapterId,
-          },
-          data: {
-            compressStatus: 'compressed',
-          },
-        })
-      }
       imagesResponse = new SResponse({
         code: 0,
         message: '',
         data: images,
-        status: 'compressed',
+        status: compress.compressStatus,
       })
+
+      // 清理解压缓存
+      if (get_config().compress.autoClear === 1) {
+        await addTask({
+          taskName: `clear_compress_cache_${chapter.chapterId}`,
+          command: 'clearCompressCache',
+          args: {},
+          priority: TaskPriority.clearCompress,
+        })
+      }
     } else {
       // 解压任务超时，删除任务记录
       await prisma.compress.delete({ where: { chapterId: chapterId } })
@@ -392,6 +469,17 @@ export default class ChaptersController {
           }
         }
     */
+  }
+
+  public async compress_delete({ params, response }: HttpContext) {
+    let { chapterId } = params
+    const compress = await prisma.compress.findUnique({ where: { chapterId } })
+    if (!compress) {
+      return response.json(new SResponse({ code: 1, message: '章节解压记录不存在' }))
+    }
+    s_delete(compress.compressPath)
+    await prisma.compress.delete({ where: { compressId: compress.compressId } })
+    return response.json(new SResponse({ code: 0, message: '删除成功' }))
   }
 }
 

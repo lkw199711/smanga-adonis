@@ -66,8 +66,8 @@ export default class ReloadMangaMetaJob {
         )
         return null
       })
-    
-    this.isCloudMedia = this.mediaRecord.isCloudMedia;
+
+    this.isCloudMedia = this.mediaRecord.isCloudMedia
 
     // 检查漫画是否有 smanga 元数据文件夹
     this.smangaMetaFolder = this.smanga_meta_folder()
@@ -243,7 +243,7 @@ export default class ReloadMangaMetaJob {
     const doNotCopyCover = get_config()?.scan?.doNotCopyCover ?? 1
     // 源封面
     let sourcePoster = ''
-    const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '');
+    const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
 
     // 如果是网盘库 简化封面检索逻辑
     if (this.isCloudMedia) {
@@ -266,8 +266,19 @@ export default class ReloadMangaMetaJob {
       }
     }
 
+    // 检索元数据目录封面图片
+    if (!sourcePoster && fs.existsSync(this.smangaMetaFolder)) {
+      extensions.some((ext) => {
+        const picPath = path.join(this.smangaMetaFolder, 'cover' + ext)
+        if (fs.existsSync(picPath)) {
+          sourcePoster = picPath
+          return true
+        }
+      })
+    }
+
     // 检索平级目录封面图片
-    if (!this.isCloudMedia && !sourcePoster) {
+    if (!sourcePoster) {
       extensions.some((ext) => {
         const picPath = dirOutExt + ext
         if (fs.existsSync(picPath)) {
@@ -279,25 +290,12 @@ export default class ReloadMangaMetaJob {
 
     // 检索漫画文件夹内的封面图片
     if (
-      !this.isCloudMedia &&
       !sourcePoster &&
       fs.existsSync(dir) &&
       fs.statSync(dir).isDirectory()
     ) {
       extensions.some((ext) => {
         const picPath = path.join(dir, 'cover' + ext)
-        if (fs.existsSync(picPath)) {
-          sourcePoster = picPath
-          return true
-        }
-      })
-    }
-
-    // 检索元数据目录封面图片
-    const dirMeta = dirOutExt + '-smanga-info'
-    if (!this.isCloudMedia && !sourcePoster && fs.existsSync(dirMeta)) {
-      extensions.some((ext) => {
-        const picPath = dirMeta + '/cover' + ext
         if (fs.existsSync(picPath)) {
           sourcePoster = picPath
           return true
@@ -400,6 +398,7 @@ export default class ReloadMangaMetaJob {
         this.mangaRecord.mangaName,
         this.chapterRecord.chapterName + '.jpg'
       )
+      const metaChapterCover2 = path.join(this.smangaMetaFolder, 'chapter-cover.jpg')
       // 同级别目录封面
       const sidePoster = dirOutExt + '.jpg'
       // 漫画文件夹内部封面
@@ -408,6 +407,9 @@ export default class ReloadMangaMetaJob {
       if (fs.existsSync(metaChapterCover)) {
         hasMetaChapterCover = true
         sourcePoster = metaChapterCover
+      } else if (fs.existsSync(metaChapterCover2)) {
+        hasMetaChapterCover = true
+        sourcePoster = metaChapterCover2
       } else if (fs.existsSync(sidePoster)) {
         sourcePoster = sidePoster
       } else if (fs.existsSync(picPath)) {

@@ -1,20 +1,29 @@
 import { unzipFile } from '#utils/unzip'
 import { extractRar } from '#utils/unrar'
 import { extract7z } from '#utils/un7z'
+import prisma from '#start/prisma'
 
 export default class CompressChapterJob {
+  chapterId: number
+  chapterInfo: any
   chapterType: string
   chapterPath: string
   compressPath: string
   constructor({
+    chapterId,
+    chapterInfo,
     chapterType,
     chapterPath,
     compressPath,
   }: {
+    chapterId: number
+    chapterInfo: any
     chapterType: string
     chapterPath: string
     compressPath: string
   }) {
+    this.chapterId = chapterId
+    this.chapterInfo = chapterInfo
     this.chapterType = chapterType
     this.chapterPath = chapterPath
     this.compressPath = compressPath
@@ -33,6 +42,24 @@ export default class CompressChapterJob {
       default:
         console.log('未知的压缩类型:', this.chapterType)
     }
+
+    await prisma.compress.upsert({
+      where: {
+        chapterId: this.chapterId,
+      },
+      update: {
+        compressStatus: 'compressed',
+      },
+      create: {
+        chapterId: this.chapterId,
+        mangaId: this.chapterInfo.mangaId,
+        mediaId: this.chapterInfo.mediaId,
+        chapterPath: this.chapterPath,
+        compressPath: this.compressPath,
+        compressType: this.chapterType,
+        compressStatus: 'compressed',
+      },
+    })
 
     console.log(this.chapterPath, '解压完成')
   }

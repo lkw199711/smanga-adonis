@@ -11,6 +11,7 @@ import SyncMediaJob from './sync_media_job.js'
 import SyncMangaJob from './sync_manga_job.js'
 import SyncChapterJob from './sync_chapter_job.js'
 import CompressChapterJob from './compress_chapter_job.js'
+import ClearCompressJob from './clear_compress_job.js'
 import { get_config } from '#utils/index'
 
 import Bull from 'bull'
@@ -37,7 +38,9 @@ const scanQueue = new Bull('smanga', {
   },
 })
 
-scanQueue.on('completed', (job) => {})
+scanQueue.on('completed', (job) => {
+  console.log(`Job completed: ${job.id}`)
+})
 
 scanQueue.on('failed', (job, err) => {
   console.error(`Job failed: ${job.id} with error: ${err.message}`)
@@ -50,9 +53,11 @@ scanQueue.process('compress', queueConfig.concurrency, async (job: any) => {
   switch (command) {
     case 'compressChapter':
       //压缩章节
-      console.log('解压章节')
       new CompressChapterJob(args).run()
       break
+    case 'clearCompressCache':
+      await new ClearCompressJob().run()
+        break
     default:
       break
   }
@@ -64,145 +69,21 @@ scanQueue.process('compress', queueConfig.concurrency, async (job: any) => {
 scanQueue.process('scan', queueConfig.concurrency, async (job: any) => {
   const { command, args } = job.data
 
-  switch (command) {
-    case 'taskScanPath':
-      //扫描任务调用
-      console.log('执行扫描任务')
-      await new ScanPathJob(args).run()
-      break
-    case 'taskScanManga':
-      console.log('执行扫描漫画任务')
-      //扫描漫画任务调用
-      await new ScanMangaJob(args).run()
-      break
-    case 'deleteMedia':
-      //删除媒体库
-      console.log('删除媒体库')
-      await new DeleteMediaJob(args).run()
-      break
-    case 'deletePath':
-      //删除路径
-      console.log('删除路径')
-      await new DeletePathJob(args).run()
-      break
-    case 'deleteManga':
-      //删除漫画
-      console.log('删除漫画')
-      await new DeleteMangaJob(args).run()
-      break
-    case 'deleteChapter':
-      //删除章节
-      console.log('删除章节')
-      await new DeleteChapterJob(args).run()
-      break
-    case 'copyPoster':
-      await new CopyPosterJob(args).run()
-      break
-    case 'compressChapter':
-      //压缩章节
-      console.log('压缩章节')
-      // await compress_chapter_job(args)
-      break
-    case 'createMediaPoster':
-      //生成媒体库封面
-      console.log('生成媒体库封面')
-      await new CreateMediaPosterJob(args).run()
-      break
-    case 'reloadMangaMeta':
-      //重新加载漫画元数据
-      console.log('重新加载漫画元数据')
-      await new ReloadMangaMetaJob(args).run()
-      break
-    default:
-      break
-  }
+  await task_process(command, args)
 
-  return true
 })
 
 scanQueue.process('sync', queueConfig.concurrency, async (job: any) => {
   const { command, args } = job.data
 
-  switch (command) {
-    case 'taskSyncMedia':
-      //媒体库同步任务调用
-      console.log('执行媒体库同步任务')
-      await new SyncMediaJob(args).run()
-      break
-    case 'taskSyncManga':
-      console.log('执行漫画同步任务')
-      //漫画同步任务调用
-      await new SyncMangaJob(args).run()
-      break
-    case 'taskSyncChapter':
-      console.log('执行章节同步任务')
-      //章节同步任务调用
-      await new SyncChapterJob(args).run()
-    default:
-      break
-  }
-
-  return true
+  await task_process(command, args)
 })
 
 // 处理默认任务
 scanQueue.process(queueConfig.concurrency, async (job: any) => {
   const { command, args } = job.data
 
-  switch (command) {
-    case 'taskScanPath':
-      //扫描任务调用
-      console.log('执行扫描任务')
-      await new ScanPathJob(args).run()
-      break
-    case 'taskScanManga':
-      console.log('执行扫描漫画任务')
-      //扫描漫画任务调用
-      await new ScanMangaJob(args).run()
-      break
-    case 'deleteMedia':
-      //删除媒体库
-      console.log('删除媒体库')
-      await new DeleteMediaJob(args).run()
-      break
-    case 'deletePath':
-      //删除路径
-      console.log('删除路径')
-      await new DeletePathJob(args).run()
-      break
-    case 'deleteManga':
-      //删除漫画
-      console.log('删除漫画')
-      await new DeleteMangaJob(args).run()
-      break
-    case 'deleteChapter':
-      //删除章节
-      console.log('删除章节')
-      await new DeleteChapterJob(args).run()
-      break
-    case 'copyPoster':
-      await new CopyPosterJob(args).run()
-      break
-    case 'compressChapter':
-      //压缩章节
-      console.log('压缩章节')
-      await new CompressChapterJob(args).run()
-      break
-    case 'createMediaPoster':
-      //生成媒体库封面
-      console.log('生成媒体库封面')
-      await new CreateMediaPosterJob(args).run()
-      break
-    case 'reloadMangaMeta':
-      //重新加载漫画元数据
-      console.log('重新加载漫画元数据')
-      await new ReloadMangaMetaJob(args).run()
-      break
-    default:
-      break
-  }
-
-  return true
+  await task_process(command, args)
 })
 
 const deleteQueue = new Bull('smanga', {
@@ -218,6 +99,46 @@ const compressQueue = new Bull('smanga', {
     port: 6379,
   },
 })
+
+async function task_process(command: string, args: any) {
+  switch (command) {
+    case 'taskScanPath':
+      await new ScanPathJob(args).run()
+      break
+    case 'taskScanManga':
+      await new ScanMangaJob(args).run()
+      break
+    case 'deleteMedia':
+      await new DeleteMediaJob(args).run()
+      break
+    case 'deletePath':
+      await new DeletePathJob(args).run()
+      break
+    case 'deleteManga':
+      await new DeleteMangaJob(args).run()
+      break
+    case 'deleteChapter':
+      await new DeleteChapterJob(args).run()
+      break
+    case 'copyPoster':
+      await new CopyPosterJob(args).run()
+      break
+    case 'compressChapter':
+      await new CompressChapterJob(args).run()
+      break
+    case 'createMediaPoster':
+      await new CreateMediaPosterJob(args).run()
+      break
+    case 'reloadMangaMeta':
+      await new ReloadMangaMetaJob(args).run()
+      break
+    case 'clearCompressCache':
+      await new ClearCompressJob().run()
+      break
+    default:
+      break
+  }
+}
 
 async function path_scanning(pathId: number) {
   const wattingJobs = await scanQueue.getWaiting()
@@ -290,6 +211,9 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
         break
       case 'reloadMangaMeta':
         await new ReloadMangaMetaJob(args).run()
+        break
+      case 'clearCompressCache':
+        await new ClearCompressJob().run()
         break
       default:
         break
