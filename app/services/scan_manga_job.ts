@@ -352,6 +352,14 @@ export default class ScanMangaJob {
         where: { mangaId: this.mangaRecord.mangaId },
         data: { chapterCount: chapterList.length },
       })
+
+      // 更新漫画更新时间 当且仅当章节数量增加时
+      if (this.mangaRecord?.chapterCount && chapterList.length > this.mangaRecord.chapterCount) {
+        await prisma.manga.update({
+          where: { mangaId: this.mangaRecord.mangaId },
+          data: { chapterUpdate: new Date() },
+        })
+      }
     }
   }
 

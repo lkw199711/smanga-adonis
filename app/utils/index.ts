@@ -150,6 +150,12 @@ export function order_params(order: string = 'asc', model: string = 'chapter'): 
     }
   }
 
+  if (/chapterUpdate/i.test(order)) {
+    return {
+      chapterUpdate: sort,
+    }
+  }
+
   return {}
 }
 

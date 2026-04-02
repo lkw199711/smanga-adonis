@@ -33,8 +33,8 @@ const timeout = queueConfig?.timeout ?? 120000 // 超时时间（毫秒）
 
 const scanQueue = new Bull('smanga', {
   redis: {
-    host: '127.0.0.1',
-    port: 6379,
+    host: get_config()?.redisHost || '127.0.0.1',
+    port: get_config()?.redisPort || 6379,
   },
 })
 

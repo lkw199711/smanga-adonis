@@ -171,7 +171,7 @@ model manga {
   parentPath   String?
   mangaCover   String?
   mangaNumber  String?
-  chapterCount Int?
+  chapterCount Int        @default(0)
   browseType   String     @default("flow")
   direction    Int        @default(1)
   removeFirst  Int        @default(0)
@@ -183,6 +183,7 @@ model manga {
   deleteFlag   Int        @default(0)
   createTime   DateTime   @default(now())
   updateTime   DateTime   @default(now()) @updatedAt
+  chapterUpdate DateTime  @default(now())
   latests      latest[]
   historys     history[]
   chapters     chapter[]

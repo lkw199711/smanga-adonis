@@ -171,7 +171,7 @@ model manga {
   parentPath   String?    @db.VarChar(191)
   mangaCover   String?    @db.VarChar(191)
   mangaNumber  String?    @db.VarChar(191)
-  chapterCount Int?       @db.UnsignedInt
+  chapterCount Int        @default(0) @db.UnsignedInt
   browseType   String     @default("flow") @db.VarChar(191)
   direction    Int        @default(1) @db.UnsignedInt
   removeFirst  Int        @default(0) @db.UnsignedInt
@@ -183,6 +183,7 @@ model manga {
   deleteFlag   Int        @default(0)
   createTime   DateTime   @default(now()) @db.DateTime(6)
   updateTime   DateTime   @default(now()) @updatedAt @db.DateTime(6)
+  chapterUpdate DateTime  @default(now()) @db.DateTime(6)
   latests      latest[]
   historys     history[]
   chapters     chapter[]
