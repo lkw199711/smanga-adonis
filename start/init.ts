@@ -16,6 +16,10 @@ const defaultConfig = {
     "file": "./data/smanga.db",
     "deploy": true
   },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379
+  },
   "imagick": {
     "memory": "1gb",
     "map": "1gb",
@@ -178,6 +182,12 @@ async function check_config_ver() {
   if (config.compress?.autoClear === undefined) {
     console.log('配置文件不存在autoClear字段，使用默认值')
     config.compress.autoClear = defaultConfig.compress.autoClear
+    set_config(config)
+  }
+
+  if (config?.redis === undefined) {
+    console.log('配置文件不存在redis字段，使用默认值')
+    config.redis = defaultConfig.redis
     set_config(config)
   }
 }

@@ -7,11 +7,11 @@
     "password": "smanga",
     "database": "smanga",
     "file": "./data/smanga.db",
-    "redis": {
-      "host": "127.0.0.1",
-      "port": 6379
-    },
     "deploy": true
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379
   },
   "imagick": {
     "memory": "1gb",
