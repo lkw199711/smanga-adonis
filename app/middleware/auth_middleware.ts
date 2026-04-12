@@ -9,6 +9,7 @@ import prisma from '#start/prisma'
 import type { NextFn } from '@adonisjs/core/types/http'
 import { SResponse } from '../interfaces/response.js'
 import type { HttpContextWithUserId } from '../type/http.js'
+import { get_config } from '#utils/index'
 
 /**
  * Auth middleware is used authenticate HTTP requests and deny

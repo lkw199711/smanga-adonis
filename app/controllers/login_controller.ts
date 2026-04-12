@@ -9,6 +9,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
+import { get_config } from '#utils/index'
 import { v4 as uuidv4 } from 'uuid'
 
 export default class LoginController {
@@ -87,6 +88,7 @@ export default class LoginController {
     const saveResponse = new SResponse({
       code: 0, message: '登录成功', data: {
         ...login,
+        serverKey: get_config()?.serverKey,
         userRole: user.role
     } })
     return response.json(saveResponse)

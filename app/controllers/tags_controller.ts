@@ -1,6 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
+import { Prisma } from '@prisma/client'
 import { ListResponse, SResponse } from '../interfaces/response.js'
+import _ from 'lodash'
 
 export default class TagsController {
   public async index({ request, response }: HttpContext) {
@@ -10,21 +12,60 @@ export default class TagsController {
     if (page) {
       listResponse = await this.paginate(page, pageSize)
     } else {
-      listResponse = await this.no_paginate()
+      listResponse = await this.no_paginate({ request, response })
     }
 
     return response.json(listResponse)
   }
 
   // 不分页
-  private async no_paginate() {
-    const list = await prisma.tag.findMany()
+  private async no_paginate({ request, response }: any) {
+    const userId = (request as any).userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response
+        .status(401)
+        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+    }
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons =
+      (await prisma.mediaPermisson.findMany({
+        where: { userId },
+        select: { mediaId: true },
+      })) || []
+    const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
+
+    const tagList: any[] = await prisma.$queryRaw`SELECT 
+          tag.tagId,
+          MAX(tag.tagName) AS tagName,
+          MAX(tag.tagColor) AS tagColor,
+          MAX(tag.description) AS description,
+          MAX(tag.updateTime) AS updateTime,
+          MAX(tag.createTime) AS createTime,
+          MAX(manga.mangaId) AS mangaId,
+          MAX(manga.mediaId) AS mediaId,
+          COUNT(history.historyId) AS "readCount"      -- 使用聚合函数选readCount
+      FROM 
+          tag
+      JOIN 
+          mangaTag ON tag.tagId = mangaTag.tagId
+      JOIN 
+          manga ON mangaTag.mangaId = manga.mangaId
+      LEFT JOIN 
+          history ON manga.mangaId = history.mangaId
+      WHERE 
+          ${isAdmin} OR manga.mediaId IN (${Prisma.join(mediaIds)})
+      GROUP BY 
+          tag.tagId
+      ORDER BY 
+          COUNT(history.historyId) DESC
+      `
 
     return new ListResponse({
       code: 0,
       message: '',
-      list,
-      count: list.length,
+      list: tagList,
+      count: tagList.length,
     })
   }
 
@@ -177,18 +218,9 @@ export default class TagsController {
       },
     })
 
-    // 根据 mangaId 进行分组，确保每个 manga 只出现一次
-    Object.values(
-      mangaTags.reduce((acc: any, curr) => {
-        // 如果 mangaId 不存在于分组对象中，添加它
-        if (!acc[curr.mangaId]) {
-          acc[curr.mangaId] = curr
-        }
-        return acc
-      }, {})
-    )
-
-    const list = mangaTags.map((item) => Object.assign(item.manga, { mangaTagId: item.mangaTagId }))
+    // 去重
+    const uniqueMangaTags = _.uniqBy(mangaTags, 'mangaId')
+    const list = uniqueMangaTags.map((item) => Object.assign(item.manga, { mangaTagId: item.mangaTagId }))
 
     const listResponse = new ListResponse({
       code: 0,

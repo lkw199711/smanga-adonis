@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import prisma from './prisma.js'
 import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config, read_json } from '#utils/index'
 import { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron } from '#services/cron_service'
+import { v4 as uuidv4 } from 'uuid'
 
 // 默认配置
 const defaultConfig = {
@@ -188,6 +189,12 @@ async function check_config_ver() {
   if (config?.redis === undefined) {
     console.log('配置文件不存在redis字段，使用默认值')
     config.redis = defaultConfig.redis
+    set_config(config)
+  }
+
+  if (config?.serverKey === undefined) {
+    console.log('配置文件不存在serverKey字段，使用默认值')
+    config.serverKey = uuidv4()
     set_config(config)
   }
 }

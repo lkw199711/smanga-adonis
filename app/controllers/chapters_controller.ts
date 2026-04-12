@@ -11,7 +11,7 @@ import { unzipFile } from '#utils/unzip'
 
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
-    const { mangaId, page, mediaId, pageSize, order, keyWord } = request.only([
+    let { mangaId, mediaId, page, pageSize, order, keyWord } = request.only([
       'page',
       'pageSize',
       'mangaId',
@@ -28,6 +28,7 @@ export default class ChaptersController {
           .status(404)
           .json(new SResponse({ code: 404, message: '漫画不存在', status: 'manga not exist' }))
       }
+      mediaId = manga.mediaId
     }
 
     const user = await prisma.user.findUnique({ where: { userId } })
@@ -45,7 +46,7 @@ export default class ChaptersController {
 
     if (!isAdmin) {
       const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
-      if (!mediaIds.includes(Number(mediaId))) {
+      if (!mediaIds.includes(mediaId)) {
         return response
           .status(403)
           .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
