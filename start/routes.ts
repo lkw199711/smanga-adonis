@@ -32,6 +32,7 @@ const DeploysController = () => import('#controllers/deploys_controller')
 const FilesController = () => import('#controllers/files_controller')
 const SharesController = () => import('#controllers/shares_controller')
 const SyncsController = () => import('#controllers/syncs_controller')
+const HomepageController = () => import('#controllers/homepage_controller')
 
 router.get('/', async () => {
   return {
@@ -238,3 +239,7 @@ router.put('user-config', [ConfigsController, 'user_config'])
 router.get('/file/apk', [FilesController, 'apk'])
 router.get('/file', [FilesController, 'index'])
 router.post('/file', [FilesController, 'index'])
+
+// HomePage (gethomepage.dev) customapi 适配
+// 通过 apikey 鉴权，不走 token 中间件; 详见 homepage_controller.ts
+router.get('/homepage/statistic', [HomepageController, 'statistic'])

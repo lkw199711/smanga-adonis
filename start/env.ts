@@ -35,4 +35,12 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_USER: Env.schema.string(),
   DB_PASSWORD: Env.schema.string.optional(),
   DB_DATABASE: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | HomePage (gethomepage.dev) customapi 适配
+  | 用于 /homepage/* 接口的 apikey 鉴权; 留空则不校验。
+  |----------------------------------------------------------
+  */
+  HOMEPAGE_API_KEY: Env.schema.string.optional(),
 })
