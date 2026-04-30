@@ -220,6 +220,7 @@ export function render_feed(feed: OpdsFeed): string {
     '<feed xmlns="http://www.w3.org/2005/Atom"' +
       ' xmlns:opds="http://opds-spec.org/2010/catalog"' +
       ' xmlns:dc="http://purl.org/dc/terms/"' +
+      ' xmlns:pse="http://vaemendis.net/opds-pse/ns"' +
       ' xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">'
   )
   lines.push(`  <id>${xml_escape(feed.id)}</id>`)
