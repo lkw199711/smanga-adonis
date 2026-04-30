@@ -10,6 +10,11 @@ import type { NextFn } from '@adonisjs/core/types/http'
 import { SResponse } from '../interfaces/response.js'
 import type { HttpContextWithUserId } from '../type/http.js'
 import { get_config } from '#utils/index'
+import {
+  parse_basic_auth,
+  authenticate_basic,
+  BASIC_REALM,
+} from '../utils/basic_auth.js'
 
 /**
  * Auth middleware is used authenticate HTTP requests and deny
@@ -28,6 +33,37 @@ export default class AuthMiddleware {
       // 如果是 deploy 或 test 控制器，跳过中间件
       await next()
       return
+    }
+
+    // ========================================================================
+    // OPDS 分支: 使用 HTTP Basic Auth 鉴权 (兼容第三方阅读器, 如 可达漫画)
+    // 全局开关: OPDS_ENABLED=false 时直接返回 404
+    // ========================================================================
+    if (request.url().startsWith('/opds')) {
+      if ((process.env.OPDS_ENABLED ?? 'true').toLowerCase() === 'false') {
+        return response.status(404).send('OPDS disabled')
+      }
+
+      try {
+        const cred = parse_basic_auth(request.header('authorization'))
+        const user = await authenticate_basic(cred)
+        if (!user) {
+          return response
+            .status(401)
+            .header('WWW-Authenticate', `Basic realm="${BASIC_REALM}", charset="UTF-8"`)
+            .send('Unauthorized')
+        }
+        request.userId = user.userId
+        request.user = user
+        await next()
+        return
+      } catch (err) {
+        return response
+          .status(500)
+          .json(
+            new SResponse({ code: 1, message: 'OPDS auth error: ' + (err?.message ?? 'unknown') })
+          )
+      }
     }
 
     const userToken = request.header('token')

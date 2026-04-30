@@ -33,6 +33,7 @@ const FilesController = () => import('#controllers/files_controller')
 const SharesController = () => import('#controllers/shares_controller')
 const SyncsController = () => import('#controllers/syncs_controller')
 const HomepageController = () => import('#controllers/homepage_controller')
+const OpdsController = () => import('#controllers/opds_controller')
 
 router.get('/', async () => {
   return {
@@ -243,3 +244,16 @@ router.post('/file', [FilesController, 'index'])
 // HomePage (gethomepage.dev) customapi 适配
 // 通过 apikey 鉴权，不走 token 中间件; 详见 homepage_controller.ts
 router.get('/homepage/statistic', [HomepageController, 'statistic'])
+
+// ============================================================================
+// OPDS 1.2 协议 (供 可达漫画 / Panels / Chunky 等第三方阅读器订阅)
+// 鉴权方式: HTTP Basic Auth, 详见 auth_middleware.ts
+// ============================================================================
+router.get('/opds', [OpdsController, 'root'])
+router.get('/opds/libraries', [OpdsController, 'libraries'])
+router.get('/opds/libraries/:mediaId', [OpdsController, 'library_mangas'])
+router.get('/opds/manga/:mangaId', [OpdsController, 'manga_chapters'])
+router.get('/opds/manga/:mangaId/cover', [OpdsController, 'manga_cover'])
+router.get('/opds/chapter/:chapterId', [OpdsController, 'chapter_entry'])
+router.get('/opds/chapter/:chapterId/cover', [OpdsController, 'chapter_cover'])
+router.get('/opds/chapter/:chapterId/download', [OpdsController, 'chapter_download'])
