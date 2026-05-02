@@ -238,6 +238,7 @@ export default class SharesController {
 
             const dirOutExt = manga.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
             const dirMeta = dirOutExt + '-smanga-info'
+            const dirMetaNew = dirOutExt + '/.smanga'
 
             const extensions = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP'];
             extensions.some((ext) => {
@@ -252,6 +253,10 @@ export default class SharesController {
             if (fs.existsSync(dirMeta)) {
                 const metaFiles = fs.readdirSync(dirMeta, 'utf-8');
                 manga.metaFiles = metaFiles.map(file => path.join(dirMeta, file));
+            }
+            if (fs.existsSync(dirMetaNew)) {
+                const metaFiles = fs.readdirSync(dirMetaNew, 'utf-8');
+                manga.metaFiles = metaFiles.map(file => path.join(dirMetaNew, file));
             }
         }
         // 这里可以添加分析逻辑

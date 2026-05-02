@@ -135,6 +135,15 @@ async function task_process(command: string, args: any) {
     case 'clearCompressCache':
       await new ClearCompressJob().run()
       break
+    case 'taskSyncMedia':
+      await new SyncMediaJob(args).run()
+      break
+    case 'taskSyncManga':
+      await new SyncMangaJob(args).run()
+      break
+    case 'taskSyncChapter':
+      await new SyncChapterJob(args).run()
+      break
     default:
       break
   }

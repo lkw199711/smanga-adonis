@@ -68,7 +68,7 @@ export default class SyncMangaJob {
 
         // 下载漫画元数据文件
         if (this.targetMangaRecord.metaFiles) {
-            const metaDir = this.localMangaPath + '-smanga-info';
+            const metaDir = this.localMangaPath + '/.smanga';
             if (!fs.existsSync(metaDir)) {
                 fs.mkdirSync(metaDir);
             }
