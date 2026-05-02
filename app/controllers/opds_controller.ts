@@ -34,7 +34,7 @@ import {
   render_entry,
   xml_escape,
 } from '#utils/opds'
-import { is_img, image_files, path_compress } from '#utils/index'
+import { is_img, image_files, path_compress, get_config } from '#utils/index'
 import { unzipFile } from '#utils/unzip'
 import sharp from 'sharp'
 
@@ -43,8 +43,14 @@ import sharp from 'sharp'
 // ----------------------------------------------------------------------------
 
 function page_size(): number {
-  const n = Number(process.env.OPDS_PAGE_SIZE)
-  return Number.isFinite(n) && n > 0 ? n : 30
+  try {
+    const ps = ((get_config() || {}).opds || {}).pageSize
+    const n = Number(ps)
+    if (Number.isFinite(n) && n > 0) return n
+  } catch {
+    // ignore
+  }
+  return 30
 }
 
 /** 统一发送 Atom XML 响应 */

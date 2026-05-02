@@ -9,6 +9,8 @@
  *   dc          : http://purl.org/dc/terms/
  */
 
+import { get_config } from '#utils/index'
+
 // ----------------------------------------------------------------------------
 // MIME 类型常量
 // ----------------------------------------------------------------------------
@@ -260,11 +262,16 @@ export function render_feed(feed: OpdsFeed): string {
 
 /**
  * 计算 OPDS 链接的 base URL.
- *  - 优先使用 .env 里的 OPDS_BASE_URL
+ *  - 优先使用 smanga.json 中 opds.baseUrl
  *  - 否则根据请求的 protocol + host 推断
  */
 export function opds_base_url(request: { protocol(): string; header(name: string): any }): string {
-  const envBase = (process.env.OPDS_BASE_URL || '').trim()
+  let envBase = ''
+  try {
+    envBase = String(((get_config() || {}).opds || {}).baseUrl || '').trim()
+  } catch {
+    envBase = ''
+  }
   if (envBase) return envBase.replace(/\/+$/, '')
 
   // X-Forwarded-* 优先 (反向代理场景)

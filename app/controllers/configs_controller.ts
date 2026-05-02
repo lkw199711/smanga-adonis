@@ -81,6 +81,27 @@ export default class ConfigsController {
       config.compress.limit = Number(value)
     }
 
+    // OPDS 协议设置
+    if (/^opds\./.test(key)) {
+      if (!config.opds) {
+        config.opds = { enabled: 1, pageSize: 30, baseUrl: '' }
+      }
+    }
+
+    if (key === 'opds.enabled') {
+      // 兼容 0/1 与 true/false
+      config.opds.enabled = value === true || value === 1 || value === '1' || value === 'true' ? 1 : 0
+    }
+
+    if (key === 'opds.pageSize') {
+      const n = Number(value)
+      config.opds.pageSize = Number.isFinite(n) && n > 0 ? n : 30
+    }
+
+    if (key === 'opds.baseUrl') {
+      config.opds.baseUrl = String(value || '').trim()
+    }
+
     // 检查并创建配置文件
     const configFile = join(path_config(), 'smanga.json')
     await fs.writeFile(configFile, JSON.stringify(config, null, 2))

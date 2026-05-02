@@ -54,5 +54,10 @@
   },
   "sync": {
     "interval": "0 0 23,10 * * *"
+  },
+  "opds": {
+    "enabled": 1,
+    "pageSize": 30,
+    "baseUrl": ""
   }
 }

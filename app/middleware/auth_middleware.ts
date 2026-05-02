@@ -37,10 +37,12 @@ export default class AuthMiddleware {
 
     // ========================================================================
     // OPDS 分支: 使用 HTTP Basic Auth 鉴权 (兼容第三方阅读器, 如 可达漫画)
-    // 全局开关: OPDS_ENABLED=false 时直接返回 404
+    // 全局开关: smanga.json 的 opds.enabled 为 0/false 时直接返回 404 (默认启用)
     // ========================================================================
     if (request.url().startsWith('/opds')) {
-      if ((process.env.OPDS_ENABLED ?? 'true').toLowerCase() === 'false') {
+      const opdsCfg = (get_config() || {}).opds || {}
+      const enabled = opdsCfg.enabled ?? 1
+      if (enabled === 0 || enabled === false || String(enabled).toLowerCase() === 'false') {
         return response.status(404).send('OPDS disabled')
       }
 
