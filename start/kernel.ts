@@ -46,6 +46,8 @@ router.use([
   () => import('@adonisjs/auth/initialize_auth_middleware'),
   () => import('#middleware/params_middleware'),
   () => import('#middleware/auth_middleware'),
+  () => import('#middleware/tracker_auth_middleware'),
+  () => import('#middleware/p2p_peer_auth_middleware'),
 ])
 
 /*

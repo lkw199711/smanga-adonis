@@ -27,10 +27,13 @@ export default class AuthMiddleware {
   redirectTo = '/login'
 
   async handle({ request, response }: HttpContextWithUserId, next: NextFn) {
-    const skipRoutes = ['/deploy', '/test', '/login', '/file', '/analysis', '/homepage']
+    const skipRoutes = ['/deploy', '/test', '/login', '/file', '/analysis', '/homepage', '/tracker', '/p2p/serve']
 
-    if (skipRoutes.some((route) => request.url().startsWith(route))) {
-      // 如果是 deploy 或 test 控制器，跳过中间件
+    // 用 "全等 或 以 prefix/ 开头" 的方式精确匹配,避免 /p2p 误命中 /api/p2p,或 /tracker 误命中 /trackerxxx
+    const url = request.url()
+    const isSkipped = skipRoutes.some((prefix) => url === prefix || url.startsWith(prefix + '/'))
+    if (isSkipped) {
+      // 部署/测试/登录/资源/分析/对外接口/对等节点接口 跳过用户 token 校验
       await next()
       return
     }

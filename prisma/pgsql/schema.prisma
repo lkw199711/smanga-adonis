@@ -445,3 +445,193 @@ model version {
   createTime  DateTime @default(now())
   updateTime  DateTime @default(now()) @updatedAt
 }
+
+// ============================================================
+//  P2P 节点角色(本节点数据) - 前缀 p2p_
+// ============================================================
+
+model p2p_group {
+  p2pGroupId   Int      @id @default(autoincrement())
+  groupNo      String   @unique(map: "uniqueP2pGroupNo")
+  groupName    String
+  describe     String?
+  ownerNodeId  String
+  isOwner      Int      @default(0)
+  trackerUrl   String
+  memberCount  Int      @default(0)
+  joinTime     DateTime @default(now())
+  lastSyncTime DateTime @default(now())
+  createTime   DateTime @default(now())
+  updateTime   DateTime @default(now()) @updatedAt
+
+  localShares p2p_local_share[]
+  peerCaches  p2p_peer_cache[]
+  transfers   p2p_transfer[]
+
+  @@map("p2p_group")
+}
+
+model p2p_local_share {
+  p2pLocalShareId Int       @id @default(autoincrement())
+  group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pGroupId      Int
+  shareType       String    @default("media")
+  mediaId         Int?
+  mangaId         Int?
+  shareName       String
+  enable          Int       @default(1)
+  announceHash    String?
+  createTime      DateTime  @default(now())
+  updateTime      DateTime  @default(now()) @updatedAt
+
+  @@unique([p2pGroupId, shareType, mediaId, mangaId], map: "uniqueGroupShare")
+  @@map("p2p_local_share")
+}
+
+model p2p_peer_cache {
+  p2pPeerCacheId Int       @id @default(autoincrement())
+  group          p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pGroupId     Int
+  nodeId         String
+  nodeName       String?
+  publicHost     String?
+  publicPort     Int?
+  localHost      String?
+  localPort      Int?
+  online         Int       @default(0)
+  version        String?
+  lastSeen       DateTime?
+  createTime     DateTime  @default(now())
+  updateTime     DateTime  @default(now()) @updatedAt
+
+  @@unique([p2pGroupId, nodeId], map: "uniqueGroupNode")
+  @@map("p2p_peer_cache")
+}
+
+model p2p_transfer {
+  p2pTransferId   Int       @id @default(autoincrement())
+  group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pGroupId      Int
+  peerNodeId      String
+  transferType    String
+  remoteMediaId   Int?
+  remoteMangaId   Int?
+  remoteChapterId Int?
+  remoteName      String
+  receivedPath    String
+  status          String    @default("pending")
+  progress        Int       @default(0)
+  totalBytes      BigInt?
+  downloadedBytes BigInt    @default(0)
+  speedBps        Int       @default(0)
+  error           String?
+  connectMode     String?
+  createTime      DateTime  @default(now())
+  updateTime      DateTime  @default(now()) @updatedAt
+  startTime       DateTime?
+  endTime         DateTime?
+
+  @@map("p2p_transfer")
+}
+
+
+// ============================================================
+//  Tracker 角色(公网服务端数据) - 前缀 tracker_
+// ============================================================
+
+model tracker_node {
+  trackerNodeId Int       @id @default(autoincrement())
+  nodeId        String    @unique(map: "uniqueTrackerNodeId")
+  nodeToken     String
+  nodeName      String?
+  publicHost    String?
+  publicPort    Int?
+  localHost     String?
+  localPort     Int?
+  version       String?
+  userAgent     String?
+  online        Int       @default(0)
+  lastHeartbeat DateTime?
+  totalUpload   BigInt    @default(0)
+  totalDownload BigInt    @default(0)
+  banned        Int       @default(0)
+  bannedReason  String?
+  createTime    DateTime  @default(now())
+  updateTime    DateTime  @default(now()) @updatedAt
+
+  memberships tracker_membership[]
+  ownedGroups tracker_group[]      @relation("TrackerGroupOwner")
+
+  @@map("tracker_node")
+}
+
+model tracker_group {
+  trackerGroupId Int          @id @default(autoincrement())
+  groupNo        String       @unique(map: "uniqueTrackerGroupNo")
+  groupName      String
+  describe       String?
+  password       String
+  owner          tracker_node @relation("TrackerGroupOwner", fields: [ownerNodeId], references: [nodeId])
+  ownerNodeId    String
+  maxMembers     Int          @default(50)
+  memberCount    Int          @default(1)
+  enable         Int          @default(1)
+  createTime     DateTime     @default(now())
+  updateTime     DateTime     @default(now()) @updatedAt
+
+  memberships  tracker_membership[]
+  invites      tracker_invite[]
+  shareIndexes tracker_share_index[]
+
+  @@map("tracker_group")
+}
+
+model tracker_membership {
+  trackerMembershipId Int           @id @default(autoincrement())
+  group               tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+  trackerGroupId      Int
+  node                tracker_node  @relation(fields: [nodeId], references: [nodeId])
+  nodeId              String
+  role                String        @default("member")
+  joinTime            DateTime      @default(now())
+  lastAnnounce        DateTime?
+  createTime          DateTime      @default(now())
+  updateTime          DateTime      @default(now()) @updatedAt
+
+  @@unique([trackerGroupId, nodeId], map: "uniqueTrackerMembership")
+  @@map("tracker_membership")
+}
+
+model tracker_invite {
+  trackerInviteId Int           @id @default(autoincrement())
+  group           tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+  trackerGroupId  Int
+  code            String        @unique(map: "uniqueTrackerInviteCode")
+  createdBy       String
+  usedBy          String?
+  usedTime        DateTime?
+  expires         DateTime?
+  createTime      DateTime      @default(now())
+
+  @@map("tracker_invite")
+}
+
+model tracker_share_index {
+  trackerShareIndexId Int           @id @default(autoincrement())
+  group               tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+  trackerGroupId      Int
+  nodeId              String
+  shareType           String        @default("media")
+  remoteMediaId       Int?
+  remoteMangaId       Int?
+  shareName           String
+  coverUrl            String?
+  mangaCount          Int           @default(0)
+  totalSize           BigInt?
+  enable              Int           @default(1)
+  createTime          DateTime      @default(now())
+  updateTime          DateTime      @default(now()) @updatedAt
+
+  @@unique([trackerGroupId, nodeId, shareType, remoteMediaId, remoteMangaId], map: "uniqueShareIndex")
+  @@map("tracker_share_index")
+}

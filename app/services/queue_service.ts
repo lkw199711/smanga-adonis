@@ -12,6 +12,7 @@ import SyncMangaJob from './sync_manga_job.js'
 import SyncChapterJob from './sync_chapter_job.js'
 import CompressChapterJob from './compress_chapter_job.js'
 import ClearCompressJob from './clear_compress_job.js'
+import P2PPullJob from './p2p/p2p_pull_job.js'
 import { get_config } from '#utils/index'
 
 import Bull from 'bull'
@@ -144,6 +145,9 @@ async function task_process(command: string, args: any) {
     case 'taskSyncChapter':
       await new SyncChapterJob(args).run()
       break
+    case 'taskP2PPull':
+      await new P2PPullJob(args).run()
+      break
     default:
       break
   }
@@ -245,6 +249,8 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
       taskQueue = 'sync'
     } else if (/compress/.test(taskName)) {
       taskQueue = 'compress'
+    } else if (/p2p/.test(taskName)) {
+      taskQueue = 'sync'
     }
 
     scanQueue.add(

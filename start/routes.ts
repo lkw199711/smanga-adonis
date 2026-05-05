@@ -34,6 +34,14 @@ const SharesController = () => import('#controllers/shares_controller')
 const SyncsController = () => import('#controllers/syncs_controller')
 const HomepageController = () => import('#controllers/homepage_controller')
 const OpdsController = () => import('#controllers/opds_controller')
+const TrackerNodesController = () => import('#controllers/tracker/tracker_nodes_controller')
+const TrackerGroupsController = () => import('#controllers/tracker/tracker_groups_controller')
+const TrackerSharesController = () => import('#controllers/tracker/tracker_shares_controller')
+const P2PGroupsController = () => import('#controllers/p2p/p2p_groups_controller')
+const P2PSharesController = () => import('#controllers/p2p/p2p_shares_controller')
+const P2PPeersController = () => import('#controllers/p2p/p2p_peers_controller')
+const P2PServeController = () => import('#controllers/p2p/p2p_serve_controller')
+const P2PTransfersController = () => import('#controllers/p2p/p2p_transfers_controller')
 
 router.get('/', async () => {
   return {
@@ -230,6 +238,30 @@ router.delete('/sync/:syncId', [SyncsController, 'destroy'])
 router.delete('/sync/:syncIds/batch', [SyncsController, 'destroy_batch'])
 router.post('/sync/execute/:syncId', [SyncsController, 'execute'])
 
+// ============================================================
+// Tracker 角色路由 - 由 TrackerAuthMiddleware 统一鉴权
+// 仅当 smanga.json 里 p2p.enable=true 且 p2p.role.tracker=true 时生效
+// ============================================================
+
+// 节点生命周期
+router.post('/tracker/node/register', [TrackerNodesController, 'register'])
+router.post('/tracker/node/heartbeat', [TrackerNodesController, 'heartbeat'])
+router.patch('/tracker/node/me', [TrackerNodesController, 'update'])
+router.delete('/tracker/node/me', [TrackerNodesController, 'deregister'])
+
+// 群组管理
+router.get('/tracker/group', [TrackerGroupsController, 'index'])
+router.post('/tracker/group', [TrackerGroupsController, 'create'])
+router.post('/tracker/group/join', [TrackerGroupsController, 'join'])
+router.post('/tracker/group/:groupNo/leave', [TrackerGroupsController, 'leave'])
+router.get('/tracker/group/:groupNo/members', [TrackerGroupsController, 'members'])
+router.delete('/tracker/group/:groupNo/member/:nodeId', [TrackerGroupsController, 'kick'])
+router.post('/tracker/group/:groupNo/invite', [TrackerGroupsController, 'invite'])
+
+// 共享索引
+router.post('/tracker/group/:groupNo/announce', [TrackerSharesController, 'announce'])
+router.get('/tracker/group/:groupNo/shares', [TrackerSharesController, 'index'])
+
 // 配置信息
 router.get('client-user-config', [UsersController, 'config'])
 router.get('serve-config', [ConfigsController, 'get'])
@@ -262,3 +294,45 @@ router.get('/opds/chapter/:chapterId', [OpdsController, 'chapter_entry'])
 router.get('/opds/chapter/:chapterId/cover', [OpdsController, 'chapter_cover'])
 router.get('/opds/chapter/:chapterId/download', [OpdsController, 'chapter_download'])
 router.get('/opds/chapter/:chapterId/page/:page', [OpdsController, 'chapter_page'])
+
+// ============================================================================
+// P2P 用户/管理接口 (/p2p/*)
+// 鉴权: auth_middleware(用户 token)
+// 注意: 与对等节点接口 /p2p/serve/* 通过子前缀隔离, 便于中间件按前缀区分
+// ============================================================================
+router.get('/p2p/group', [P2PGroupsController, 'index'])
+router.get('/p2p/group/:id', [P2PGroupsController, 'show'])
+router.post('/p2p/group/create', [P2PGroupsController, 'create'])
+router.post('/p2p/group/join', [P2PGroupsController, 'join'])
+router.post('/p2p/group/leave', [P2PGroupsController, 'leave'])
+router.post('/p2p/group/refresh', [P2PGroupsController, 'refresh'])
+
+router.get('/p2p/share', [P2PSharesController, 'index'])
+router.post('/p2p/share/create', [P2PSharesController, 'create'])
+router.put('/p2p/share/:id', [P2PSharesController, 'update'])
+router.delete('/p2p/share/:id', [P2PSharesController, 'destroy'])
+router.post('/p2p/share/announce', [P2PSharesController, 'announce'])
+
+router.get('/p2p/peer/members/:groupNo', [P2PPeersController, 'members'])
+router.get('/p2p/peer/shares/:groupNo', [P2PPeersController, 'shares'])
+router.get('/p2p/peer/cache/:groupNo', [P2PPeersController, 'cache'])
+
+// P2P 传输任务
+router.get('/p2p/transfer', [P2PTransfersController, 'index'])
+router.get('/p2p/transfer/:id', [P2PTransfersController, 'show'])
+router.post('/p2p/transfer/pull', [P2PTransfersController, 'pull'])
+router.post('/p2p/transfer/:id/cancel', [P2PTransfersController, 'cancel'])
+router.post('/p2p/transfer/:id/retry', [P2PTransfersController, 'retry'])
+
+// ============================================================================
+// P2P 对等节点接口 (/p2p/serve/*)
+// 鉴权: p2p_peer_auth_middleware(X-Node-Id + X-Group-No)
+// 节点间直连(不经 nginx/反向代理),所以路径需与 adonis 实际监听一致
+// ============================================================================
+router.get('/p2p/serve/ping', [P2PServeController, 'ping'])
+router.get('/p2p/serve/shares', [P2PServeController, 'shares'])
+router.get('/p2p/serve/media/:mediaId/mangas', [P2PServeController, 'mangas'])
+router.get('/p2p/serve/manga/:mangaId/chapters', [P2PServeController, 'chapters'])
+router.get('/p2p/serve/chapter/:chapterId/images', [P2PServeController, 'images'])
+router.post('/p2p/serve/file', [P2PServeController, 'file'])
+router.get('/p2p/serve/file', [P2PServeController, 'file'])

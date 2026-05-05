@@ -12,6 +12,7 @@ let scanCron: any = { stop: () => { } }
 let syncCron: any = { stop: () => { } }
 let createMediaPosterCron: any = { stop: () => { } }
 let clearCompressCron: any = { stop: () => { } }
+let trackerCleanupCron: any = { stop: () => { } }
 
 function create_scan_cron() {
   // 停止旧扫描任务
@@ -140,4 +141,39 @@ function create_clear_compress_cron() {
   }
 }
 
-export { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron }
+function create_tracker_cleanup_cron() {
+  // 停止旧任务
+  trackerCleanupCron.stop()
+
+  const config = get_config()
+  const p2p = config?.p2p
+  // 未开启 p2p 或未启用 tracker 角色,跳过
+  if (!p2p?.enable || !p2p?.role?.tracker) {
+    return
+  }
+
+  const cleanupCron = p2p?.tracker?.cleanupCron
+  if (!cleanupCron || String(cleanupCron).trim() === '') {
+    console.log('未配置 tracker.cleanupCron,跳过部署')
+    return
+  }
+
+  try {
+    trackerCleanupCron = cron.schedule(cleanupCron, async () => {
+      try {
+        const mod = await import('./tracker/tracker_node_service.js')
+        const trackerNodeService = mod.default
+        const count = await trackerNodeService.markOfflineNodes()
+        if (count > 0) {
+          console.log(`[tracker] 标记 ${count} 个离线节点`)
+        }
+      } catch (e) {
+        console.error('[tracker] 离线扫描失败', e)
+      }
+    })
+  } catch (e) {
+    console.error('部署 tracker 清理任务失败', e)
+  }
+}
+
+export { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron, create_tracker_cleanup_cron }

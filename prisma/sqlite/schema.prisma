@@ -11,9 +11,7 @@ datasource db {
 model bookmark {
   bookmarkId Int      @id @default(autoincrement())
   mediaId    Int
-  manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int
-  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId  Int
   userId     Int
   browseType String   @default("flow")
@@ -21,6 +19,8 @@ model bookmark {
   createTime DateTime @default(now())
   updateTime DateTime @default(now()) @updatedAt
   pageImage  String?
+  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
+  manga      manga    @relation(fields: [mangaId], references: [mangaId])
 
   @@unique([chapterId, page], map: "opage")
 }
@@ -28,9 +28,7 @@ model bookmark {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model chapter {
   chapterId     Int        @id @default(autoincrement())
-  manga         manga      @relation(fields: [mangaId], references: [mangaId])
   mangaId       Int
-  media         media      @relation(fields: [mediaId], references: [mediaId])
   mediaId       Int
   pathId        Int
   browseType    String     @default("flow")
@@ -45,9 +43,11 @@ model chapter {
   chapterNumber String?
   deleteFlag    Int        @default(0)
   bookmarks     bookmark[]
-  compress      compress[]
-  history       history[]
+  media         media      @relation(fields: [mediaId], references: [mediaId])
+  manga         manga      @relation(fields: [mangaId], references: [mangaId])
   collects      collect[]
+  compress      compress?
+  history       history[]
   latests       latest[]
   meta          meta[]
 
@@ -58,17 +58,17 @@ model chapter {
 model collect {
   collectId   Int      @id @default(autoincrement())
   collectType String   @default("manga")
-  user        user     @relation(fields: [userId], references: [userId])
   userId      Int
   mediaId     Int
-  manga       manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId     Int
   mangaName   String?
-  chapter     chapter? @relation(fields: [chapterId], references: [chapterId])
   chapterId   Int?
   chapterName String?
   createTime  DateTime @default(now())
   updateTime  DateTime @default(now()) @updatedAt
+  chapter     chapter? @relation(fields: [chapterId], references: [chapterId])
+  manga       manga    @relation(fields: [mangaId], references: [mangaId])
+  user        user     @relation(fields: [userId], references: [userId])
 
   @@unique([userId, collectType, mangaId, chapterId], map: "uniqueMangaChapter")
 }
@@ -81,32 +81,32 @@ model compress {
   compressStatus String?
   imageCount     Int?
   mediaId        Int
-  manga          manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId        Int
-  chapter        chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId      Int      @unique(map: "uniqueChapter")
   chapterPath    String
   userId         Int?
   createTime     DateTime @default(now())
   updateTime     DateTime @default(now()) @updatedAt
+  chapter        chapter  @relation(fields: [chapterId], references: [chapterId])
+  manga          manga    @relation(fields: [mangaId], references: [mangaId])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model history {
   historyId   Int      @id @default(autoincrement())
-  user        user     @relation(fields: [userId], references: [userId])
   userId      Int
   mediaId     Int
-  manga       manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId     Int
   mangaName   String?
-  chapter     chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId   Int
   chapterName String?
   chapterPath String?
   browseType  String   @default("flow")
   createTime  DateTime @default(now())
   updateTime  DateTime @default(now()) @updatedAt
+  chapter     chapter  @relation(fields: [chapterId], references: [chapterId])
+  manga       manga    @relation(fields: [mangaId], references: [mangaId])
+  user        user     @relation(fields: [userId], references: [userId])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -115,13 +115,13 @@ model latest {
   page       Int
   count      Int?
   finish     Int      @default(0)
-  manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int
-  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
   chapterId  Int
   userId     Int
   createTime DateTime @default(now())
   updateTime DateTime @default(now()) @updatedAt
+  chapter    chapter  @relation(fields: [chapterId], references: [chapterId])
+  manga      manga    @relation(fields: [mangaId], references: [mangaId])
 
   @@unique([chapterId, userId], map: "uniqueChapterUser")
 }
@@ -147,7 +147,6 @@ model log {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model login {
   loginId    Int      @id @default(autoincrement())
-  user       user?    @relation(fields: [userId], references: [userId])
   userId     Int?
   userName   String?
   nickName   String?
@@ -157,42 +156,43 @@ model login {
   createTime DateTime @default(now())
   updateTime DateTime @default(now()) @updatedAt
   token      String?
+  user       user?    @relation(fields: [userId], references: [userId])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model manga {
-  mangaId      Int        @id @default(autoincrement())
-  media        media      @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int
-  path         path       @relation(fields: [pathId], references: [pathId])
-  pathId       Int
-  mangaName    String
-  mangaPath    String
-  parentPath   String?
-  mangaCover   String?
-  mangaNumber  String?
-  chapterCount Int        @default(0)       
-  browseType   String     @default("flow")
-  direction    Int        @default(1)
-  removeFirst  Int        @default(0)
-  title        String?
-  subTitle     String?
-  author       String?
-  describe     String?
-  publishDate  DateTime?
-  deleteFlag   Int        @default(0)
-  createTime   DateTime   @default(now())
-  updateTime   DateTime   @default(now()) @updatedAt
-  chapterUpdate DateTime  @default(now())
-  latests      latest[]
-  historys     history[]
-  chapters     chapter[]
-  collects     collect[]
-  bookmarks    bookmark[]
-  compress     compress[]
-  metas        meta[]
-  mangaTags    mangaTag[]
-  shares       share[]
+  mangaId       Int        @id @default(autoincrement())
+  mediaId       Int
+  pathId        Int
+  mangaName     String
+  mangaPath     String
+  parentPath    String?
+  mangaCover    String?
+  mangaNumber   String?
+  chapterCount  Int        @default(0)
+  browseType    String     @default("flow")
+  direction     Int        @default(1)
+  removeFirst   Int        @default(0)
+  title         String?
+  subTitle      String?
+  author        String?
+  describe      String?
+  publishDate   DateTime?
+  deleteFlag    Int        @default(0)
+  createTime    DateTime   @default(now())
+  updateTime    DateTime   @default(now()) @updatedAt
+  chapterUpdate DateTime   @default(now())
+  bookmarks     bookmark[]
+  chapters      chapter[]
+  collects      collect[]
+  compress      compress[]
+  historys      history[]
+  latests       latest[]
+  path          path       @relation(fields: [pathId], references: [pathId])
+  media         media      @relation(fields: [mediaId], references: [mediaId])
+  mangaTags     mangaTag[]
+  metas         meta[]
+  shares        share[]
 
   @@unique([mediaId, mangaPath], map: "unique-name")
 }
@@ -200,12 +200,12 @@ model manga {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model mangaTag {
   mangaTagId Int      @id @default(autoincrement())
-  manga      manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int
-  tag        tag      @relation(fields: [tagId], references: [tagId])
   tagId      Int
   createTime DateTime @default(now())
   updateTime DateTime @default(now()) @updatedAt
+  tag        tag      @relation(fields: [tagId], references: [tagId])
+  manga      manga    @relation(fields: [mangaId], references: [mangaId])
 
   @@unique([mangaId, tagId], map: "uniqueMangaTag")
   @@map("mangaTag")
@@ -227,22 +227,22 @@ model media {
   deleteFlag      Int              @default(0)
   createTime      DateTime         @default(now())
   updateTime      DateTime         @default(now()) @updatedAt
-  paths           path[]
-  mangas          manga[]
   chapters        chapter[]
+  mangas          manga[]
   mediaPermissons mediaPermisson[]
+  paths           path[]
   shares          share[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model mediaPermisson {
   mediaPermissonId Int      @id @default(autoincrement())
-  user             user     @relation(fields: [userId], references: [userId])
   userId           Int
-  media            media    @relation(fields: [mediaId], references: [mediaId])
   mediaId          Int
   createTime       DateTime @default(now())
   updateTime       DateTime @default(now()) @updatedAt
+  media            media    @relation(fields: [mediaId], references: [mediaId])
+  user             user     @relation(fields: [userId], references: [userId])
 
   @@unique([userId, mediaId], map: "userMedia")
   @@map("mediaPermisson")
@@ -252,21 +252,20 @@ model mediaPermisson {
 model meta {
   metaId      Int      @id @default(autoincrement())
   metaName    String
-  manga       manga    @relation(fields: [mangaId], references: [mangaId])
   mangaId     Int
-  chapter     chapter? @relation(fields: [chapterId], references: [chapterId])
   chapterId   Int?
   metaFile    String?
   metaContent String?
   description String?
   createTime  DateTime @default(now())
   updateTime  DateTime @default(now()) @updatedAt
+  chapter     chapter? @relation(fields: [chapterId], references: [chapterId])
+  manga       manga    @relation(fields: [mangaId], references: [mangaId])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model path {
   pathId       Int       @id @default(autoincrement())
-  media        media     @relation(fields: [mediaId], references: [mediaId])
   mediaId      Int
   pathType     String?
   autoScan     Int       @default(0)
@@ -278,6 +277,7 @@ model path {
   updateTime   DateTime  @default(now()) @updatedAt
   pathContent  String
   mangas       manga[]
+  media        media     @relation(fields: [mediaId], references: [mediaId])
 
   @@unique([mediaId, pathContent], map: "opath")
 }
@@ -356,12 +356,12 @@ model taskSuccess {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model token {
   tokenId    Int       @id @default(autoincrement())
-  user       user      @relation(fields: [userId], references: [userId])
   userId     Int
   token      String
   expires    DateTime?
   createTime DateTime  @default(now())
   updateTime DateTime  @default(now()) @updatedAt
+  user       user      @relation(fields: [userId], references: [userId])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -376,24 +376,24 @@ model user {
   createTime      DateTime         @default(now())
   updateTime      DateTime         @default(now()) @updatedAt
   userConfig      String?
+  collects        collect[]
+  historys        history[]
   logins          login[]
+  mediaPermissons mediaPermisson[]
+  shares          share[]
   tokens          token[]
   userPermissons  userPermisson[]
-  mediaPermissons mediaPermisson[]
-  historys        history[]
-  collects        collect[]
-  shares          share[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model userPermisson {
   userPermissonId Int      @id @default(autoincrement())
-  user            user     @relation(fields: [userId], references: [userId])
   userId          Int
   module          String
   operation       String   @default("default")
   createTime      DateTime @default(now())
   updateTime      DateTime @default(now()) @updatedAt
+  user            user     @relation(fields: [userId], references: [userId])
 
   @@unique([userId, module, operation], map: "userModuleOperation")
   @@map("userPermisson")
@@ -404,11 +404,8 @@ model share {
   shareType  String    @default("manga")
   shareName  String
   origin     String
-  user       user?     @relation(fields: [userId], references: [userId])
   userId     Int?
-  media      media     @relation(fields: [mediaId], references: [mediaId])
   mediaId    Int
-  manga      manga?    @relation(fields: [mangaId], references: [mangaId])
   mangaId    Int?
   link       String
   secret     String
@@ -418,6 +415,9 @@ model share {
   blackList  String?
   createTime DateTime  @default(now())
   updateTime DateTime  @default(now()) @updatedAt
+  manga      manga?    @relation(fields: [mangaId], references: [mangaId])
+  media      media     @relation(fields: [mediaId], references: [mediaId])
+  user       user?     @relation(fields: [userId], references: [userId])
 }
 
 model sync {
@@ -443,4 +443,191 @@ model version {
   description String?
   createTime  DateTime @default(now())
   updateTime  DateTime @default(now()) @updatedAt
+}
+
+/// 本节点加入的群组(Tracker 数据的本地缓存)
+model p2p_group {
+  p2pGroupId   Int               @id @default(autoincrement())
+  groupNo      String            @unique(map: "uniqueP2pGroupNo")
+  groupName    String
+  describe     String?
+  ownerNodeId  String
+  isOwner      Int               @default(0)
+  trackerUrl   String
+  memberCount  Int               @default(0)
+  joinTime     DateTime          @default(now())
+  lastSyncTime DateTime          @default(now())
+  createTime   DateTime          @default(now())
+  updateTime   DateTime          @default(now()) @updatedAt
+  localShares  p2p_local_share[]
+  peerCaches   p2p_peer_cache[]
+  transfers    p2p_transfer[]
+
+  @@map("p2p_group")
+}
+
+/// 本节点对某群组的共享配置
+model p2p_local_share {
+  p2pLocalShareId Int       @id @default(autoincrement())
+  p2pGroupId      Int
+  shareType       String    @default("media")
+  mediaId         Int?
+  mangaId         Int?
+  shareName       String
+  enable          Int       @default(1)
+  announceHash    String?
+  createTime      DateTime  @default(now())
+  updateTime      DateTime  @default(now()) @updatedAt
+  group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+
+  @@unique([p2pGroupId, shareType, mediaId, mangaId], map: "uniqueGroupShare")
+  @@map("p2p_local_share")
+}
+
+/// 群组内其他节点的信息缓存
+model p2p_peer_cache {
+  p2pPeerCacheId Int       @id @default(autoincrement())
+  p2pGroupId     Int
+  nodeId         String
+  nodeName       String?
+  publicHost     String?
+  publicPort     Int?
+  localHost      String?
+  localPort      Int?
+  online         Int       @default(0)
+  version        String?
+  lastSeen       DateTime?
+  createTime     DateTime  @default(now())
+  updateTime     DateTime  @default(now()) @updatedAt
+  group          p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+
+  @@unique([p2pGroupId, nodeId], map: "uniqueGroupNode")
+  @@map("p2p_peer_cache")
+}
+
+/// P2P 传输任务
+model p2p_transfer {
+  p2pTransferId   Int       @id @default(autoincrement())
+  p2pGroupId      Int
+  peerNodeId      String
+  transferType    String
+  remoteMediaId   Int?
+  remoteMangaId   Int?
+  remoteChapterId Int?
+  remoteName      String
+  receivedPath    String
+  status          String    @default("pending")
+  progress        Int       @default(0)
+  totalBytes      BigInt?
+  downloadedBytes BigInt    @default(0)
+  speedBps        Int       @default(0)
+  error           String?
+  connectMode     String?
+  createTime      DateTime  @default(now())
+  updateTime      DateTime  @default(now()) @updatedAt
+  startTime       DateTime?
+  endTime         DateTime?
+  group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+
+  @@map("p2p_transfer")
+}
+
+/// Tracker 上已注册的所有节点
+model tracker_node {
+  trackerNodeId Int                  @id @default(autoincrement())
+  nodeId        String               @unique(map: "uniqueTrackerNodeId")
+  nodeToken     String
+  nodeName      String?
+  publicHost    String?
+  publicPort    Int?
+  localHost     String?
+  localPort     Int?
+  version       String?
+  userAgent     String?
+  online        Int                  @default(0)
+  lastHeartbeat DateTime?
+  totalUpload   BigInt               @default(0)
+  totalDownload BigInt               @default(0)
+  banned        Int                  @default(0)
+  bannedReason  String?
+  createTime    DateTime             @default(now())
+  updateTime    DateTime             @default(now()) @updatedAt
+  ownedGroups   tracker_group[]      @relation("TrackerGroupOwner")
+  memberships   tracker_membership[]
+
+  @@map("tracker_node")
+}
+
+/// Tracker 上所有群组
+model tracker_group {
+  trackerGroupId Int                   @id @default(autoincrement())
+  groupNo        String                @unique(map: "uniqueTrackerGroupNo")
+  groupName      String
+  describe       String?
+  password       String
+  ownerNodeId    String
+  maxMembers     Int                   @default(50)
+  memberCount    Int                   @default(1)
+  enable         Int                   @default(1)
+  createTime     DateTime              @default(now())
+  updateTime     DateTime              @default(now()) @updatedAt
+  owner          tracker_node          @relation("TrackerGroupOwner", fields: [ownerNodeId], references: [nodeId])
+  invites        tracker_invite[]
+  memberships    tracker_membership[]
+  shareIndexes   tracker_share_index[]
+
+  @@map("tracker_group")
+}
+
+/// 节点与群组的成员关系
+model tracker_membership {
+  trackerMembershipId Int           @id @default(autoincrement())
+  trackerGroupId      Int
+  nodeId              String
+  role                String        @default("member")
+  joinTime            DateTime      @default(now())
+  lastAnnounce        DateTime?
+  createTime          DateTime      @default(now())
+  updateTime          DateTime      @default(now()) @updatedAt
+  node                tracker_node  @relation(fields: [nodeId], references: [nodeId])
+  group               tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+
+  @@unique([trackerGroupId, nodeId], map: "uniqueTrackerMembership")
+  @@map("tracker_membership")
+}
+
+/// 一次性邀请码
+model tracker_invite {
+  trackerInviteId Int           @id @default(autoincrement())
+  trackerGroupId  Int
+  code            String        @unique(map: "uniqueTrackerInviteCode")
+  createdBy       String
+  usedBy          String?
+  usedTime        DateTime?
+  expires         DateTime?
+  createTime      DateTime      @default(now())
+  group           tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+
+  @@map("tracker_invite")
+}
+
+/// 群组内所有共享资源的索引聚合
+model tracker_share_index {
+  trackerShareIndexId Int           @id @default(autoincrement())
+  trackerGroupId      Int
+  nodeId              String
+  shareType           String        @default("media")
+  remoteMediaId       Int?
+  remoteMangaId       Int?
+  shareName           String
+  coverUrl            String?
+  mangaCount          Int           @default(0)
+  totalSize           BigInt?
+  enable              Int           @default(1)
+  createTime          DateTime      @default(now())
+  updateTime          DateTime      @default(now()) @updatedAt
+  group               tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+
+  @@unique([trackerGroupId, nodeId, shareType, remoteMediaId, remoteMangaId], map: "uniqueShareIndex")
+  @@map("tracker_share_index")
 }

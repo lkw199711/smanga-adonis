@@ -2,7 +2,7 @@ import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
 import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config, read_json } from '#utils/index'
-import { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron } from '#services/cron_service'
+import { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron, create_tracker_cleanup_cron } from '#services/cron_service'
 import { v4 as uuidv4 } from 'uuid'
 
 // 默认配置
@@ -62,6 +62,45 @@ const defaultConfig = {
   },
   "sync": {
     "interval": "0 0 23,10 * * *"
+  },
+  "p2p": {
+    "enable": false,
+    "role": {
+      "node": true,
+      "tracker": false
+    },
+    "node": {
+      "nodeId": "",
+      "nodeToken": "",
+      "nodeName": "",
+      "listenPort": 3333,
+      "publicHost": "",
+      "publicPort": 0,
+      "trackers": [],
+      "heartbeatInterval": 30,
+      "announceInterval": 300,
+      "allowLan": true,
+      "lanHost": "",
+      "lanPort": 3333,
+      "maxConcurrentPulls": 2,
+      "maxConcurrentServes": 4,
+      "maxUploadKbps": 0,
+      "maxDownloadKbps": 0,
+      "defaultReceivedPath": "",
+      "autoPullOnNewShare": false
+    },
+    "tracker": {
+      "publicUrl": "",
+      "listenPort": 0,
+      "allowPublicRegister": true,
+      "requireInviteToRegister": false,
+      "maxNodes": 1000,
+      "maxGroupsPerNode": 10,
+      "maxMembersPerGroup": 50,
+      "offlineThresholdSec": 90,
+      "cleanupCron": "0 */10 * * * *",
+      "adminNodeIds": []
+    }
   }
 }
 
@@ -112,6 +151,18 @@ export default async function boot() {
   create_sync_cron()
   create_media_poster_cron()
   create_clear_compress_cron()
+  create_tracker_cleanup_cron()
+
+  // 启动 P2P 心跳服务(若启用)
+  try {
+    const cfg = (await import('#utils/index')).get_config()
+    if (cfg?.p2p?.enable && cfg?.p2p?.role?.node) {
+      const { default: heartbeat } = await import('#services/p2p/p2p_heartbeat_service')
+      await heartbeat.start()
+    }
+  } catch (e) {
+    console.error('[p2p] 心跳服务启动异常', e)
+  }
 }
 
 async function check_config_ver() {
@@ -196,6 +247,23 @@ async function check_config_ver() {
     console.log('配置文件不存在serverKey字段，使用默认值')
     config.serverKey = uuidv4()
     set_config(config)
+  }
+
+  // 老用户升级时补充 p2p 段,默认全部关闭
+  if (config?.p2p === undefined) {
+    console.log('配置文件不存在p2p字段，使用默认值')
+    config.p2p = defaultConfig.p2p
+    set_config(config)
+  } else {
+    // 递归补齐缺失的子字段
+    let changed = false
+    if (config.p2p.role === undefined) { config.p2p.role = defaultConfig.p2p.role; changed = true }
+    if (config.p2p.node === undefined) { config.p2p.node = defaultConfig.p2p.node; changed = true }
+    if (config.p2p.tracker === undefined) { config.p2p.tracker = defaultConfig.p2p.tracker; changed = true }
+    if (changed) {
+      console.log('配置文件 p2p 子字段不完整，补齐默认值')
+      set_config(config)
+    }
   }
 }
 

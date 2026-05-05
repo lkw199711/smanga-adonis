@@ -446,3 +446,193 @@ model version {
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
 }
+
+// ============================================================
+//  P2P 节点角色(本节点数据) - 前缀 p2p_
+// ============================================================
+
+model p2p_group {
+  p2pGroupId   Int      @id @default(autoincrement()) @db.UnsignedInt
+  groupNo      String   @unique(map: "uniqueP2pGroupNo") @db.VarChar(32)
+  groupName    String   @db.VarChar(191)
+  describe     String?  @db.VarChar(500)
+  ownerNodeId  String   @db.VarChar(64)
+  isOwner      Int      @default(0) @db.UnsignedInt
+  trackerUrl   String   @db.VarChar(255)
+  memberCount  Int      @default(0) @db.UnsignedInt
+  joinTime     DateTime @default(now()) @db.DateTime(6)
+  lastSyncTime DateTime @default(now()) @db.DateTime(6)
+  createTime   DateTime @default(now()) @db.DateTime(6)
+  updateTime   DateTime @default(now()) @updatedAt @db.DateTime(6)
+
+  localShares p2p_local_share[]
+  peerCaches  p2p_peer_cache[]
+  transfers   p2p_transfer[]
+
+  @@map("p2p_group")
+}
+
+model p2p_local_share {
+  p2pLocalShareId Int       @id @default(autoincrement()) @db.UnsignedInt
+  group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pGroupId      Int       @db.UnsignedInt
+  shareType       String    @default("media") @db.VarChar(32)
+  mediaId         Int?      @db.UnsignedInt
+  mangaId         Int?      @db.UnsignedInt
+  shareName       String    @db.VarChar(191)
+  enable          Int       @default(1) @db.UnsignedInt
+  announceHash    String?   @db.VarChar(64)
+  createTime      DateTime  @default(now()) @db.DateTime(6)
+  updateTime      DateTime  @default(now()) @updatedAt @db.DateTime(6)
+
+  @@unique([p2pGroupId, shareType, mediaId, mangaId], map: "uniqueGroupShare")
+  @@map("p2p_local_share")
+}
+
+model p2p_peer_cache {
+  p2pPeerCacheId Int       @id @default(autoincrement()) @db.UnsignedInt
+  group          p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pGroupId     Int       @db.UnsignedInt
+  nodeId         String    @db.VarChar(64)
+  nodeName       String?   @db.VarChar(191)
+  publicHost     String?   @db.VarChar(191)
+  publicPort     Int?      @db.UnsignedInt
+  localHost      String?   @db.VarChar(191)
+  localPort      Int?      @db.UnsignedInt
+  online         Int       @default(0) @db.UnsignedInt
+  version        String?   @db.VarChar(32)
+  lastSeen       DateTime? @db.DateTime(6)
+  createTime     DateTime  @default(now()) @db.DateTime(6)
+  updateTime     DateTime  @default(now()) @updatedAt @db.DateTime(6)
+
+  @@unique([p2pGroupId, nodeId], map: "uniqueGroupNode")
+  @@map("p2p_peer_cache")
+}
+
+model p2p_transfer {
+  p2pTransferId   Int       @id @default(autoincrement()) @db.UnsignedInt
+  group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pGroupId      Int       @db.UnsignedInt
+  peerNodeId      String    @db.VarChar(64)
+  transferType    String    @db.VarChar(32)
+  remoteMediaId   Int?      @db.UnsignedInt
+  remoteMangaId   Int?      @db.UnsignedInt
+  remoteChapterId Int?      @db.UnsignedInt
+  remoteName      String    @db.VarChar(191)
+  receivedPath    String    @db.VarChar(500)
+  status          String    @default("pending") @db.VarChar(32)
+  progress        Int       @default(0) @db.UnsignedInt
+  totalBytes      BigInt?   @db.UnsignedBigInt
+  downloadedBytes BigInt    @default(0) @db.UnsignedBigInt
+  speedBps        Int       @default(0) @db.UnsignedInt
+  error           String?   @db.Text
+  connectMode     String?   @db.VarChar(32)
+  createTime      DateTime  @default(now()) @db.DateTime(6)
+  updateTime      DateTime  @default(now()) @updatedAt @db.DateTime(6)
+  startTime       DateTime? @db.DateTime(6)
+  endTime         DateTime? @db.DateTime(6)
+
+  @@map("p2p_transfer")
+}
+
+
+// ============================================================
+//  Tracker 角色(公网服务端数据) - 前缀 tracker_
+// ============================================================
+
+model tracker_node {
+  trackerNodeId Int       @id @default(autoincrement()) @db.UnsignedInt
+  nodeId        String    @unique(map: "uniqueTrackerNodeId") @db.VarChar(64)
+  nodeToken     String    @db.VarChar(128)
+  nodeName      String?   @db.VarChar(191)
+  publicHost    String?   @db.VarChar(191)
+  publicPort    Int?      @db.UnsignedInt
+  localHost     String?   @db.VarChar(191)
+  localPort     Int?      @db.UnsignedInt
+  version       String?   @db.VarChar(32)
+  userAgent     String?   @db.VarChar(255)
+  online        Int       @default(0) @db.UnsignedInt
+  lastHeartbeat DateTime? @db.DateTime(6)
+  totalUpload   BigInt    @default(0) @db.UnsignedBigInt
+  totalDownload BigInt    @default(0) @db.UnsignedBigInt
+  banned        Int       @default(0) @db.UnsignedInt
+  bannedReason  String?   @db.VarChar(255)
+  createTime    DateTime  @default(now()) @db.DateTime(6)
+  updateTime    DateTime  @default(now()) @updatedAt @db.DateTime(6)
+
+  memberships tracker_membership[]
+  ownedGroups tracker_group[]      @relation("TrackerGroupOwner")
+
+  @@map("tracker_node")
+}
+
+model tracker_group {
+  trackerGroupId Int          @id @default(autoincrement()) @db.UnsignedInt
+  groupNo        String       @unique(map: "uniqueTrackerGroupNo") @db.VarChar(32)
+  groupName      String       @db.VarChar(191)
+  describe       String?      @db.VarChar(500)
+  password       String       @db.VarChar(191)
+  owner          tracker_node @relation("TrackerGroupOwner", fields: [ownerNodeId], references: [nodeId])
+  ownerNodeId    String       @db.VarChar(64)
+  maxMembers     Int          @default(50) @db.UnsignedInt
+  memberCount    Int          @default(1) @db.UnsignedInt
+  enable         Int          @default(1) @db.UnsignedInt
+  createTime     DateTime     @default(now()) @db.DateTime(6)
+  updateTime     DateTime     @default(now()) @updatedAt @db.DateTime(6)
+
+  memberships  tracker_membership[]
+  invites      tracker_invite[]
+  shareIndexes tracker_share_index[]
+
+  @@map("tracker_group")
+}
+
+model tracker_membership {
+  trackerMembershipId Int           @id @default(autoincrement()) @db.UnsignedInt
+  group               tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+  trackerGroupId      Int           @db.UnsignedInt
+  node                tracker_node  @relation(fields: [nodeId], references: [nodeId])
+  nodeId              String        @db.VarChar(64)
+  role                String        @default("member") @db.VarChar(32)
+  joinTime            DateTime      @default(now()) @db.DateTime(6)
+  lastAnnounce        DateTime?     @db.DateTime(6)
+  createTime          DateTime      @default(now()) @db.DateTime(6)
+  updateTime          DateTime      @default(now()) @updatedAt @db.DateTime(6)
+
+  @@unique([trackerGroupId, nodeId], map: "uniqueTrackerMembership")
+  @@map("tracker_membership")
+}
+
+model tracker_invite {
+  trackerInviteId Int           @id @default(autoincrement()) @db.UnsignedInt
+  group           tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+  trackerGroupId  Int           @db.UnsignedInt
+  code            String        @unique(map: "uniqueTrackerInviteCode") @db.VarChar(64)
+  createdBy       String        @db.VarChar(64)
+  usedBy          String?       @db.VarChar(64)
+  usedTime        DateTime?     @db.DateTime(6)
+  expires         DateTime?     @db.DateTime(6)
+  createTime      DateTime      @default(now()) @db.DateTime(6)
+
+  @@map("tracker_invite")
+}
+
+model tracker_share_index {
+  trackerShareIndexId Int           @id @default(autoincrement()) @db.UnsignedInt
+  group               tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+  trackerGroupId      Int           @db.UnsignedInt
+  nodeId              String        @db.VarChar(64)
+  shareType           String        @default("media") @db.VarChar(32)
+  remoteMediaId       Int?          @db.UnsignedInt
+  remoteMangaId       Int?          @db.UnsignedInt
+  shareName           String        @db.VarChar(191)
+  coverUrl            String?       @db.VarChar(500)
+  mangaCount          Int           @default(0) @db.UnsignedInt
+  totalSize           BigInt?       @db.UnsignedBigInt
+  enable              Int           @default(1) @db.UnsignedInt
+  createTime          DateTime      @default(now()) @db.DateTime(6)
+  updateTime          DateTime      @default(now()) @updatedAt @db.DateTime(6)
+
+  @@unique([trackerGroupId, nodeId, shareType, remoteMediaId, remoteMangaId], map: "uniqueShareIndex")
+  @@map("tracker_share_index")
+}
