@@ -28,15 +28,27 @@ const queueConfig: queueConfigType = get_config()?.queue || {
   timeout: 120000, // 默认超时时间为2分钟
 }
 
-const concurrency = queueConfig?.concurrency ?? 1 // 并发数
+const concurrency = queueConfig?.concurrency ?? 1 // 并发数 (保留以作为默认值参考，部分 process 中直接使用 queueConfig.concurrency)
 const attempts = queueConfig?.attempts ?? 3 // 最大重试次数
 const timeout = queueConfig?.timeout ?? 120000 // 超时时间（毫秒）
+void concurrency
+void attempts
+void timeout
 
-const scanQueue = new Bull('smanga', {
-  redis: {
-    host: get_config()?.redis?.host || '127.0.0.1',
-    port: get_config()?.redis?.port || 6379,
-  },
+// 服务标识，用于在共用同一个 Redis 时隔离不同 smanga 实例的队列。
+// 在 data/config/smanga.json 中配置 "serverKey"，缺省为 'default'。
+const serverKey: string = (get_config()?.serverKey || 'default').toString().trim() || 'default'
+const queueName = `smanga:${serverKey}`
+
+const redisOptions = {
+  host: get_config()?.redis?.host || '127.0.0.1',
+  port: get_config()?.redis?.port || 6379,
+}
+
+console.log(`[queue] using queue name: ${queueName}`)
+
+const scanQueue = new Bull(queueName, {
+  redis: redisOptions,
 })
 
 scanQueue.on('completed', (job) => {
@@ -87,18 +99,12 @@ scanQueue.process(queueConfig.concurrency, async (job: any) => {
   await task_process(command, args)
 })
 
-const deleteQueue = new Bull('smanga', {
-  redis: {
-    host: '127.0.0.1',
-    port: 6379,
-  },
+const deleteQueue = new Bull(queueName, {
+  redis: redisOptions,
 })
 
-const compressQueue = new Bull('smanga', {
-  redis: {
-    host: '127.0.0.1',
-    port: 6379,
-  },
+const compressQueue = new Bull(queueName, {
+  redis: redisOptions,
 })
 
 async function task_process(command: string, args: any) {
@@ -186,6 +192,7 @@ type addTaskType = {
 }
 
 async function addTask({ taskName, command, args, priority, timeout }: addTaskType) {
+  void timeout // 形参保留以兼容外部调用，超时统一使用 queueConfig.timeout
   // console.log(`添加任务: ${taskName}, 命令: ${command}, 参数: ${JSON.stringify(args)}, 优先级: ${priority}, 超时: ${timeout}`);
   console.log(`添加任务: ${taskName}`)
 
