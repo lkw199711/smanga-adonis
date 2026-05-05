@@ -27,7 +27,7 @@ export default class AuthMiddleware {
   redirectTo = '/login'
 
   async handle({ request, response }: HttpContextWithUserId, next: NextFn) {
-    const skipRoutes = ['/deploy', '/test', '/login', '/file', '/analysis', '/homepage', '/tracker', '/p2p/serve']
+    const skipRoutes = ['/deploy', '/test', '/login', '/file', '/analysis', '/homepage', '/tracker', '/p2p/serve', '/p2p/verify']
 
     // 用 "全等 或 以 prefix/ 开头" 的方式精确匹配,避免 /p2p 误命中 /api/p2p,或 /tracker 误命中 /trackerxxx
     const url = request.url()

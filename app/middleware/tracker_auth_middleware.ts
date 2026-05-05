@@ -32,8 +32,10 @@ export default class TrackerAuthMiddleware {
         .json(new SResponse({ code: 1, message: 'Tracker 未启用', status: 'tracker disabled' }))
     }
 
-    // 注册接口公开访问 (精确匹配,避免误放行 /tracker/node/registerxxx)
-    if (url === '/tracker/node/register') {
+    // 公开访问的接口白名单(精确匹配,避免前缀误伤)
+    //   - /tracker/node/register: 节点注册(首次)
+    //   - /tracker/node/whoami:   客户端网络可达性自检(返回 tracker 视角看到的 IP)
+    if (url === '/tracker/node/register' || url === '/tracker/node/whoami') {
       await next()
       return
     }

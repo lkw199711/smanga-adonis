@@ -321,6 +321,11 @@ class P2PIdentityService {
   /**
    * 本地直注册:自行生成 nodeId/rawToken,写入 tracker_node 表,并回写 smanga.json
    * 用于 "本机既是 node 又是 tracker" 的一体机场景,避免 HTTP 自调
+   *
+   * publicHost 决策:
+   *  - 用户在 smanga.json 配置了 p2p.node.publicHost(且非 127.0.0.1) -> 直接采用
+   *  - 否则置 null(留空),等节点首次心跳/外部请求时由 tracker 侧识别
+   *    (一体机自连无法识别外部 IP,这一步交给后续真实远程心跳来填补)
    */
   private async registerLocally(nodeName: string, p2p: any): Promise<P2PIdentity> {
     const nodeId = uuidv4()
@@ -328,14 +333,24 @@ class P2PIdentityService {
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
     const port = resolveLocalPort(p2p) || null
+    const cfgPublicHost = resolvePublicHost(p2p) // 已过滤掉 127.0.0.1 / localhost / 0.0.0.0
+
+    if (!cfgPublicHost) {
+      console.warn(
+        '[p2p] 本地直注册:未配置 p2p.node.publicHost,publicHost 将先置空。\n' +
+        '       如本机需要被外部节点访问,请在 smanga.json 设置:\n' +
+        '         p2p.node.publicHost = "你的公网IP或域名"\n' +
+        '         p2p.node.publicPort = 对外端口(NAT 后需做端口映射)'
+      )
+    }
 
     await prisma.tracker_node.create({
       data: {
         nodeId,
         nodeToken: tokenHash,
         nodeName: nodeName || null,
-        publicHost: '127.0.0.1',
-        publicPort: resolvePublicPort(p2p) || port,
+        publicHost: cfgPublicHost || null,
+        publicPort: cfgPublicHost ? (resolvePublicPort(p2p) || port) : null,
         localHost: p2p?.node?.lanHost || '127.0.0.1',
         localPort: port,
         version: 'smanga-adonis',
@@ -345,14 +360,11 @@ class P2PIdentityService {
       },
     })
 
-    // 回写配置
+    // 回写配置(仅 nodeId/nodeToken/nodeName,publicHost 不主动写入 127.0.0.1)
     const config = get_config()
     config.p2p.node.nodeId = nodeId
     config.p2p.node.nodeToken = rawToken
     config.p2p.node.nodeName = nodeName
-    if (!config.p2p.node.publicHost) {
-      config.p2p.node.publicHost = '127.0.0.1'
-    }
     set_config(config)
 
     return { nodeId, nodeToken: rawToken, nodeName }
@@ -371,6 +383,7 @@ class P2PIdentityService {
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
     const port = resolveLocalPort(p2p) || null
+    const cfgPublicHost = resolvePublicHost(p2p)
 
     await prisma.tracker_node.upsert({
       where: { nodeId },
@@ -387,8 +400,9 @@ class P2PIdentityService {
         nodeId,
         nodeToken: tokenHash,
         nodeName: p2p?.node?.nodeName || null,
-        publicHost: p2p?.node?.publicHost || '127.0.0.1',
-        publicPort: resolvePublicPort(p2p) || port,
+        // 仅当配置里显式给了真实公网 host(非 127.0.0.1)才入库,避免污染
+        publicHost: cfgPublicHost || null,
+        publicPort: cfgPublicHost ? (resolvePublicPort(p2p) || port) : null,
         localHost: p2p?.node?.lanHost || '127.0.0.1',
         localPort: port,
         version: 'smanga-adonis',

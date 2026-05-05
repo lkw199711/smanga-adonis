@@ -41,6 +41,7 @@ const P2PGroupsController = () => import('#controllers/p2p/p2p_groups_controller
 const P2PSharesController = () => import('#controllers/p2p/p2p_shares_controller')
 const P2PPeersController = () => import('#controllers/p2p/p2p_peers_controller')
 const P2PServeController = () => import('#controllers/p2p/p2p_serve_controller')
+const P2PVerifyController = () => import('#controllers/p2p/p2p_verify_controller')
 const P2PTransfersController = () => import('#controllers/p2p/p2p_transfers_controller')
 
 router.get('/', async () => {
@@ -248,6 +249,8 @@ router.post('/tracker/node/register', [TrackerNodesController, 'register'])
 router.post('/tracker/node/heartbeat', [TrackerNodesController, 'heartbeat'])
 router.patch('/tracker/node/me', [TrackerNodesController, 'update'])
 router.delete('/tracker/node/me', [TrackerNodesController, 'deregister'])
+// 网络可达性诊断(公开):返回 tracker 视角下的客户端真实 IP / 公私网分类
+router.get('/tracker/node/whoami', [TrackerNodesController, 'whoami'])
 
 // 群组管理
 router.get('/tracker/group', [TrackerGroupsController, 'index'])
@@ -342,3 +345,9 @@ router.get('/p2p/serve/chapter/:chapterId/images', [P2PServeController, 'images'
 router.post('/p2p/serve/file', [P2PServeController, 'file'])
 router.get('/p2p/serve/file', [P2PServeController, 'file'])
 router.post('/p2p/serve/file/stat', [P2PServeController, 'file_stat'])
+
+// ============================================================================
+// P2P 节点公网可达性反向验证接口 (/p2p/verify/*)
+// 公开访问(不走 P2PPeerAuthMiddleware,因为注册阶段调用方还没有群组上下文)
+// ============================================================================
+router.get('/p2p/verify/echo', [P2PVerifyController, 'echo'])
