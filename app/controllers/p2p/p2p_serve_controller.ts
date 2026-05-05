@@ -365,12 +365,20 @@ export default class P2PServeController {
   }
 
   /**
-   * POST /p2p/serve/file  { file: absPath }
+   * POST/GET /p2p/serve/file  { file: absPath }
+   * 支持 HTTP Range:
+   *  - 无 Range 头         → 200 OK + 整文件
+   *  - `Range: bytes=a-b`  → 206 Partial Content + [a,b] 区间
+   *  - `Range: bytes=a-`   → 206 + [a, size-1]
+   * 始终暴露 `Accept-Ranges: bytes` 供客户端探测
    */
   async file({ request, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      const { file } = request.only(['file'])
+      // 兼容 POST body / GET query 两种传参
+      const fileFromBody = (request as any).only?.(['file'])?.file
+      const fileFromQuery = request.qs?.()?.file
+      const file: any = fileFromBody || fileFromQuery
 
       if (!file || typeof file !== 'string') {
         console.warn(`[p2p-serve] file 400 file参数缺失 | caller=${callerNodeId} groupNo=${groupNo}`)
@@ -381,12 +389,49 @@ export default class P2PServeController {
         return response.status(404).json({ code: 1, message: `file not found: ${file}` })
       }
 
-      console.log(`[p2p-serve] file 200 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
       const st = fs.statSync(file)
+      const totalSize = st.size
+      const rangeHeader = request.header('range') || request.header('Range')
+
       response.header('Content-Type', is_img(file) ? 'image/jpeg' : 'application/octet-stream')
-      response.header('Content-Length', String(st.size))
-      response.header('X-File-Size', String(st.size))
+      response.header('Accept-Ranges', 'bytes')
+      response.header('X-File-Size', String(totalSize))
       response.header('X-File-Mtime', String(st.mtimeMs))
+
+      if (rangeHeader && /^bytes=/i.test(rangeHeader)) {
+        // 解析 Range: bytes=start-end
+        const m = /bytes=(\d*)-(\d*)/i.exec(rangeHeader)
+        let start = m && m[1] !== '' ? Number(m[1]) : NaN
+        let end = m && m[2] !== '' ? Number(m[2]) : NaN
+
+        if (isNaN(start) && !isNaN(end)) {
+          // suffix: bytes=-N  → 最后 N 字节
+          start = Math.max(0, totalSize - end)
+          end = totalSize - 1
+        } else {
+          if (isNaN(start)) start = 0
+          if (isNaN(end) || end >= totalSize) end = totalSize - 1
+        }
+
+        if (start < 0 || start >= totalSize || end < start) {
+          response.header('Content-Range', `bytes */${totalSize}`)
+          return response.status(416).json({ code: 1, message: `invalid range: ${rangeHeader}` })
+        }
+
+        const chunkSize = end - start + 1
+        response.status(206)
+        response.header('Content-Range', `bytes ${start}-${end}/${totalSize}`)
+        response.header('Content-Length', String(chunkSize))
+        console.log(
+          `[p2p-serve] file 206 | caller=${callerNodeId} groupNo=${groupNo} ` +
+          `file=${file} range=${start}-${end}/${totalSize}`
+        )
+        response.stream(fs.createReadStream(file, { start, end }))
+        return
+      }
+
+      console.log(`[p2p-serve] file 200 | caller=${callerNodeId} groupNo=${groupNo} file=${file} size=${totalSize}`)
+      response.header('Content-Length', String(totalSize))
       response.stream(fs.createReadStream(file))
     } catch (e: any) {
       log_p2p_error('serve.file', e)
