@@ -513,8 +513,7 @@ model p2p_transfer {
   group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
   p2pGroupId      Int
   groupNo         String    @default("")
-  peerNodeId      String
-  peerBaseUrl     String    @default("")
+  peerNodeId      String    @default("")
   transferType    String
   remoteMediaId   Int?
   remoteMangaId   Int?

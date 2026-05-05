@@ -28,6 +28,29 @@ export default class TrackerSharesController {
   }
 
   /**
+   * GET /tracker/group/:groupNo/seeds?shareType=&remoteMediaId=&remoteMangaId=
+   * 返回拥有该资源的节点列表(在线优先),供拉取任务做多源选择
+   */
+  async seeds({ params, request, response }: HttpContext) {
+    try {
+      const { shareType, remoteMediaId, remoteMangaId } = request.only([
+        'shareType', 'remoteMediaId', 'remoteMangaId',
+      ])
+      const { list, count } = await trackerShareService.findSeeds(params.groupNo, {
+        shareType,
+        remoteMediaId: remoteMediaId ? Number(remoteMediaId) : undefined,
+        remoteMangaId: remoteMangaId ? Number(remoteMangaId) : undefined,
+      })
+      return response.json(
+        new ListResponse({ code: 0, message: '', list: list as any, count })
+      )
+    } catch (err: any) {
+      log_tracker_error('share.seeds', err)
+      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+    }
+  }
+
+  /**
    * GET /tracker/group/:groupNo/shares?page=&pageSize=&keyword=
    */
   async index({ params, request, response }: HttpContext) {

@@ -135,6 +135,35 @@ export class TrackerClient {
     const data = res.data?.data ?? res.data
     return data?.list ?? data
   }
+
+  /**
+   * 按资源查询群内拥有该资源的节点(多源 P2P 拉取用)
+   */
+  async findSeeds(
+    groupNo: string,
+    params: {
+      shareType: 'media' | 'manga' | 'chapter'
+      remoteMediaId?: number
+      remoteMangaId?: number
+    }
+  ) {
+    const res = await this.http.get(
+      `/tracker/group/${groupNo}/seeds`,
+      this.auth({ params })
+    )
+    const data = res.data?.data ?? res.data
+    return (data?.list ?? data) as Array<{
+      nodeId: string
+      nodeName: string | null
+      online: number
+      publicHost: string | null
+      publicPort: number | null
+      localHost: string | null
+      localPort: number | null
+      lastHeartbeat: string | null
+      shareName: string
+    }>
+  }
 }
 
 /**

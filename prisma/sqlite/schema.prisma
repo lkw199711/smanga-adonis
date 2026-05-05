@@ -510,8 +510,7 @@ model p2p_transfer {
   p2pTransferId   Int       @id @default(autoincrement())
   p2pGroupId      Int
   groupNo         String    @default("")
-  peerNodeId      String
-  peerBaseUrl     String    @default("")
+  peerNodeId      String    @default("")
   transferType    String
   remoteMediaId   Int?
   remoteMangaId   Int?

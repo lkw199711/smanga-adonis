@@ -29,9 +29,11 @@ export type P2PIdentity = {
 
 class P2PIdentityService {
   /**
-   * 获取身份;如缺失则自动注册(本机 tracker 走本地直注册,否则走 HTTP)
+   * 获取身份;如缺失或已失效则自动(重新)注册
+   * - 本机 tracker:直接落库
+   * - 远端 tracker:HTTP 注册;若已有身份会先做一次心跳验证,无效则清身份重注册
    */
-  async ensureIdentity(): Promise<P2PIdentity | null> {
+  async ensureIdentity(options: { forceReregister?: boolean } = {}): Promise<P2PIdentity | null> {
     const config = get_config()
     const p2p = config?.p2p
     if (!p2p?.enable) {
@@ -43,11 +45,11 @@ class P2PIdentityService {
       return null
     }
 
-    // 已存在且完整
-    if (p2p.node?.nodeId && p2p.node?.nodeToken) {
-      // 若本机同时是 tracker,额外校验本地 tracker_node 表是否真的存在该节点
-      // 防止数据漂移:config 里有 nodeId 但数据库被重置/清空,导致后续所有
-      // /tracker/* 请求被中间件判为 "节点不存在"
+    // 已存在且完整(且未强制重注册)
+    if (!options.forceReregister && p2p.node?.nodeId && p2p.node?.nodeToken) {
+      // 1) 若本机同时是 tracker,先校验本地 tracker_node 表是否真的存在该节点
+      //    防止数据漂移:config 里有 nodeId 但数据库被重置/清空,导致后续所有
+      //    /tracker/* 请求被中间件判为 "节点不存在"
       if (this.isLocalTracker(p2p)) {
         try {
           const exists = await prisma.tracker_node.findUnique({
@@ -65,11 +67,21 @@ class P2PIdentityService {
         }
       }
 
-      return {
-        nodeId: p2p.node.nodeId,
-        nodeToken: p2p.node.nodeToken,
-        nodeName: p2p.node.nodeName || '',
+      // 2) 远端有效性验证:防止 tracker 数据库被清/更换 tracker 等场景
+      const valid = await this.verifyIdentityOnTracker(p2p)
+      if (valid) {
+        return {
+          nodeId: p2p.node.nodeId,
+          nodeToken: p2p.node.nodeToken,
+          nodeName: p2p.node.nodeName || '',
+        }
       }
+
+      // 3) 失效:清空本地身份后走下面的注册流程
+      console.warn(
+        `[p2p] 本地 nodeId=${p2p.node.nodeId} 在 tracker 端失效(可能被清库或换了 tracker),将自动重新注册`
+      )
+      this.clearLocalIdentity()
     }
 
     const nodeName = p2p.node?.nodeName || os.hostname() || 'smanga-node'
@@ -82,6 +94,7 @@ class P2PIdentityService {
         return identity
       } catch (e: any) {
         log_p2p_error('identity.registerLocally', e)
+        this.lastRegisterError = e
         return null
       }
     }
@@ -94,6 +107,7 @@ class P2PIdentityService {
         '       请在 smanga.json 中设置 p2p.node.trackers = ["http://你的tracker地址:端口"]\n' +
         '       或将本机配置为 tracker (p2p.role.tracker=true)'
       )
+      this.lastRegisterError = new Error('未配置 trackers 且本机非 tracker 角色')
       return null
     }
 
@@ -124,6 +138,9 @@ class P2PIdentityService {
       }
     } catch (e: any) {
       log_p2p_error(`identity.register(url=${trackerUrl})`, e)
+      // 记录远端返回的 message(若有),否则用原始 error.message
+      const remoteMsg: string | undefined = e?.response?.data?.message
+      this.lastRegisterError = remoteMsg ? new Error(remoteMsg) : e
       // 给出明确的诊断建议
       if (e?.code === 'ECONNREFUSED' || e?.code === 'ENOTFOUND' || e?.code === 'ETIMEDOUT') {
         console.warn(
@@ -132,10 +149,90 @@ class P2PIdentityService {
           '       - 检查 tracker 服务是否已启动\n' +
           '       - 检查防火墙 / 端口映射'
         )
+        this.lastRegisterError = new Error(`无法连接 tracker ${trackerUrl} (${e?.code})`)
       }
       return null
     }
   }
+
+  /**
+   * 校验本地 nodeId/nodeToken 在 tracker 端是否仍然有效
+   * - 本机 tracker:查 tracker_node 表
+   * - 远端 tracker:用 heartbeat 探测,401 视为失效;网络错误视为"暂时性",当作仍有效避免误清
+   */
+  private async verifyIdentityOnTracker(p2p: any): Promise<boolean> {
+    const nodeId = p2p?.node?.nodeId
+    const nodeToken = p2p?.node?.nodeToken
+    if (!nodeId || !nodeToken) return false
+
+    if (this.isLocalTracker(p2p)) {
+      try {
+        const node = await prisma.tracker_node.findUnique({ where: { nodeId } })
+        if (!node) return false
+        const tokenHash = crypto.createHash('sha256').update(nodeToken).digest('hex')
+        return tokenHash === node.nodeToken
+      } catch (e: any) {
+        log_p2p_error('identity.verifyLocal', e)
+        return true // 数据库异常时不清身份
+      }
+    }
+
+    const url = this.pickTrackerUrl(p2p)
+    if (!url) return true // 取不到 url 不当作失效
+    try {
+      const client = new TrackerClient(url, nodeId, nodeToken)
+      await client.heartbeat({
+        localHost: p2p?.node?.lanHost || undefined,
+        localPort: p2p?.node?.lanPort || p2p?.node?.listenPort || undefined,
+      })
+      return true
+    } catch (e: any) {
+      const status = e?.response?.status
+      if (status === 401 || status === 403) {
+        return false
+      }
+      // 网络错误等暂时性问题:不当作失效,避免误清身份
+      if (process.env.P2P_DEBUG) {
+        console.warn(`[p2p] identity.verify 网络异常,保留身份 (status=${status} msg=${e?.message})`)
+      }
+      return true
+    }
+  }
+
+  /**
+   * 清空本地配置中的 nodeId / nodeToken,nodeName 保留
+   */
+  private clearLocalIdentity() {
+    const config = get_config()
+    if (config?.p2p?.node) {
+      config.p2p.node.nodeId = ''
+      config.p2p.node.nodeToken = ''
+      set_config(config)
+    }
+  }
+
+  /**
+   * 主动作废本地身份并重新注册:供心跳/控制器在收到 401 / 节点不存在时调用
+   * - 成功:返回新的身份
+   * - 失败:抛出最近一次注册失败的原因(便于上层把详细错误透给前端)
+   */
+  async invalidateAndReregister(): Promise<P2PIdentity> {
+    this.clearLocalIdentity()
+    this.lastRegisterError = null
+    const fresh = await this.ensureIdentity({ forceReregister: true })
+    if (!fresh) {
+      const reason = this.lastRegisterError?.message || this.lastRegisterError?.toString() || '未知原因'
+      const err: any = new Error(`节点重新注册失败: ${reason}`)
+      err.cause = this.lastRegisterError
+      throw err
+    }
+    return fresh
+  }
+
+  /**
+   * 最近一次注册过程中遇到的错误(由 ensureIdentity 内部记录,供 invalidateAndReregister 上抛)
+   */
+  private lastRegisterError: any = null
 
   /**
    * 读取当前身份(不触发注册)

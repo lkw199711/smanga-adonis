@@ -261,6 +261,7 @@ router.post('/tracker/group/:groupNo/invite', [TrackerGroupsController, 'invite'
 // 共享索引
 router.post('/tracker/group/:groupNo/announce', [TrackerSharesController, 'announce'])
 router.get('/tracker/group/:groupNo/shares', [TrackerSharesController, 'index'])
+router.get('/tracker/group/:groupNo/seeds', [TrackerSharesController, 'seeds'])
 
 // 配置信息
 router.get('client-user-config', [UsersController, 'config'])
