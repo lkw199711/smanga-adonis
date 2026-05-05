@@ -27,6 +27,40 @@ export type P2PIdentity = {
   nodeName: string
 }
 
+/**
+ * 解析节点本次运行对外的监听端口:
+ * 优先读 process.env.PORT (AdonisJS 实际监听端口),否则回落 smanga.json 的 p2p.node.listenPort/lanPort
+ * 保证 register/heartbeat 上报的端口与 HTTP serve 实际监听一致
+ */
+function resolveLocalPort(p2p: any): number | undefined {
+  const envPort = Number(process.env.PORT)
+  if (Number.isFinite(envPort) && envPort > 0) return envPort
+  const cfgPort = p2p?.node?.listenPort || p2p?.node?.lanPort
+  return cfgPort && cfgPort > 0 ? cfgPort : undefined
+}
+
+/**
+ * 解析节点对外可达的 publicPort:
+ * - 配置中明确指定了 publicPort(>0) 则用它(公网/反代场景)
+ * - 否则回落到实际监听端口(同机/局域网场景足够)
+ */
+function resolvePublicPort(p2p: any): number | undefined {
+  const cfgPub = p2p?.node?.publicPort
+  if (cfgPub && cfgPub > 0) return cfgPub
+  return resolveLocalPort(p2p)
+}
+
+/**
+ * 解析节点对外可达 publicHost:
+ * 仅当配置里填写了真实公网域名/IP 才上报;否则交给 tracker 用 request.ip()
+ * (127.0.0.1 视为未配置,不上报以免污染 tracker)
+ */
+function resolvePublicHost(p2p: any): string | undefined {
+  const h = p2p?.node?.publicHost
+  if (!h || h === '127.0.0.1' || h === 'localhost' || h === '0.0.0.0') return undefined
+  return h
+}
+
 class P2PIdentityService {
   /**
    * 获取身份;如缺失或已失效则自动(重新)注册
@@ -117,8 +151,10 @@ class P2PIdentityService {
       const res = await client.register({
         nodeName,
         version: 'smanga-adonis',
+        publicHost: resolvePublicHost(p2p),
+        publicPort: resolvePublicPort(p2p),
         localHost: p2p.node?.lanHost || undefined,
-        localPort: p2p.node?.lanPort || p2p.node?.listenPort || undefined,
+        localPort: resolveLocalPort(p2p),
       })
 
       // 回写配置
@@ -182,8 +218,10 @@ class P2PIdentityService {
     try {
       const client = new TrackerClient(url, nodeId, nodeToken)
       await client.heartbeat({
+        publicHost: resolvePublicHost(p2p),
+        publicPort: resolvePublicPort(p2p),
         localHost: p2p?.node?.lanHost || undefined,
-        localPort: p2p?.node?.lanPort || p2p?.node?.listenPort || undefined,
+        localPort: resolveLocalPort(p2p),
       })
       return true
     } catch (e: any) {
@@ -289,14 +327,17 @@ class P2PIdentityService {
     const rawToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '')
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
+    const port = resolveLocalPort(p2p) || null
+
     await prisma.tracker_node.create({
       data: {
         nodeId,
         nodeToken: tokenHash,
         nodeName: nodeName || null,
         publicHost: '127.0.0.1',
+        publicPort: resolvePublicPort(p2p) || port,
         localHost: p2p?.node?.lanHost || '127.0.0.1',
-        localPort: p2p?.node?.lanPort || p2p?.node?.listenPort || null,
+        localPort: port,
         version: 'smanga-adonis',
         userAgent: 'local-init',
         online: 1,
@@ -329,6 +370,8 @@ class P2PIdentityService {
 
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
+    const port = resolveLocalPort(p2p) || null
+
     await prisma.tracker_node.upsert({
       where: { nodeId },
       update: {
@@ -336,14 +379,18 @@ class P2PIdentityService {
         nodeToken: tokenHash,
         online: 1,
         lastHeartbeat: new Date(),
+        // 同机自愈时强制刷新端口,保证 seeds 能拼出正确 baseUrl
+        ...(port !== null && { localPort: port }),
+        ...(port !== null && { publicPort: resolvePublicPort(p2p) || port }),
       },
       create: {
         nodeId,
         nodeToken: tokenHash,
         nodeName: p2p?.node?.nodeName || null,
         publicHost: p2p?.node?.publicHost || '127.0.0.1',
+        publicPort: resolvePublicPort(p2p) || port,
         localHost: p2p?.node?.lanHost || '127.0.0.1',
-        localPort: p2p?.node?.lanPort || p2p?.node?.listenPort || null,
+        localPort: port,
         version: 'smanga-adonis',
         userAgent: 'local-sync',
         online: 1,

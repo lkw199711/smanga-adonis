@@ -92,6 +92,10 @@ export type P2PConfig = {
 export type NodeRegisterPayload = {
   nodeName?: string
   version?: string
+  /** 节点对外可达的 host(公网/反向代理域名),由节点自报;不传时 tracker 用 request.ip() */
+  publicHost?: string
+  /** 节点对外可达的 http 端口,由节点自报;通常等于 AdonisJS 监听端口 */
+  publicPort?: number
   localHost?: string
   localPort?: number
   inviteCode?: string
@@ -104,6 +108,8 @@ export type NodeRegisterResult = {
 }
 
 export type HeartbeatPayload = {
+  publicHost?: string
+  publicPort?: number
   localHost?: string
   localPort?: number
 }

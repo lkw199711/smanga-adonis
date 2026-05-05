@@ -52,12 +52,19 @@ class TrackerNodeService {
     const rawToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '')
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
+    // publicHost / publicPort:
+    //   - publicHost 优先取节点自报(部署在公网/反向代理后,节点自己更清楚域名),否则用 request.ip()
+    //   - publicPort 必须由节点自报(tracker 无法从 HTTP 连接推导出节点的对外端口)
+    const publicHost = payload.publicHost || remoteIp
+    const publicPort = payload.publicPort || null
+
     await prisma.tracker_node.create({
       data: {
         nodeId,
         nodeToken: tokenHash,
         nodeName: payload.nodeName || null,
-        publicHost: remoteIp,
+        publicHost,
+        publicPort,
         localHost: payload.localHost || null,
         localPort: payload.localPort || null,
         version: payload.version || null,
@@ -70,7 +77,7 @@ class TrackerNodeService {
     return {
       nodeId,
       nodeToken: rawToken,
-      publicHost: remoteIp,
+      publicHost,
     }
   }
 
@@ -82,19 +89,24 @@ class TrackerNodeService {
     payload: HeartbeatPayload,
     remoteIp: string
   ): Promise<HeartbeatResult> {
+    // 心跳时同步刷新 publicHost/publicPort/localHost/localPort
+    // - publicHost: 节点自报优先,否则用请求来源 IP
+    // - publicPort: 仅节点自报(undefined 时不更新原值)
+    const publicHost = payload.publicHost || remoteIp
     await prisma.tracker_node.update({
       where: { nodeId },
       data: {
         online: 1,
         lastHeartbeat: new Date(),
-        publicHost: remoteIp,
+        publicHost,
+        ...(payload.publicPort !== undefined && { publicPort: payload.publicPort }),
         ...(payload.localHost !== undefined && { localHost: payload.localHost }),
         ...(payload.localPort !== undefined && { localPort: payload.localPort }),
       },
     })
 
     return {
-      publicHost: remoteIp,
+      publicHost,
       serverTime: Date.now(),
       pendingNotifications: [],
     }

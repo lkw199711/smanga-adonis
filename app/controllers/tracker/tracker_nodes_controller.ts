@@ -16,6 +16,8 @@ export default class TrackerNodesController {
       const payload = request.only([
         'nodeName',
         'version',
+        'publicHost',
+        'publicPort',
         'localHost',
         'localPort',
         'inviteCode',
@@ -40,7 +42,7 @@ export default class TrackerNodesController {
   async heartbeat({ request, response }: HttpContext) {
     try {
       const nodeId = (request as any).trackerNodeId as string
-      const payload = request.only(['localHost', 'localPort'])
+      const payload = request.only(['publicHost', 'publicPort', 'localHost', 'localPort'])
       const remoteIp = request.ip()
 
       const result = await trackerNodeService.heartbeat(nodeId, payload, remoteIp)

@@ -91,9 +91,24 @@ class P2PHeartbeatService {
       list.map(async (url) => {
         try {
           const client = new TrackerClient(url, identity.nodeId, identity.nodeToken)
+          // 同步上报当前实际监听端口(优先 process.env.PORT)
+          // 以便 tracker 里的 publicPort/localPort 始终指向正在监听的端口
+          const envPort = Number(process.env.PORT)
+          const runtimePort = Number.isFinite(envPort) && envPort > 0
+            ? envPort
+            : (p2p.node?.listenPort || p2p.node?.lanPort || undefined)
+          const cfgPublicHost = p2p.node?.publicHost
+          const publicHost = cfgPublicHost && cfgPublicHost !== '127.0.0.1'
+            && cfgPublicHost !== 'localhost' && cfgPublicHost !== '0.0.0.0'
+            ? cfgPublicHost
+            : undefined
+          const cfgPublicPort = p2p.node?.publicPort
+          const publicPort = cfgPublicPort && cfgPublicPort > 0 ? cfgPublicPort : runtimePort
           await client.heartbeat({
+            publicHost,
+            publicPort,
             localHost: p2p.node?.lanHost || undefined,
-            localPort: p2p.node?.lanPort || p2p.node?.listenPort || undefined,
+            localPort: runtimePort,
           })
         } catch (e: any) {
           const status = e?.response?.status
