@@ -117,7 +117,7 @@ export type HeartbeatResult = {
 export type CreateGroupPayload = {
   groupName: string
   describe?: string
-  password: string
+  password?: string
   maxMembers?: number
 }
 

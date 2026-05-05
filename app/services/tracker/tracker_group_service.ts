@@ -28,8 +28,10 @@ class TrackerGroupService {
 
   /**
    * 简易 hash(非 bcrypt,减少依赖;生产可换成 bcryptjs)
+   * 空密码统一返回空字符串,代表"无密码群组"
    */
-  private hashPassword(raw: string): string {
+  private hashPassword(raw: string | undefined | null): string {
+    if (raw === undefined || raw === null || raw === '') return ''
     const salt = get_config()?.serverKey || 'smanga-salt'
     return crypto.createHash('sha256').update(salt + ':' + raw).digest('hex')
   }
@@ -118,9 +120,14 @@ class TrackerGroupService {
         data: { usedBy: nodeId, usedTime: new Date() },
       })
     } else {
-      if (!payload.password && payload.password !== '') throw new Error('需要密码或邀请码')
-      if (this.hashPassword(payload.password) !== group.password) {
-        throw new Error('密码错误')
+      // 群组无密码: 任何人都可加入
+      if (group.password === '') {
+        // pass
+      } else {
+        if (!payload.password) throw new Error('该群组需要密码或邀请码')
+        if (this.hashPassword(payload.password) !== group.password) {
+          throw new Error('密码错误')
+        }
       }
     }
 

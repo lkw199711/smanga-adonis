@@ -64,8 +64,9 @@ export default class P2PTransfersController {
    * POST /api/p2p/transfer/pull
    * body: {
    *   groupNo, peerNodeId,
-   *   transferType: 'chapter',
-   *   remoteChapterId, remoteName,
+   *   transferType: 'media' | 'manga' | 'chapter',
+   *   remoteMediaId? / remoteMangaId? / remoteChapterId?,
+   *   remoteName,
    *   receivedPath?  (不传则使用 defaultReceivedPath)
    * }
    */
@@ -76,6 +77,9 @@ export default class P2PTransfersController {
       'remoteName', 'receivedPath',
     ])
 
+    if (!body.groupNo) {
+      return response.status(400).json(new SResponse({ code: 1, message: 'groupNo required' }))
+    }
     const group = await prisma.p2p_group.findUnique({ where: { groupNo: body.groupNo } })
     if (!group) {
       return response.status(400).json(new SResponse({ code: 1, message: '群组不存在' }))
@@ -86,6 +90,20 @@ export default class P2PTransfersController {
     }
     if (!body.remoteName) {
       return response.status(400).json(new SResponse({ code: 1, message: 'remoteName required' }))
+    }
+
+    const transferType = body.transferType || 'chapter'
+    if (transferType !== 'media' && transferType !== 'manga' && transferType !== 'chapter') {
+      return response.status(400).json(new SResponse({ code: 1, message: 'transferType must be media | manga | chapter' }))
+    }
+    if (transferType === 'media' && !body.remoteMediaId) {
+      return response.status(400).json(new SResponse({ code: 1, message: 'remoteMediaId required' }))
+    }
+    if (transferType === 'manga' && !body.remoteMangaId) {
+      return response.status(400).json(new SResponse({ code: 1, message: 'remoteMangaId required' }))
+    }
+    if (transferType === 'chapter' && !body.remoteChapterId) {
+      return response.status(400).json(new SResponse({ code: 1, message: 'remoteChapterId required' }))
     }
 
     const receivedPath =
@@ -104,10 +122,10 @@ export default class P2PTransfersController {
         data: {
           p2pGroupId: group.p2pGroupId,
           peerNodeId: body.peerNodeId,
-          transferType: body.transferType || 'chapter',
-          remoteMediaId: body.remoteMediaId || null,
-          remoteMangaId: body.remoteMangaId || null,
-          remoteChapterId: body.remoteChapterId || null,
+          transferType,
+          remoteMediaId: body.remoteMediaId ? Number(body.remoteMediaId) : null,
+          remoteMangaId: body.remoteMangaId ? Number(body.remoteMangaId) : null,
+          remoteChapterId: body.remoteChapterId ? Number(body.remoteChapterId) : null,
           remoteName: body.remoteName,
           receivedPath: path.resolve(receivedPath),
           status: 'pending',

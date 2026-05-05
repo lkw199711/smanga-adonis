@@ -66,10 +66,14 @@ async function announce_group(groupNo: string) {
 
 export default class P2PSharesController {
   /**
-   * GET /api/p2p/share?groupNo=xxx
+   * GET /api/p2p/share?groupNo=xxx&page=&pageSize=
+   *
+   * 返回字段在原表基础上补充:
+   *   - groupName / groupNo (来自 p2p_group)
+   *   - mediaName / mangaName (从本地 media / manga 查询)
    */
   async index({ request, response }: HttpContext) {
-    const { groupNo } = request.only(['groupNo'])
+    const { groupNo, page, pageSize } = request.only(['groupNo', 'page', 'pageSize'])
     let where: any = {}
     if (groupNo) {
       const g = await prisma.p2p_group.findUnique({ where: { groupNo } })
@@ -78,30 +82,97 @@ export default class P2PSharesController {
       }
       where.p2pGroupId = g.p2pGroupId
     }
-    const list = await prisma.p2p_local_share.findMany({
+
+    const queryParams: any = {
       where,
       orderBy: { createTime: 'desc' },
+      include: {
+        group: {
+          select: { p2pGroupId: true, groupNo: true, groupName: true },
+        },
+      },
+    }
+    if (page && pageSize) {
+      queryParams.skip = (Number(page) - 1) * Number(pageSize)
+      queryParams.take = Number(pageSize)
+    }
+
+    const list: any[] = await prisma.p2p_local_share.findMany(queryParams)
+    const count = await prisma.p2p_local_share.count({ where })
+
+    // 收集需要查询名称的 mediaId / mangaId
+    const mediaIds = Array.from(
+      new Set(list.map((s: any) => s.mediaId).filter((v): v is number => !!v))
+    )
+    const mangaIds = Array.from(
+      new Set(list.map((s: any) => s.mangaId).filter((v): v is number => !!v))
+    )
+
+    const [mediaRows, mangaRows] = await Promise.all([
+      mediaIds.length
+        ? prisma.media.findMany({
+            where: { mediaId: { in: mediaIds } },
+            select: { mediaId: true, mediaName: true },
+          })
+        : Promise.resolve([] as { mediaId: number; mediaName: string }[]),
+      mangaIds.length
+        ? prisma.manga.findMany({
+            where: { mangaId: { in: mangaIds } },
+            select: { mangaId: true, mangaName: true, mediaId: true },
+          })
+        : Promise.resolve([] as { mangaId: number; mangaName: string; mediaId: number }[]),
+    ])
+
+    const mediaMap = new Map(mediaRows.map((m) => [m.mediaId, m.mediaName]))
+    const mangaMap = new Map(mangaRows.map((m) => [m.mangaId, m]))
+
+    const enriched = list.map((s: any) => {
+      const groupName = s.group?.groupName || ''
+      const groupNoVal = s.group?.groupNo || ''
+      let mediaName = ''
+      let mangaName = ''
+      if (s.mediaId && mediaMap.has(s.mediaId)) {
+        mediaName = mediaMap.get(s.mediaId) || ''
+      }
+      if (s.mangaId && mangaMap.has(s.mangaId)) {
+        const mg = mangaMap.get(s.mangaId)!
+        mangaName = mg.mangaName
+        // 漫画类型分享:补充媒体库名
+        if (!mediaName && mg.mediaId && mediaMap.has(mg.mediaId)) {
+          mediaName = mediaMap.get(mg.mediaId) || ''
+        }
+      }
+      return {
+        ...s,
+        groupName,
+        groupNo: groupNoVal,
+        mediaName,
+        mangaName,
+      }
     })
-    return response.json(new ListResponse({ code: 0, message: '', list, count: list.length }))
+
+    return response.json(new ListResponse({ code: 0, message: '', list: enriched, count }))
   }
 
   /**
    * POST /api/p2p/share/create
-   * body: { groupNo, shareType(media|manga), mediaId?, mangaId?, shareName }
+   * body: { groupNo, shareType('media'|'manga'), mediaId?, mangaId?, shareName? }
+   *
+   * shareName 缺省时自动用对应 media / manga 的名字。
    */
   async create({ request, response }: HttpContext) {
     const { groupNo, shareType, mediaId, mangaId, shareName } = request.only([
       'groupNo', 'shareType', 'mediaId', 'mangaId', 'shareName',
     ])
 
+    if (!groupNo) {
+      return response.status(400).json(new SResponse({ code: 1, message: 'groupNo required' }))
+    }
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) {
       return response.status(400).json(new SResponse({ code: 1, message: '群组不存在' }))
     }
 
-    if (!shareName || !String(shareName).trim()) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'shareName required' }))
-    }
     if (shareType !== 'media' && shareType !== 'manga') {
       return response.status(400).json(new SResponse({ code: 1, message: 'shareType must be media or manga' }))
     }
@@ -112,20 +183,37 @@ export default class P2PSharesController {
       return response.status(400).json(new SResponse({ code: 1, message: 'mangaId required' }))
     }
 
+    // 自动推导 shareName
+    let resolvedShareName = shareName ? String(shareName).trim() : ''
+    try {
+      if (!resolvedShareName) {
+        if (shareType === 'media') {
+          const m = await prisma.media.findUnique({ where: { mediaId: Number(mediaId) } })
+          resolvedShareName = m?.mediaName || `media-${mediaId}`
+        } else {
+          const m = await prisma.manga.findUnique({ where: { mangaId: Number(mangaId) } })
+          resolvedShareName = m?.mangaName || `manga-${mangaId}`
+        }
+      }
+    } catch (e: any) {
+      log_p2p_error('share.create.resolveName', e)
+      resolvedShareName = shareType === 'media' ? `media-${mediaId}` : `manga-${mangaId}`
+    }
+
     try {
       const item = await prisma.p2p_local_share.create({
         data: {
           p2pGroupId: group.p2pGroupId,
           shareType,
-          mediaId: mediaId || null,
-          mangaId: mangaId || null,
-          shareName: String(shareName).trim(),
+          mediaId: mediaId ? Number(mediaId) : null,
+          mangaId: mangaId ? Number(mangaId) : null,
+          shareName: resolvedShareName,
           enable: 1,
         },
       })
 
       // 异步上报
-      announce_group(groupNo)
+      announce_group(group.groupNo)
 
       return response.json(new SResponse({ code: 0, message: '创建成功', data: item }))
     } catch (e: any) {
