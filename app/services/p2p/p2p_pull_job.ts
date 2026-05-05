@@ -1,30 +1,27 @@
 /**
- * P2P 拉取任务 - 多源版本
+ * P2P 拉取任务 - 多源并行版
  *
- * 支持三种 transferType:
- *  - chapter: 拉取单个章节的所有图片到 receivedPath/
- *  - manga:   拉取整本漫画(下属所有章节),结构 receivedPath/<chapterName>/<files>
- *  - media:   拉取整个媒体库(下属所有漫画的所有章节),结构 receivedPath/<mangaName>/<chapterName>/<files>
+ * 核心模型:"漫画整树镜像复制 + 多节点并行下载"
+ *  - 对端提供 /p2p/serve/manga/:id/tree 与 /p2p/serve/chapter/:id/tree 返回目录下全部文件清单
+ *  - 客户端把所有文件扁平化为 FileTask 入池,N 个 seed = N 个 Worker 同时下载(真并行)
+ *  - 不再按文件类型区分,zip/rar/cbz/cbr/pdf/epub/散图/series.json/.smanga/ 都原样复制
  *
- * 多源策略 (方案 A: 轮询 + 失败换源):
- *  1. 任务启动时通过 Tracker.findSeeds 获取群组内拥有该资源的所有节点 (seeds)
- *  2. 每次发起请求(列章节/列漫画/列图片/下载文件)使用 round-robin 选择 seed
- *  3. 单次请求失败时尝试下一个 seed,所有 seed 全部失败才视为该请求失败
- *  4. 失败的 seed 在本次任务内进入"短期屏蔽列表",避免反复重试导致超时累积
+ * 三种 transferType:
+ *  - chapter: 拉取单个章节整棵树 -> receivedPath/<...tree>
+ *  - manga:   拉取整本漫画整棵树 -> receivedPath/<...tree>
+ *             (当 media.mediaType==0 即章节漫画时,本地额外套一层 mangaName/ 目录,对齐 sync 行为)
+ *  - media:   拉取整个媒体库 -> receivedPath/<mangaName>/<...tree>,按漫画逐个展开
  *
- * baseUrl 选择:每个 seed 优先 publicHost:publicPort,回落 localHost:localPort
- *
- * 注意:
- *  - 不再依赖 transfer.peerBaseUrl(已删除)/peerNodeId
- *  - 仅依赖本地 p2p_identity (X-Node-Id / X-Group-No / X-Timestamp) 与 seeds 池
+ * 进度:按字节数计算 totalBytes / downloadedBytes,实时更新 speedBps
  */
 
 import axios from 'axios'
-import fs from 'fs'
 import path from 'path'
+import fs from 'fs'
 import prisma from '#start/prisma'
 import p2pIdentityService from './p2p_identity_service.js'
 import { get_default_tracker_client } from './tracker_client.js'
+import { P2PDownloadPool, type FileTask, type Seed } from './p2p_download_pool.js'
 
 type P2PPullArgs = {
   transferId: number
@@ -32,31 +29,30 @@ type P2PPullArgs = {
 
 type Headers = Record<string, string>
 
-type ChapterTask = {
-  remoteChapterId: number
-  saveDir: string
-}
-
-type Seed = {
-  nodeId: string
-  nodeName: string | null
-  online: number
-  publicHost: string | null
-  publicPort: number | null
-  localHost: string | null
-  localPort: number | null
-  baseUrl: string // 计算后的可用 baseUrl
+type TreeResponseData = {
+  isSingleFile: boolean
+  rootDir: string
+  fileCount: number
+  totalBytes: number
+  files: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
+  // 漫画级独有
+  mangaId?: number
+  mangaName?: string
+  mangaPath?: string
+  // 章节级独有
+  chapterId?: number
+  chapterName?: string
+  chapterPath?: string
 }
 
 /**
- * 从 axios 错误中提取详细信息,生成可读性强的错误描述
+ * 从 axios 错误中提取详细信息
  */
 function format_axios_error(err: any, context: string): string {
   const url = err?.config?.url || '(unknown url)'
   const method = (err?.config?.method || 'get').toUpperCase()
   const status = err?.response?.status
   const remoteMsg = err?.response?.data?.message
-  const remoteData = err?.response?.data
   const code = err?.code
 
   if (!status) {
@@ -72,8 +68,7 @@ function format_axios_error(err: any, context: string): string {
   else if (status === 404) hint = ' (资源不存在)'
   else if (status === 503) hint = ' (对端 P2P 服务未启用)'
 
-  const dataStr = remoteData && typeof remoteData === 'object' ? JSON.stringify(remoteData) : ''
-  return `${context}: HTTP ${status}${hint} (${method} ${url}) - ${remoteMsg || err?.message}${dataStr ? ' | data=' + dataStr : ''}`
+  return `${context}: HTTP ${status}${hint} (${method} ${url}) - ${remoteMsg || err?.message}`
 }
 
 /**
@@ -94,16 +89,27 @@ function pickBaseUrl(seed: {
   return ''
 }
 
+/** 将任意字符串做路径安全化(windows 非法字符替换) */
+function safeName(name: string): string {
+  return (
+    String(name)
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/^\.+/, '_')
+      .trim()
+      .slice(0, 200) || 'unnamed'
+  )
+}
+
 export default class P2PPullJob {
   private transferId: number
-
-  // seeds 池:运行时刷新
   private seeds: Seed[] = []
-  // 轮询游标
-  private cursor: number = 0
-  // 失败次数(本次任务内,超过阈值则跳过该 seed)
-  private failureCounter = new Map<string, number>()
-  private readonly MAX_FAILURE_PER_SEED = 3
+
+  // 进度相关
+  private totalBytes: number = 0
+  private downloadedBytes: number = 0
+  private lastReportTime: number = 0
+  private lastReportBytes: number = 0
+  private lastSpeedBps: number = 0
 
   constructor(args: P2PPullArgs) {
     this.transferId = args.transferId
@@ -125,12 +131,8 @@ export default class P2PPullJob {
     }
 
     console.log(
-      `[p2p-pull] 任务详情 type=${transfer.transferType} ` +
-      `groupNo=${transfer.groupNo} ` +
-      `remoteName=${transfer.remoteName} ` +
-      `mediaId=${transfer.remoteMediaId} ` +
-      `mangaId=${transfer.remoteMangaId} ` +
-      `chapterId=${transfer.remoteChapterId} ` +
+      `[p2p-pull] 任务 type=${transfer.transferType} groupNo=${transfer.groupNo} ` +
+      `mediaId=${transfer.remoteMediaId} mangaId=${transfer.remoteMangaId} chapterId=${transfer.remoteChapterId} ` +
       `receivedPath=${transfer.receivedPath}`
     )
 
@@ -139,7 +141,6 @@ export default class P2PPullJob {
       await this.fail('本节点未完成身份注册')
       return
     }
-    console.log(`[p2p-pull] 本节点身份 nodeId=${identity.nodeId} nodeName=${identity.nodeName}`)
 
     const groupNo = transfer.groupNo
     if (!groupNo) {
@@ -149,7 +150,7 @@ export default class P2PPullJob {
 
     await prisma.p2p_transfer.update({
       where: { p2pTransferId: transfer.p2pTransferId },
-      data: { status: 'running', startTime: new Date() },
+      data: { status: 'running', startTime: new Date(), progress: 0, downloadedBytes: 0n, speedBps: 0 },
     })
 
     const headers: Headers = {
@@ -162,78 +163,59 @@ export default class P2PPullJob {
       // 1. 通过 Tracker 发现 seeds
       await this.discoverSeeds(transfer)
       if (!this.seeds.length) {
-        throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空,请确认对端已开启共享并在线)')
+        throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
       }
       console.log(
         `[p2p-pull] 发现 ${this.seeds.length} 个 seed: ` +
-        this.seeds.map((s) => `${s.nodeName || s.nodeId}(online=${s.online}, ${s.baseUrl})`).join(', ')
+        this.seeds.map((s) => `${s.nodeName || s.nodeId}(${s.baseUrl})`).join(', ')
       )
 
-      // 2. 展开章节任务
-      let chapterTasks: ChapterTask[] = []
-      if (transfer.transferType === 'chapter') {
-        if (!transfer.remoteChapterId) throw new Error('remoteChapterId 缺失')
-        chapterTasks = [
-          {
-            remoteChapterId: transfer.remoteChapterId,
-            saveDir: transfer.receivedPath,
-          },
-        ]
-      } else if (transfer.transferType === 'manga') {
-        if (!transfer.remoteMangaId) throw new Error('remoteMangaId 缺失')
-        chapterTasks = await this.expandMangaTasks(headers, transfer.remoteMangaId, transfer.receivedPath)
-      } else if (transfer.transferType === 'media') {
-        if (!transfer.remoteMediaId) throw new Error('remoteMediaId 缺失')
-        chapterTasks = await this.expandMediaTasks(headers, transfer.remoteMediaId, transfer.receivedPath)
-      } else {
-        throw new Error(`暂不支持的 transferType: ${transfer.transferType}`)
+      // 2. 展开所有 FileTask
+      const allTasks = await this.expandAllTasks(headers, transfer)
+      if (!allTasks.length) {
+        throw new Error('展开后无文件可下载 (对端目录为空?)')
       }
 
-      if (!chapterTasks.length) {
-        throw new Error('对端无可下载章节 (列表为空)')
-      }
-      console.log(`[p2p-pull] 共 ${chapterTasks.length} 个章节待下载`)
-
-      // 3. 逐章节下载,以章节为粒度刷新进度
-      let doneChapters = 0
-      const totalChapters = chapterTasks.length
-      for (const task of chapterTasks) {
-        const cur = await prisma.p2p_transfer.findUnique({
-          where: { p2pTransferId: this.transferId },
-          select: { status: true },
-        })
-        if (cur?.status === 'canceled') {
-          console.log(`[p2p-pull] transfer ${this.transferId} canceled mid-way`)
-          return
-        }
-
-        console.log(
-          `[p2p-pull] (${doneChapters + 1}/${totalChapters}) 拉取章节 ` +
-          `remoteChapterId=${task.remoteChapterId} -> ${task.saveDir}`
-        )
-
-        try {
-          await this.pullChapterImages(headers, task.remoteChapterId, task.saveDir)
-        } catch (chErr: any) {
-          throw new Error(
-            `章节 remoteChapterId=${task.remoteChapterId} 下载失败: ${chErr?.message || chErr}`
-          )
-        }
-        doneChapters++
-
-        await prisma.p2p_transfer.update({
-          where: { p2pTransferId: this.transferId },
-          data: {
-            progress: Math.min(99, Math.floor((doneChapters / totalChapters) * 100)),
-          },
-        })
-      }
+      this.totalBytes = allTasks.reduce((a, t) => a + (t.size || 0), 0)
+      console.log(
+        `[p2p-pull] 共 ${allTasks.length} 个文件, totalBytes=${this.totalBytes}`
+      )
 
       await prisma.p2p_transfer.update({
-        where: { p2pTransferId: transfer.p2pTransferId },
-        data: { status: 'success', progress: 100, endTime: new Date() },
+        where: { p2pTransferId: this.transferId },
+        data: { totalBytes: BigInt(this.totalBytes) },
       })
-      console.log(`[p2p-pull] === 任务完成 transferId=${this.transferId} 共 ${totalChapters} 章节 ===`)
+
+      // 3. 启动下载池
+      const pool = new P2PDownloadPool({
+        headers,
+        logTag: `p2p-pull#${this.transferId}`,
+        onBytes: (delta) => this.onBytesDelta(delta),
+        isCanceled: async () => {
+          const cur = await prisma.p2p_transfer.findUnique({
+            where: { p2pTransferId: this.transferId },
+            select: { status: true },
+          })
+          return cur?.status === 'canceled'
+        },
+      })
+      pool.enqueue(allTasks)
+      await pool.run(this.seeds)
+
+      // 4. 成功:标记完成
+      await prisma.p2p_transfer.update({
+        where: { p2pTransferId: transfer.p2pTransferId },
+        data: {
+          status: 'success',
+          progress: 100,
+          downloadedBytes: BigInt(pool.downloadedBytes()),
+          speedBps: 0,
+          endTime: new Date(),
+        },
+      })
+      console.log(
+        `[p2p-pull] === 任务完成 transferId=${this.transferId} files=${allTasks.length} bytes=${pool.downloadedBytes()} ===`
+      )
     } catch (e: any) {
       const detail = {
         message: e?.message,
@@ -248,9 +230,7 @@ export default class P2PPullJob {
   }
 
   /**
-   * 通过 Tracker 发现拥有该资源的 seeds
-   * - chapter / manga 类型按 remoteMangaId 查询(章节级共享回落到漫画级)
-   * - media 类型按 remoteMediaId 查询
+   * 通过 Tracker 发现 seeds 池
    */
   private async discoverSeeds(transfer: {
     groupNo: string
@@ -283,7 +263,6 @@ export default class P2PPullJob {
       throw new Error(format_axios_error(e, '查询 Tracker seeds 列表'))
     }
 
-    // 过滤 baseUrl 不可用的 seed
     const seeds: Seed[] = []
     for (const r of raw || []) {
       const baseUrl = pickBaseUrl(r)
@@ -291,240 +270,175 @@ export default class P2PPullJob {
       seeds.push({
         nodeId: r.nodeId,
         nodeName: r.nodeName,
-        online: r.online,
-        publicHost: r.publicHost,
-        publicPort: r.publicPort,
-        localHost: r.localHost,
-        localPort: r.localPort,
         baseUrl,
       })
     }
-
-    // 在线优先(tracker 已排序但二次保险)
-    seeds.sort((a, b) => (b.online ?? 0) - (a.online ?? 0))
+    // 在线优先(tracker 已排序,这里保留原顺序即可)
     this.seeds = seeds
   }
 
   /**
-   * 选择下一个可用 seed (round-robin),自动跳过失败次数超阈值的节点
+   * 根据 transferType 展开所有 FileTask
+   *  - chapter: 调 chapter/:id/tree
+   *  - manga:   调 manga/:id/tree
+   *  - media:   先 media/:id/mangas 拿漫画列表,再逐个 manga/:id/tree
    */
-  private nextSeed(blacklist: Set<string> = new Set()): Seed | null {
-    const total = this.seeds.length
-    if (!total) return null
-
-    for (let i = 0; i < total; i++) {
-      const seed = this.seeds[(this.cursor + i) % total]
-      if (blacklist.has(seed.nodeId)) continue
-      const fail = this.failureCounter.get(seed.nodeId) ?? 0
-      if (fail >= this.MAX_FAILURE_PER_SEED) continue
-      this.cursor = (this.cursor + i + 1) % total
-      return seed
+  private async expandAllTasks(
+    headers: Headers,
+    transfer: {
+      transferType: string
+      remoteMediaId: number | null
+      remoteMangaId: number | null
+      remoteChapterId: number | null
+      receivedPath: string
     }
-    return null
+  ): Promise<FileTask[]> {
+    this.ensureDir(transfer.receivedPath)
+
+    if (transfer.transferType === 'chapter') {
+      if (!transfer.remoteChapterId) throw new Error('remoteChapterId 缺失')
+      const tree = await this.fetchChapterTree(headers, transfer.remoteChapterId)
+      return this.treeToFileTasks(tree, transfer.receivedPath)
+    }
+
+    if (transfer.transferType === 'manga') {
+      if (!transfer.remoteMangaId) throw new Error('remoteMangaId 缺失')
+      const tree = await this.fetchMangaTree(headers, transfer.remoteMangaId)
+      // 章节漫画:单本(isSingleFile=true)不套目录,多文件(目录结构漫画)套一层 mangaName/
+      //   但因为 tree.files 的 relPath 已经是"相对 mangaPath 的结构",对于目录型漫画
+      //   直接放到 receivedPath 会丢失漫画名;因此当 isSingleFile=false 时套一层 mangaName 目录
+      const baseDir = tree.isSingleFile
+        ? transfer.receivedPath
+        : path.join(transfer.receivedPath, safeName(tree.mangaName || `manga_${tree.mangaId}`))
+      return this.treeToFileTasks(tree, baseDir)
+    }
+
+    if (transfer.transferType === 'media') {
+      if (!transfer.remoteMediaId) throw new Error('remoteMediaId 缺失')
+      const mangas = await this.fetchMediaMangas(headers, transfer.remoteMediaId)
+      if (!mangas.length) return []
+
+      const allTasks: FileTask[] = []
+      for (const m of mangas) {
+        if (!m?.mangaId) continue
+        let tree: TreeResponseData
+        try {
+          tree = await this.fetchMangaTree(headers, Number(m.mangaId))
+        } catch (err: any) {
+          console.warn(`[p2p-pull] 漫画 ${m.mangaName || m.mangaId} 获取 tree 失败,跳过: ${err.message || err}`)
+          continue
+        }
+        const baseDir = tree.isSingleFile
+          ? transfer.receivedPath
+          : path.join(transfer.receivedPath, safeName(tree.mangaName || m.mangaName || `manga_${m.mangaId}`))
+        allTasks.push(...this.treeToFileTasks(tree, baseDir))
+      }
+      return allTasks
+    }
+
+    throw new Error(`暂不支持的 transferType: ${transfer.transferType}`)
   }
 
-  private markSeedFailure(seed: Seed) {
-    const cur = this.failureCounter.get(seed.nodeId) ?? 0
-    this.failureCounter.set(seed.nodeId, cur + 1)
+  /** 调对端 /p2p/serve/manga/:id/tree,自动在多 seed 间 failover */
+  private async fetchMangaTree(headers: Headers, mangaId: number): Promise<TreeResponseData> {
+    return this.withSeedFailover(`获取漫画目录树 (mangaId=${mangaId})`, async (seed) => {
+      const url = `${seed.baseUrl}/p2p/serve/manga/${mangaId}/tree`
+      const res = await axios.get(url, { headers, timeout: 60 * 1000 })
+      return res.data?.data as TreeResponseData
+    })
+  }
+
+  /** 调对端 /p2p/serve/chapter/:id/tree */
+  private async fetchChapterTree(headers: Headers, chapterId: number): Promise<TreeResponseData> {
+    return this.withSeedFailover(`获取章节目录树 (chapterId=${chapterId})`, async (seed) => {
+      const url = `${seed.baseUrl}/p2p/serve/chapter/${chapterId}/tree`
+      const res = await axios.get(url, { headers, timeout: 60 * 1000 })
+      return res.data?.data as TreeResponseData
+    })
+  }
+
+  /** 调对端 /p2p/serve/media/:id/mangas */
+  private async fetchMediaMangas(headers: Headers, mediaId: number): Promise<any[]> {
+    return this.withSeedFailover(`获取媒体库漫画列表 (mediaId=${mediaId})`, async (seed) => {
+      const url = `${seed.baseUrl}/p2p/serve/media/${mediaId}/mangas`
+      const res = await axios.get(url, { headers, timeout: 30 * 1000 })
+      return (res.data?.list ?? []) as any[]
+    })
+  }
+
+  /** 把 tree 响应拍平成 FileTask 列表 */
+  private treeToFileTasks(tree: TreeResponseData, baseLocalDir: string): FileTask[] {
+    if (!tree?.files?.length) return []
+    return tree.files.map((f) => ({
+      remoteAbsPath: f.absPath,
+      localPath: path.join(baseLocalDir, f.relPath.split('/').join(path.sep)),
+      size: f.size || 0,
+      attempts: 0,
+    }))
   }
 
   /**
-   * 多源请求执行器:用 round-robin 在 seeds 池中尝试,直到成功或所有 seed 失败
+   * 元请求级 failover:获取 tree/mangas 时在所有 seed 之间逐个尝试,任一成功即返回
+   * (下载文件的 failover 由 P2PDownloadPool 负责,这里只处理"列清单"这类一次性调用)
    */
-  private async withFailover<T>(
+  private async withSeedFailover<T>(
     context: string,
     fn: (seed: Seed) => Promise<T>
   ): Promise<T> {
-    const triedThisCall = new Set<string>()
-    let lastError: any = null
-
-    while (true) {
-      const seed = this.nextSeed(triedThisCall)
-      if (!seed) break
-      triedThisCall.add(seed.nodeId)
-
+    let lastErr: any = null
+    for (const seed of this.seeds) {
       try {
-        const result = await fn(seed)
-        return result
+        return await fn(seed)
       } catch (e: any) {
         const msg = format_axios_error(e, `${context} @ ${seed.nodeName || seed.nodeId}`)
         console.warn(`[p2p-pull] ${msg},尝试下一个 seed`)
-        this.markSeedFailure(seed)
-        lastError = new Error(msg)
+        lastErr = new Error(msg)
       }
     }
-
-    throw lastError || new Error(`${context}: 所有 seed 均失败`)
+    throw lastErr || new Error(`${context}: 所有 seed 均失败`)
   }
 
-  /**
-   * 展开 manga 拉取为多个章节子任务
-   */
-  private async expandMangaTasks(
-    headers: Headers,
-    remoteMangaId: number,
-    rootDir: string
-  ): Promise<ChapterTask[]> {
-    this.ensureDir(rootDir)
-
-    const chapters = await this.withFailover(
-      `获取漫画章节列表 (mangaId=${remoteMangaId})`,
-      async (seed) => {
-        const url = `${seed.baseUrl}/p2p/serve/manga/${remoteMangaId}/chapters`
-        const res = await axios.get(url, { headers, timeout: 30 * 1000 })
-        return (res.data?.list ?? []) as any[]
-      }
-    )
-
-    console.log(`[p2p-pull] expandMangaTasks mangaId=${remoteMangaId} 章节数=${chapters.length}`)
-    return chapters
-      .filter((c) => c?.chapterId)
-      .map((c) => ({
-        remoteChapterId: Number(c.chapterId),
-        saveDir: path.join(rootDir, this.safeName(c.chapterName || `chapter_${c.chapterId}`)),
-      }))
-  }
-
-  /**
-   * 展开 media 拉取
-   */
-  private async expandMediaTasks(
-    headers: Headers,
-    remoteMediaId: number,
-    rootDir: string
-  ): Promise<ChapterTask[]> {
-    this.ensureDir(rootDir)
-
-    const mangas = await this.withFailover(
-      `获取媒体库漫画列表 (mediaId=${remoteMediaId})`,
-      async (seed) => {
-        const url = `${seed.baseUrl}/p2p/serve/media/${remoteMediaId}/mangas`
-        const res = await axios.get(url, { headers, timeout: 30 * 1000 })
-        return (res.data?.list ?? []) as any[]
-      }
-    )
-    console.log(`[p2p-pull] expandMediaTasks mediaId=${remoteMediaId} 漫画数=${mangas.length}`)
-    if (!mangas.length) return []
-
-    const allTasks: ChapterTask[] = []
-    for (const manga of mangas) {
-      if (!manga?.mangaId) continue
-      const mangaDir = path.join(rootDir, this.safeName(manga.mangaName || `manga_${manga.mangaId}`))
-
-      const chapters = await this.withFailover(
-        `获取漫画章节列表 (mangaId=${manga.mangaId})`,
-        async (seed) => {
-          const url = `${seed.baseUrl}/p2p/serve/manga/${manga.mangaId}/chapters`
-          const res = await axios.get(url, { headers, timeout: 30 * 1000 })
-          return (res.data?.list ?? []) as any[]
-        }
-      )
-      for (const c of chapters) {
-        if (!c?.chapterId) continue
-        allTasks.push({
-          remoteChapterId: Number(c.chapterId),
-          saveDir: path.join(mangaDir, this.safeName(c.chapterName || `chapter_${c.chapterId}`)),
-        })
-      }
-    }
-
-    return allTasks
-  }
-
-  /**
-   * 章节级:拉取该章节所有图片到 saveDir
-   * - 图片清单:从任意 seed 拉取(默认所有 seed 索引一致)
-   * - 单文件下载:在 seeds 之间轮询,失败自动换下一个 seed
-   */
-  private async pullChapterImages(
-    headers: Headers,
-    remoteChapterId: number,
-    saveDir: string
-  ) {
-    this.ensureDir(saveDir)
-
-    const images = await this.withFailover(
-      `获取章节图片列表 (chapterId=${remoteChapterId})`,
-      async (seed) => {
-        const url = `${seed.baseUrl}/p2p/serve/chapter/${remoteChapterId}/images`
-        const res = await axios.get(url, { headers, timeout: 30 * 1000 })
-        return (res.data?.list ?? []) as string[]
-      }
-    )
-
-    if (!images.length) {
-      console.warn(`[p2p-pull] 章节 chapterId=${remoteChapterId} 图片列表为空,跳过`)
+  /** 字节增量回调:累计总字节 + 节流上报进度和速率 */
+  private onBytesDelta(delta: number) {
+    this.downloadedBytes += delta
+    const now = Date.now()
+    // 节流:每 1s 上报一次
+    if (this.lastReportTime === 0) {
+      this.lastReportTime = now
+      this.lastReportBytes = this.downloadedBytes
       return
     }
-    console.log(`[p2p-pull] 章节 chapterId=${remoteChapterId} 共 ${images.length} 张图片`)
+    const elapsed = now - this.lastReportTime
+    if (elapsed < 1000) return
 
-    let downloaded = 0
-    let skipped = 0
-    for (const remoteFile of images) {
-      const fileName = path.basename(remoteFile)
-      const localPath = path.join(saveDir, fileName)
+    const bytesDelta = this.downloadedBytes - this.lastReportBytes
+    this.lastSpeedBps = Math.floor((bytesDelta * 1000) / elapsed)
+    this.lastReportTime = now
+    this.lastReportBytes = this.downloadedBytes
 
-      if (fs.existsSync(localPath)) {
-        skipped++
-        continue
-      }
+    const progress = this.totalBytes > 0
+      ? Math.min(99, Math.floor((this.downloadedBytes / this.totalBytes) * 100))
+      : 0
 
-      // 每张图片用 round-robin 选一个 seed,失败再换源
-      await this.withFailover(
-        `下载文件 (file=${remoteFile})`,
-        async (seed) => {
-          await this.downloadFile(seed.baseUrl, headers, remoteFile, localPath)
-        }
-      )
-      downloaded++
-    }
-    console.log(
-      `[p2p-pull] 章节 chapterId=${remoteChapterId} 完成 ` +
-      `下载=${downloaded} 已存在跳过=${skipped} 总数=${images.length}`
-    )
-  }
-
-  private async downloadFile(
-    baseUrl: string,
-    headers: Headers,
-    remoteFile: string,
-    localPath: string
-  ) {
-    const writer = fs.createWriteStream(localPath)
-    const res = await axios({
-      method: 'post',
-      url: `${baseUrl}/p2p/serve/file`,
-      headers: { ...headers, 'Content-Type': 'application/json; charset=UTF-8' },
-      data: { file: remoteFile },
-      responseType: 'stream',
-      timeout: 60 * 1000,
-    })
-
-    res.data.pipe(writer)
-
-    await new Promise<void>((resolve, reject) => {
-      writer.on('finish', () => resolve())
-      writer.on('error', (err) => {
-        try {
-          fs.unlinkSync(localPath)
-        } catch {}
-        reject(new Error(`文件写入失败: ${err.message}`))
+    // 异步更新,不阻塞下载
+    prisma.p2p_transfer
+      .update({
+        where: { p2pTransferId: this.transferId },
+        data: {
+          progress,
+          downloadedBytes: BigInt(this.downloadedBytes),
+          speedBps: this.lastSpeedBps,
+        },
       })
-      // 流错误也要捕获,避免 axios stream 出错时不释放
-      res.data.on('error', (err: any) => {
-        writer.destroy()
-        try {
-          fs.unlinkSync(localPath)
-        } catch {}
-        reject(err)
+      .catch((e) => {
+        console.warn(`[p2p-pull] 进度更新失败 transferId=${this.transferId}: ${e?.message || e}`)
       })
-    })
   }
 
   private async fail(msg: string) {
     await prisma.p2p_transfer.update({
       where: { p2pTransferId: this.transferId },
-      data: { status: 'failed', error: msg, endTime: new Date() },
+      data: { status: 'failed', error: msg, endTime: new Date(), speedBps: 0 },
     })
   }
 
@@ -532,13 +446,5 @@ export default class P2PPullJob {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true })
     }
-  }
-
-  private safeName(name: string): string {
-    return String(name)
-      .replace(/[\\/:*?"<>|]/g, '_')
-      .replace(/^\.+/, '_')
-      .trim()
-      .slice(0, 200) || 'unnamed'
   }
 }
