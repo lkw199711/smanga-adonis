@@ -117,6 +117,79 @@ class TrackerShareService {
   }
 
   /**
+   * 查询某群组内拥有指定资源的所有节点(seeds)
+   * - shareType='media':按 remoteMediaId 匹配
+   * - shareType='manga':按 remoteMangaId 匹配
+   * - shareType='chapter':章节通过漫画级共享体现,因此回落到按 remoteMangaId 匹配
+   *
+   * 返回结构带节点在线/网络信息,便于调用方直接拼装 baseUrl
+   */
+  async findSeeds(
+    groupNo: string,
+    params: {
+      shareType: 'media' | 'manga' | 'chapter'
+      remoteMediaId?: number
+      remoteMangaId?: number
+    }
+  ) {
+    const group = await prisma.tracker_group.findUnique({ where: { groupNo } })
+    if (!group || group.enable === 0) throw new Error('群组不存在或已停用')
+
+    const where: any = { trackerGroupId: group.trackerGroupId, enable: 1 }
+
+    if (params.shareType === 'media') {
+      if (!params.remoteMediaId) throw new Error('remoteMediaId 必填')
+      where.shareType = 'media'
+      where.remoteMediaId = params.remoteMediaId
+    } else {
+      // manga / chapter 都要求 remoteMangaId
+      if (!params.remoteMangaId) throw new Error('remoteMangaId 必填')
+      // chapter 级也通过 manga 级共享体现,所以统一匹配 shareType='manga'
+      where.shareType = 'manga'
+      where.remoteMangaId = params.remoteMangaId
+    }
+
+    const rows = await prisma.tracker_share_index.findMany({
+      where,
+      orderBy: { updateTime: 'desc' },
+    })
+    if (!rows.length) return { list: [], count: 0 }
+
+    const nodeIds = Array.from(new Set(rows.map((r) => r.nodeId)))
+    const nodes = await prisma.tracker_node.findMany({
+      where: { nodeId: { in: nodeIds } },
+    })
+    const nodeMap = new Map(nodes.map((n) => [n.nodeId, n]))
+
+    // 优先在线 seeds;在线节点按 lastHeartbeat 倒序
+    const list = rows
+      .map((r) => {
+        const n = nodeMap.get(r.nodeId)
+        if (!n) return null
+        return {
+          nodeId: r.nodeId,
+          nodeName: n.nodeName,
+          online: n.online,
+          publicHost: n.publicHost,
+          publicPort: n.publicPort,
+          localHost: n.localHost,
+          localPort: n.localPort,
+          lastHeartbeat: n.lastHeartbeat,
+          shareName: r.shareName,
+        }
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x)
+      .sort((a, b) => {
+        if (a.online !== b.online) return (b.online ?? 0) - (a.online ?? 0)
+        const la = a.lastHeartbeat ? new Date(a.lastHeartbeat).getTime() : 0
+        const lb = b.lastHeartbeat ? new Date(b.lastHeartbeat).getTime() : 0
+        return lb - la
+      })
+
+    return { list, count: list.length }
+  }
+
+  /**
    * 清空节点在某群的所有共享(退群时使用)
    */
   async clearByNode(nodeId: string, groupNo?: string) {

@@ -96,9 +96,26 @@ class P2PHeartbeatService {
             localPort: p2p.node?.lanPort || p2p.node?.listenPort || undefined,
           })
         } catch (e: any) {
+          const status = e?.response?.status
+          // 401/403 通常意味着 tracker 不认识本节点(数据库重建/换 tracker),
+          // 此时自动作废本地身份并重新注册,避免陷入"节点不存在"死循环
+          if (status === 401 || status === 403) {
+            console.warn(
+              `[p2p] 心跳 ${url} 返回 ${status} (${e?.response?.data?.message || ''}),自动重新注册节点`
+            )
+            try {
+              const fresh = await p2pIdentityService.invalidateAndReregister()
+              console.log(`[p2p] 节点已重新注册 nodeId=${fresh.nodeId}`)
+            } catch (reErr: any) {
+              console.warn(
+                `[p2p] 节点自动重新注册失败: ${reErr?.message || reErr}`
+              )
+            }
+            return
+          }
           // 静默失败,避免日志风暴
           if (process.env.P2P_DEBUG) {
-            console.warn('[p2p] 心跳失败', url, e?.response?.status || e?.message)
+            console.warn('[p2p] 心跳失败', url, status || e?.message)
           }
         }
       })

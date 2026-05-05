@@ -33,6 +33,65 @@ function get_client(): TrackerClient | null {
   return new TrackerClient(url, id.nodeId, id.nodeToken)
 }
 
+/**
+ * 判定 tracker 返回的错误是否属于"节点身份失效"
+ * (http 401/403,或 message 中含 "节点不存在"/"节点令牌无效")
+ */
+function isNodeAuthError(e: any): boolean {
+  const status = e?.response?.status
+  if (status === 401 || status === 403) return true
+  const msg: string = e?.response?.data?.message || ''
+  return /节点不存在|节点令牌|unauthorized/i.test(msg)
+}
+
+/**
+ * 自动重注册后重建一个新 client
+ * - 成功:返回新的 client
+ * - 失败:抛出带 "节点自动重新注册失败: xxx" 的 Error
+ */
+async function refresh_client_after_reregister(): Promise<TrackerClient> {
+  try {
+    const fresh = await p2pIdentityService.invalidateAndReregister()
+    console.log(`[p2p] 节点已自动重新注册 nodeId=${fresh.nodeId}`)
+    const client = get_client()
+    if (!client) {
+      throw new Error('节点重新注册后仍无法构建 tracker 客户端(检查 p2p 配置)')
+    }
+    return client
+  } catch (e: any) {
+    log_p2p_error('group.auto-reregister', e)
+    // 将原始错误包装,保证上抛的 message 以 "节点自动重新注册失败:" 开头
+    const reason = e?.message || '未知原因'
+    const wrapped: any = new Error(
+      reason.startsWith('节点重新注册失败')
+        ? `节点自动重新注册失败: ${reason.replace(/^节点重新注册失败:\s*/, '')}`
+        : `节点自动重新注册失败: ${reason}`
+    )
+    wrapped.cause = e
+    throw wrapped
+  }
+}
+
+/**
+ * 执行一次 tracker 调用,若因身份失效失败则重注册并重试一次
+ * - 身份失效且重注册失败:抛出"节点自动重新注册失败: xxx"
+ * - 其它错误:原样抛出
+ */
+async function call_with_reregister<T>(
+  initial: TrackerClient,
+  fn: (c: TrackerClient) => Promise<T>
+): Promise<T> {
+  try {
+    return await fn(initial)
+  } catch (e: any) {
+    if (!isNodeAuthError(e)) throw e
+    console.warn('[p2p] tracker 认为本节点不存在/令牌无效,尝试自动重新注册后重试')
+    // 若 refresh 抛错,会带明确的"节点自动重新注册失败"信息,直接向上抛
+    const fresh = await refresh_client_after_reregister()
+    return await fn(fresh)
+  }
+}
+
 export default class P2PGroupsController {
   /**
    * GET /api/p2p/group
@@ -66,7 +125,9 @@ export default class P2PGroupsController {
     ])
 
     try {
-      const res = await client.createGroup({ groupName, describe, password, maxMembers })
+      const res = await call_with_reregister(client, (c) =>
+        c.createGroup({ groupName, describe, password, maxMembers })
+      )
       const id = p2pIdentityService.getIdentity()!
       const cfg = get_config()?.p2p
 
@@ -101,7 +162,9 @@ export default class P2PGroupsController {
     const { groupNo, password, inviteCode } = request.only(['groupNo', 'password', 'inviteCode'])
 
     try {
-      const res = await client.joinGroup({ groupNo, password, inviteCode })
+      const res = await call_with_reregister(client, (c) =>
+        c.joinGroup({ groupNo, password, inviteCode })
+      )
       const cfg = get_config()?.p2p
 
       const remoteGroup = res?.group || res
@@ -142,7 +205,7 @@ export default class P2PGroupsController {
     const { groupNo } = request.only(['groupNo'])
 
     try {
-      await client.leaveGroup(groupNo)
+      await call_with_reregister(client, (c) => c.leaveGroup(groupNo))
     } catch (e: any) {
       // 即使 tracker 侧失败也继续清理本地,避免僵尸群组
       log_p2p_error('group.leave.tracker(忽略,继续清理本地)', e)
@@ -170,7 +233,7 @@ export default class P2PGroupsController {
     }
 
     try {
-      const remoteGroups: any[] = await client.myGroups()
+      const remoteGroups: any[] = await call_with_reregister(client, (c) => c.myGroups())
       const id = p2pIdentityService.getIdentity()!
       const cfg = get_config()?.p2p
 

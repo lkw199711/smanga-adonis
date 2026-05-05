@@ -57,33 +57,26 @@ export default class P2PTransfersController {
   /**
    * POST /api/p2p/transfer/pull
    * body: {
-   *   groupNo, peerNodeId, peerBaseUrl,
+   *   groupNo,
    *   transferType: 'media' | 'manga' | 'chapter',
    *   remoteMediaId? / remoteMangaId? / remoteChapterId?,
    *   remoteName,
    *   receivedPath?  (不传则使用 defaultReceivedPath)
    * }
    *
-   * 设计: 共享授权由 Tracker 统一管理,本机不再查 p2p_group / p2p_peer_cache。
-   *      groupNo 与 peerBaseUrl 必须由调用方(前端)传入。
+   * 多源 P2P:调用方无需指定单一对端节点。Pull Job 会在运行时从 Tracker
+   * 查询群组内拥有该资源的所有节点作为候选源(seeds),按"轮询分片 + 失败换源"
+   * 策略下载每一个文件。
    */
   async pull({ request, response }: HttpContext) {
     const body = request.only([
-      'groupNo', 'peerNodeId', 'peerBaseUrl', 'transferType',
+      'groupNo', 'transferType',
       'remoteMediaId', 'remoteMangaId', 'remoteChapterId',
       'remoteName', 'receivedPath',
     ])
 
     if (!body.groupNo) {
       return response.status(400).json(new SResponse({ code: 1, message: 'groupNo required' }))
-    }
-    if (!body.peerNodeId) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'peerNodeId required' }))
-    }
-    if (!body.peerBaseUrl) {
-      return response.status(400).json(
-        new SResponse({ code: 1, message: 'peerBaseUrl required (例: http://1.2.3.4:3000)' })
-      )
     }
     if (!body.remoteName) {
       return response.status(400).json(new SResponse({ code: 1, message: 'remoteName required' }))
@@ -127,8 +120,8 @@ export default class P2PTransfersController {
         data: {
           p2pGroupId: groupRow.p2pGroupId,
           groupNo: body.groupNo,
-          peerNodeId: body.peerNodeId,
-          peerBaseUrl: body.peerBaseUrl,
+          // peerNodeId 字段保留为空:多源 P2P 下不再固定单一对端
+          peerNodeId: '',
           transferType,
           remoteMediaId: body.remoteMediaId ? Number(body.remoteMediaId) : null,
           remoteMangaId: body.remoteMangaId ? Number(body.remoteMangaId) : null,
