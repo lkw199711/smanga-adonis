@@ -51,7 +51,9 @@ CREATE TABLE "p2p_peer_cache" (
 CREATE TABLE "p2p_transfer" (
     "p2pTransferId" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "p2pGroupId" INTEGER NOT NULL,
+    "groupNo" TEXT NOT NULL DEFAULT '',
     "peerNodeId" TEXT NOT NULL,
+    "peerBaseUrl" TEXT NOT NULL DEFAULT '',
     "transferType" TEXT NOT NULL,
     "remoteMediaId" INTEGER,
     "remoteMangaId" INTEGER,

@@ -321,8 +321,10 @@ router.get('/p2p/peer/cache/:groupNo', [P2PPeersController, 'cache'])
 router.get('/p2p/transfer', [P2PTransfersController, 'index'])
 router.get('/p2p/transfer/:id', [P2PTransfersController, 'show'])
 router.post('/p2p/transfer/pull', [P2PTransfersController, 'pull'])
+router.post('/p2p/transfer/clear', [P2PTransfersController, 'clear'])
 router.post('/p2p/transfer/:id/cancel', [P2PTransfersController, 'cancel'])
 router.post('/p2p/transfer/:id/retry', [P2PTransfersController, 'retry'])
+router.delete('/p2p/transfer/:id', [P2PTransfersController, 'destroy'])
 
 // ============================================================================
 // P2P 对等节点接口 (/p2p/serve/*)

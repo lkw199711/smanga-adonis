@@ -27,13 +27,7 @@ export default class P2PTransfersController {
     ])
     let where: any = {}
     if (status) where.status = status
-    if (groupNo) {
-      const g = await prisma.p2p_group.findUnique({ where: { groupNo } })
-      if (!g) {
-        return response.json(new ListResponse({ code: 0, message: '', list: [], count: 0 }))
-      }
-      where.p2pGroupId = g.p2pGroupId
-    }
+    if (groupNo) where.groupNo = groupNo
 
     const queryParams: any = {
       where,
@@ -63,16 +57,19 @@ export default class P2PTransfersController {
   /**
    * POST /api/p2p/transfer/pull
    * body: {
-   *   groupNo, peerNodeId,
+   *   groupNo, peerNodeId, peerBaseUrl,
    *   transferType: 'media' | 'manga' | 'chapter',
    *   remoteMediaId? / remoteMangaId? / remoteChapterId?,
    *   remoteName,
    *   receivedPath?  (不传则使用 defaultReceivedPath)
    * }
+   *
+   * 设计: 共享授权由 Tracker 统一管理,本机不再查 p2p_group / p2p_peer_cache。
+   *      groupNo 与 peerBaseUrl 必须由调用方(前端)传入。
    */
   async pull({ request, response }: HttpContext) {
     const body = request.only([
-      'groupNo', 'peerNodeId', 'transferType',
+      'groupNo', 'peerNodeId', 'peerBaseUrl', 'transferType',
       'remoteMediaId', 'remoteMangaId', 'remoteChapterId',
       'remoteName', 'receivedPath',
     ])
@@ -80,16 +77,24 @@ export default class P2PTransfersController {
     if (!body.groupNo) {
       return response.status(400).json(new SResponse({ code: 1, message: 'groupNo required' }))
     }
-    const group = await prisma.p2p_group.findUnique({ where: { groupNo: body.groupNo } })
-    if (!group) {
-      return response.status(400).json(new SResponse({ code: 1, message: '群组不存在' }))
-    }
-
     if (!body.peerNodeId) {
       return response.status(400).json(new SResponse({ code: 1, message: 'peerNodeId required' }))
     }
+    if (!body.peerBaseUrl) {
+      return response.status(400).json(
+        new SResponse({ code: 1, message: 'peerBaseUrl required (例: http://1.2.3.4:3000)' })
+      )
+    }
     if (!body.remoteName) {
       return response.status(400).json(new SResponse({ code: 1, message: 'remoteName required' }))
+    }
+
+    // p2p_transfer.p2pGroupId 仍是必填外键,这里仅用于满足数据库约束,不做权限语义
+    const groupRow = await prisma.p2p_group.findUnique({ where: { groupNo: body.groupNo } })
+    if (!groupRow) {
+      return response.status(400).json(
+        new SResponse({ code: 1, message: `本地未加入群组 groupNo=${body.groupNo} (仅用于满足外键约束)` })
+      )
     }
 
     const transferType = body.transferType || 'chapter'
@@ -120,8 +125,10 @@ export default class P2PTransfersController {
     try {
       const transfer = await prisma.p2p_transfer.create({
         data: {
-          p2pGroupId: group.p2pGroupId,
+          p2pGroupId: groupRow.p2pGroupId,
+          groupNo: body.groupNo,
           peerNodeId: body.peerNodeId,
+          peerBaseUrl: body.peerBaseUrl,
           transferType,
           remoteMediaId: body.remoteMediaId ? Number(body.remoteMediaId) : null,
           remoteMangaId: body.remoteMangaId ? Number(body.remoteMangaId) : null,
@@ -169,6 +176,60 @@ export default class P2PTransfersController {
     } catch (e: any) {
       log_p2p_error('transfer.cancel', e)
       return response.status(500).json(new SResponse({ code: 1, message: e?.message || '取消失败' }))
+    }
+  }
+
+  /**
+   * DELETE /api/p2p/transfer/:id
+   *
+   * 删除单条传输记录。
+   * - 若任务仍在进行(pending/running),先标记为 canceled,再删除记录
+   * - 不会删除已落盘的文件(receivedPath 下的内容由用户自行清理)
+   */
+  async destroy({ params, response }: HttpContext) {
+    const id = Number(params.id)
+    const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
+    if (!item) {
+      return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
+    }
+    try {
+      // 若任务还在进行,先标记为 canceled,Job 内部的 status 检查会让它尽快退出
+      if (item.status === 'pending' || item.status === 'running') {
+        await prisma.p2p_transfer.update({
+          where: { p2pTransferId: id },
+          data: { status: 'canceled', endTime: new Date() },
+        })
+      }
+      await prisma.p2p_transfer.delete({ where: { p2pTransferId: id } })
+      return response.json(new SResponse({ code: 0, message: '已删除' }))
+    } catch (e: any) {
+      log_p2p_error('transfer.destroy', e)
+      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '删除失败' }))
+    }
+  }
+
+  /**
+   * POST /api/p2p/transfer/clear
+   * body: { status?: 'success' | 'failed' | 'canceled' }
+   *
+   * 批量清理已结束的任务记录。不传 status 时清理 success + failed + canceled。
+   * 永远不会删除 pending / running 状态的任务,避免影响进行中的下载。
+   */
+  async clear({ request, response }: HttpContext) {
+    const { status } = request.only(['status'])
+    const allowed = ['success', 'failed', 'canceled']
+    const targetStatus = status && allowed.includes(status) ? [status] : allowed
+
+    try {
+      const result = await prisma.p2p_transfer.deleteMany({
+        where: { status: { in: targetStatus } },
+      })
+      return response.json(
+        new SResponse({ code: 0, message: `已清理 ${result.count} 条记录`, data: { count: result.count } })
+      )
+    } catch (e: any) {
+      log_p2p_error('transfer.clear', e)
+      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '清理失败' }))
     }
   }
 

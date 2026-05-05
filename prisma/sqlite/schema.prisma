@@ -509,7 +509,9 @@ model p2p_peer_cache {
 model p2p_transfer {
   p2pTransferId   Int       @id @default(autoincrement())
   p2pGroupId      Int
+  groupNo         String    @default("")
   peerNodeId      String
+  peerBaseUrl     String    @default("")
   transferType    String
   remoteMediaId   Int?
   remoteMangaId   Int?
