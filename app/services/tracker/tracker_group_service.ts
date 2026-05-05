@@ -118,7 +118,7 @@ class TrackerGroupService {
         data: { usedBy: nodeId, usedTime: new Date() },
       })
     } else {
-      if (!payload.password) throw new Error('需要密码或邀请码')
+      if (!payload.password && payload.password !== '') throw new Error('需要密码或邀请码')
       if (this.hashPassword(payload.password) !== group.password) {
         throw new Error('密码错误')
       }

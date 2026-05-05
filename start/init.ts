@@ -249,6 +249,9 @@ async function check_config_ver() {
     set_config(config)
   }
 
+  // 默认tracker地址常量，便于之后修改
+  const DEFAULT_TRACKER_URL = 'http://145000.xyz:9798'
+
   // 老用户升级时补充 p2p 段,默认全部关闭
   if (config?.p2p === undefined) {
     console.log('配置文件不存在p2p字段，使用默认值')
@@ -260,6 +263,17 @@ async function check_config_ver() {
     if (config.p2p.role === undefined) { config.p2p.role = defaultConfig.p2p.role; changed = true }
     if (config.p2p.node === undefined) { config.p2p.node = defaultConfig.p2p.node; changed = true }
     if (config.p2p.tracker === undefined) { config.p2p.tracker = defaultConfig.p2p.tracker; changed = true }
+    
+    // 如果本机不是tracker服务器，且trackers配置为空，则添加默认tracker地址
+    if (config.p2p.enable && config.p2p.role?.node && !config.p2p.role?.tracker) {
+      const trackers: string[] = config.p2p.node?.trackers || []
+      if (trackers.length === 0) {
+        console.log('检测到本机不是tracker服务器且trackers配置为空，自动添加默认tracker地址:', DEFAULT_TRACKER_URL)
+        config.p2p.node.trackers = [DEFAULT_TRACKER_URL]
+        changed = true
+      }
+    }
+    
     if (changed) {
       console.log('配置文件 p2p 子字段不完整，补齐默认值')
       set_config(config)
