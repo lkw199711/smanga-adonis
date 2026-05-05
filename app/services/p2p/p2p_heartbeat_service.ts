@@ -28,7 +28,9 @@ class P2PHeartbeatService {
     // 首次确保身份存在
     const identity = await p2pIdentityService.ensureIdentity()
     if (!identity) {
-      console.warn('[p2p] 心跳服务启动失败:无有效身份')
+      console.warn(
+        '[p2p] 心跳服务启动失败:无有效身份 (具体原因见上方 [p2p] identity.* 日志)'
+      )
       return
     }
 

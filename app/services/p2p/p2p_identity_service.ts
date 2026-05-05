@@ -19,6 +19,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { get_config, set_config } from '#utils/index'
 import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
+import { log_p2p_error } from '#utils/p2p_log'
 
 export type P2PIdentity = {
   nodeId: string
@@ -33,7 +34,14 @@ class P2PIdentityService {
   async ensureIdentity(): Promise<P2PIdentity | null> {
     const config = get_config()
     const p2p = config?.p2p
-    if (!p2p?.enable || !p2p?.role?.node) return null
+    if (!p2p?.enable) {
+      console.warn('[p2p] ensureIdentity: 跳过 (smanga.json p2p.enable=false)')
+      return null
+    }
+    if (!p2p?.role?.node) {
+      console.warn('[p2p] ensureIdentity: 跳过 (smanga.json p2p.role.node=false)')
+      return null
+    }
 
     // 已存在且完整
     if (p2p.node?.nodeId && p2p.node?.nodeToken) {
@@ -53,7 +61,7 @@ class P2PIdentityService {
         console.log(`[p2p] 本机 tracker,已本地直注册 nodeId=${identity.nodeId}`)
         return identity
       } catch (e: any) {
-        console.error('[p2p] 本地直注册失败:', e?.message || e)
+        log_p2p_error('identity.registerLocally', e)
         return null
       }
     }
@@ -61,10 +69,15 @@ class P2PIdentityService {
     // 2) 远端 tracker,走 HTTP 注册
     const trackerUrl = this.pickTrackerUrl(p2p)
     if (!trackerUrl) {
-      console.warn('[p2p] 未配置 trackers,跳过自动注册')
+      console.warn(
+        '[p2p] ensureIdentity 失败: 未配置 trackers 且本机非 tracker 角色\n' +
+        '       请在 smanga.json 中设置 p2p.node.trackers = ["http://你的tracker地址:端口"]\n' +
+        '       或将本机配置为 tracker (p2p.role.tracker=true)'
+      )
       return null
     }
 
+    console.log(`[p2p] ensureIdentity: 准备向远端 tracker 注册 url=${trackerUrl}`)
     const client = new TrackerClient(trackerUrl)
     try {
       const res = await client.register({
@@ -90,13 +103,15 @@ class P2PIdentityService {
         nodeName,
       }
     } catch (e: any) {
-      console.error('[p2p] 节点自动注册失败 url=%s', trackerUrl)
-      console.error('[p2p] -> message :', e?.message)
-      console.error('[p2p] -> code    :', e?.code)
-      console.error('[p2p] -> status  :', e?.response?.status)
-      console.error('[p2p] -> data    :', e?.response?.data)
-      if (!e?.response) {
-        console.error('[p2p] -> stack   :', e?.stack)
+      log_p2p_error(`identity.register(url=${trackerUrl})`, e)
+      // 给出明确的诊断建议
+      if (e?.code === 'ECONNREFUSED' || e?.code === 'ENOTFOUND' || e?.code === 'ETIMEDOUT') {
+        console.warn(
+          '[p2p] 网络层连接失败提示:\n' +
+          `       - 检查 tracker 地址 ${trackerUrl} 是否可达 (telnet / curl 测试)\n` +
+          '       - 检查 tracker 服务是否已启动\n' +
+          '       - 检查防火墙 / 端口映射'
+        )
       }
       return null
     }
