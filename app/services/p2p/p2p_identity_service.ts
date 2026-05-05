@@ -45,6 +45,26 @@ class P2PIdentityService {
 
     // 已存在且完整
     if (p2p.node?.nodeId && p2p.node?.nodeToken) {
+      // 若本机同时是 tracker,额外校验本地 tracker_node 表是否真的存在该节点
+      // 防止数据漂移:config 里有 nodeId 但数据库被重置/清空,导致后续所有
+      // /tracker/* 请求被中间件判为 "节点不存在"
+      if (this.isLocalTracker(p2p)) {
+        try {
+          const exists = await prisma.tracker_node.findUnique({
+            where: { nodeId: p2p.node.nodeId },
+          })
+          if (!exists) {
+            console.warn(
+              `[p2p] 检测到 config 中的 nodeId=${p2p.node.nodeId} 在 tracker_node 表中不存在,` +
+              '正在用配置里的凭证补录一条记录(避免"节点不存在")'
+            )
+            await this.syncLocalTrackerNode(p2p)
+          }
+        } catch (e: any) {
+          log_p2p_error('identity.syncLocalTrackerNode', e)
+        }
+      }
+
       return {
         nodeId: p2p.node.nodeId,
         nodeToken: p2p.node.nodeToken,
@@ -198,6 +218,43 @@ class P2PIdentityService {
     set_config(config)
 
     return { nodeId, nodeToken: rawToken, nodeName }
+  }
+
+  /**
+   * 一体机自愈:当 config 中有 nodeId/nodeToken,但 tracker_node 表没有对应记录时,
+   * 用配置里的 rawToken 计算 hash 并补录一条 tracker_node 记录。
+   * 这样后续 /tracker/* 请求的 X-Node-Id/X-Node-Token 鉴权就能通过。
+   */
+  private async syncLocalTrackerNode(p2p: any): Promise<void> {
+    const nodeId: string = p2p?.node?.nodeId
+    const rawToken: string = p2p?.node?.nodeToken
+    if (!nodeId || !rawToken) return
+
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+
+    await prisma.tracker_node.upsert({
+      where: { nodeId },
+      update: {
+        // 仅更新必要字段,避免覆盖人工修改
+        nodeToken: tokenHash,
+        online: 1,
+        lastHeartbeat: new Date(),
+      },
+      create: {
+        nodeId,
+        nodeToken: tokenHash,
+        nodeName: p2p?.node?.nodeName || null,
+        publicHost: p2p?.node?.publicHost || '127.0.0.1',
+        localHost: p2p?.node?.lanHost || '127.0.0.1',
+        localPort: p2p?.node?.lanPort || p2p?.node?.listenPort || null,
+        version: 'smanga-adonis',
+        userAgent: 'local-sync',
+        online: 1,
+        lastHeartbeat: new Date(),
+      },
+    })
+
+    console.log(`[p2p] 已补录 tracker_node 记录 nodeId=${nodeId}`)
   }
 
   /**

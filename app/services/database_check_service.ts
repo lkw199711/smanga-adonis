@@ -74,19 +74,19 @@ export default async function hanle() {
 
 /*
   * 运行命令
-  * npx prisma generate --schema=./prisma/mysql/schema.prisma
-  * npx prisma migrate deploy --schema=./prisma/mysql/schema.prisma
+  * npx prisma generate --schema=./prisma/sqlite/schema.prisma
+  * npx prisma migrate deploy --schema=./prisma/sqlite/schema.prisma
   * 
   * 生成迁移文件
-  * npx prisma migrate dev --name isCloudMedia --schema=./prisma/mysql/schema.prisma
+  * npx prisma migrate dev --name isCloudMedia --schema=./prisma/sqlite/schema.prisma
   * 生成 Prisma Client
-  * npx prisma generate --schema=./prisma/mysql/schema.prisma
+  * npx prisma generate --schema=./prisma/sqlite/schema.prisma
   * 部署迁移
-  * npx prisma migrate deploy --schema=./prisma/mysql/schema.prisma
+  * npx prisma migrate deploy --schema=./prisma/sqlite/schema.prisma
   * 注意：如果是第一次运行，可能需要先创建数据库
   * 
-npx prisma generate --schema=./prisma/mysql/schema.prisma
-// npx prisma migrate deploy --schema=./prisma/mysql/schema.prisma
+npx prisma generate --schema=./prisma/sqlite/schema.prisma
+// npx prisma migrate deploy --schema=./prisma/sqlite/schema.prisma
 
 // npx prisma migrate dev--name add_created_at  # --name 指定迁移描述
 */
