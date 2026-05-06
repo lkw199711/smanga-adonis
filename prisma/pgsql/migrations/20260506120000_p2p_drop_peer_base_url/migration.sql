@@ -1,1 +1,0 @@
-ALTER TABLE "p2p_transfer" DROP COLUMN "peerBaseUrl";
