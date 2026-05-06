@@ -270,4 +270,165 @@ export default class P2PGroupsController {
       return response.status(500).json(new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '同步失败' }))
     }
   }
+
+  /**
+   * GET /api/p2p/group/whoami
+   * 返回本机节点身份信息(供前端判断"我是不是群主")
+   */
+  async whoami({ response }: HttpContext) {
+    const id = p2pIdentityService.getIdentity()
+    return response.json(
+      new SResponse({
+        code: 0,
+        message: '',
+        data: {
+          nodeId: id?.nodeId || '',
+          nodeName: id?.nodeName || '',
+        },
+      })
+    )
+  }
+
+  /**
+   * GET /api/p2p/group/by-no/:groupNo/detail
+   * 群组详情聚合:本地 group + tracker 端最新群信息 + 成员列表
+   * 任何登录用户都可调用
+   */
+  async detail({ params, response }: HttpContext) {
+    const groupNo = String(params.groupNo)
+    const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
+    if (!local) {
+      return response.status(404).json(new SResponse({ code: 1, message: '本机未加入该群' }))
+    }
+
+    const client = get_client()
+    if (!client) {
+      // P2P 未启用:仅返回本地视图
+      return response.json(
+        new SResponse({
+          code: 0,
+          message: '',
+          data: { local, members: [], remote: null, fromTracker: false },
+        })
+      )
+    }
+
+    try {
+      const [members, myGroups] = await Promise.all([
+        call_with_reregister(client, (c) => c.groupMembers(groupNo)),
+        call_with_reregister(client, (c) => c.myGroups()),
+      ])
+      const remote = (myGroups as any[]).find((g) => g.groupNo === groupNo) || null
+      return response.json(
+        new SResponse({
+          code: 0,
+          message: '',
+          data: { local, members, remote, fromTracker: true },
+        })
+      )
+    } catch (e: any) {
+      log_p2p_error('group.detail', e)
+      // tracker 不可达:降级为本地视图
+      return response.json(
+        new SResponse({
+          code: 0,
+          message: 'tracker 暂不可达,仅返回本地数据',
+          data: { local, members: [], remote: null, fromTracker: false },
+        })
+      )
+    }
+  }
+
+  /**
+   * POST /api/p2p/group/kick
+   * body: { groupNo, targetNodeId }
+   *
+   * 仅在两种情况下放行(由 tracker 端最终鉴权):
+   *  - 本节点是该群群主 (本机视角:p2p_group.isOwner === 1)
+   *  - 本机操作者是 admin(由用户路由中间件控制),通过 tracker 进行实际操作
+   *
+   * 注意:tracker 端的 kick 接口本身只允许群主,因此仅当本机是群主时该调用才会成功;
+   * "管理员强制踢人" 路径在 tracker 端走的是 /tracker-admin/* 接口(那条路径已存在)。
+   */
+  async kick({ request, response }: HttpContext) {
+    const client = get_client()
+    if (!client) {
+      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
+    }
+
+    const { groupNo, targetNodeId } = request.only(['groupNo', 'targetNodeId'])
+    if (!groupNo || !targetNodeId) {
+      return response.status(400).json(new SResponse({ code: 1, message: '参数缺失' }))
+    }
+
+    try {
+      await call_with_reregister(client, (c) => c.kickMember(groupNo, targetNodeId))
+      // 联动清理本机缓存
+      const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
+      if (local) {
+        await prisma.p2p_peer_cache.deleteMany({
+          where: { p2pGroupId: local.p2pGroupId, nodeId: targetNodeId },
+        })
+        await prisma.p2p_group.update({
+          where: { p2pGroupId: local.p2pGroupId },
+          data: { memberCount: { decrement: 1 } },
+        })
+      }
+      return response.json(new SResponse({ code: 0, message: '已踢出该成员' }))
+    } catch (e: any) {
+      log_p2p_error('group.kick', e)
+      return response
+        .status(500)
+        .json(
+          new SResponse({
+            code: 1,
+            message: e?.response?.data?.message || e?.message || '踢出失败',
+          })
+        )
+    }
+  }
+
+  /**
+   * POST /api/p2p/group/dismiss
+   * body: { groupNo }
+   *
+   * 群主主动解散:调 tracker DELETE /tracker/group/:groupNo;
+   * tracker 端会校验 ownerNodeId === 调用者。
+   * 成功后清理本机所有相关数据(p2p_local_share / p2p_peer_cache / p2p_transfer / p2p_group)。
+   */
+  async dismiss({ request, response }: HttpContext) {
+    const client = get_client()
+    if (!client) {
+      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
+    }
+    const { groupNo } = request.only(['groupNo'])
+    if (!groupNo) {
+      return response.status(400).json(new SResponse({ code: 1, message: '参数缺失' }))
+    }
+
+    try {
+      await call_with_reregister(client, (c) => c.dismissGroup(groupNo))
+    } catch (e: any) {
+      log_p2p_error('group.dismiss.tracker', e)
+      return response
+        .status(500)
+        .json(
+          new SResponse({
+            code: 1,
+            message: e?.response?.data?.message || e?.message || '解散失败',
+          })
+        )
+    }
+
+    // tracker 端已经成功 → 清理本机数据
+    const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
+    if (local) {
+      await prisma.p2p_local_share.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
+      await prisma.p2p_peer_cache.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
+      await prisma.p2p_transfer.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
+      await prisma.p2p_group.delete({ where: { p2pGroupId: local.p2pGroupId } })
+    }
+
+    return response.json(new SResponse({ code: 0, message: '群组已解散' }))
+  }
 }

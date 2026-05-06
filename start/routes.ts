@@ -37,6 +37,7 @@ const OpdsController = () => import('#controllers/opds_controller')
 const TrackerNodesController = () => import('#controllers/tracker/tracker_nodes_controller')
 const TrackerGroupsController = () => import('#controllers/tracker/tracker_groups_controller')
 const TrackerSharesController = () => import('#controllers/tracker/tracker_shares_controller')
+const TrackerAdminGroupsController = () => import('#controllers/tracker/tracker_admin_groups_controller')
 const P2PGroupsController = () => import('#controllers/p2p/p2p_groups_controller')
 const P2PSharesController = () => import('#controllers/p2p/p2p_shares_controller')
 const P2PPeersController = () => import('#controllers/p2p/p2p_peers_controller')
@@ -259,12 +260,26 @@ router.post('/tracker/group/join', [TrackerGroupsController, 'join'])
 router.post('/tracker/group/:groupNo/leave', [TrackerGroupsController, 'leave'])
 router.get('/tracker/group/:groupNo/members', [TrackerGroupsController, 'members'])
 router.delete('/tracker/group/:groupNo/member/:nodeId', [TrackerGroupsController, 'kick'])
+router.delete('/tracker/group/:groupNo', [TrackerGroupsController, 'dismiss'])
 router.post('/tracker/group/:groupNo/invite', [TrackerGroupsController, 'invite'])
 
 // 共享索引
 router.post('/tracker/group/:groupNo/announce', [TrackerSharesController, 'announce'])
 router.get('/tracker/group/:groupNo/shares', [TrackerSharesController, 'index'])
 router.get('/tracker/group/:groupNo/seeds', [TrackerSharesController, 'seeds'])
+
+// ============================================================
+// Tracker 管理员路由 (/tracker-admin/*)
+// 走 auth_middleware (用户 token + admin 角色),不走节点鉴权
+// 仅当本机开启 tracker 角色时控制器内部会再次校验
+// 注意:故意使用 "tracker-admin" 而不是 "tracker/admin",
+//      避免被 tracker_auth_middleware 当成节点接口拦截
+// ============================================================
+router.get('/tracker-admin/group', [TrackerAdminGroupsController, 'index'])
+router.get('/tracker-admin/group/:groupNo', [TrackerAdminGroupsController, 'show'])
+router.get('/tracker-admin/group/:groupNo/members', [TrackerAdminGroupsController, 'members'])
+router.delete('/tracker-admin/group/:groupNo/member/:nodeId', [TrackerAdminGroupsController, 'kick'])
+router.delete('/tracker-admin/group/:groupNo', [TrackerAdminGroupsController, 'destroy'])
 
 // 配置信息
 router.get('client-user-config', [UsersController, 'config'])
@@ -305,10 +320,14 @@ router.get('/opds/chapter/:chapterId/page/:page', [OpdsController, 'chapter_page
 // 注意: 与对等节点接口 /p2p/serve/* 通过子前缀隔离, 便于中间件按前缀区分
 // ============================================================================
 router.get('/p2p/group', [P2PGroupsController, 'index'])
+router.get('/p2p/group/whoami', [P2PGroupsController, 'whoami'])
+router.get('/p2p/group/by-no/:groupNo/detail', [P2PGroupsController, 'detail'])
 router.get('/p2p/group/:id', [P2PGroupsController, 'show'])
 router.post('/p2p/group/create', [P2PGroupsController, 'create'])
 router.post('/p2p/group/join', [P2PGroupsController, 'join'])
 router.post('/p2p/group/leave', [P2PGroupsController, 'leave'])
+router.post('/p2p/group/kick', [P2PGroupsController, 'kick'])
+router.post('/p2p/group/dismiss', [P2PGroupsController, 'dismiss'])
 router.post('/p2p/group/refresh', [P2PGroupsController, 'refresh'])
 
 router.get('/p2p/share', [P2PSharesController, 'index'])

@@ -127,6 +127,20 @@ export default class TrackerGroupsController {
   }
 
   /**
+   * DELETE /tracker/group/:groupNo  —— 群主解散群组
+   */
+  async dismiss({ params, request, response }: HttpContext) {
+    try {
+      const operator = (request as any).trackerNodeId as string
+      const data = await trackerGroupService.dismiss(operator, params.groupNo)
+      return response.json(new SResponse({ code: 0, message: '群组已解散', data }))
+    } catch (err: any) {
+      log_tracker_error('group.dismiss', err)
+      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+    }
+  }
+
+  /**
    * POST /tracker/group/:groupNo/invite
    */
   async invite({ params, request, response }: HttpContext) {

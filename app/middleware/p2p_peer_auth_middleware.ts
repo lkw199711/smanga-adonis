@@ -2,18 +2,26 @@ import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import { SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
+import trackerGroupService from '#services/tracker/tracker_group_service'
+import { get_default_tracker_client } from '#services/p2p/tracker_client'
+import membershipCache from '#services/p2p/p2p_membership_cache'
 
 /**
- * P2P 对等节点鉴权中间件 (轻量版)
+ * P2P 对等节点鉴权中间件
  *
  * 仅对 /p2p/serve/* 路径生效 (节点间直连接口)。
  *
- * 设计前提:
- *  - 共享/群组关系的权威方是 Tracker 服务器,节点之间不做本地数据库校验
- *  - 本中间件只做"握手字段是否齐全 + 时间戳是否在允许窗口内"两层基础校验
- *  - 真正的 "调用方是否有权访问此资源" 由 Tracker 在颁发 group/share 信息时统一管理
+ * 鉴权三层:
+ *   1. 握手字段齐全(X-Node-Id / X-Group-No / X-Timestamp)
+ *   2. 时间戳在 ±5 分钟窗口内
+ *   3. 调用方 nodeId 必须是 X-Group-No 的合法群组成员
+ *      - 本机为 tracker:直接查 tracker_membership 表
+ *      - 本机仅为 node:通过 TrackerClient.checkMembership 远程验证
+ *      - 校验结果以 60s TTL 缓存,避免高频拉取打爆 tracker / DB
+ *      - 如果 tracker 短暂不可达且 *无可用缓存*,采用 "软失败放行" 策略,
+ *        仅记录 warn,避免 tracker 抖动导致 P2P 全网雪崩
  *
- * 握手字段(HTTP Header):
+ * 握手 Header:
  *  - X-Node-Id     : 调用方节点 ID
  *  - X-Group-No    : 访问所依据的群组号
  *  - X-Timestamp   : Unix 毫秒时间戳(±5 分钟内有效)
@@ -82,11 +90,85 @@ export default class P2PPeerAuthMiddleware {
       )
     }
 
+    // ============= 群组成员关系校验(带缓存 + 软失败) =============
+    const allowed = await this.verifyMembership(nodeId, groupNo, url, clientIp)
+    if (allowed === false) {
+      return response.status(403).json(
+        new SResponse({
+          code: 1,
+          message: '当前节点不是该群组成员或已被移除',
+          status: 'forbidden',
+          data: { nodeId, groupNo },
+        })
+      )
+    }
+
     // TODO: 基于 Tracker 下发的 groupSecret 做 HMAC 签名校验
     // const signature = request.header('x-signature')
 
     ;(request as any).p2pContext = { callerNodeId: nodeId, groupNo }
 
     await next()
+  }
+
+  /**
+   * 校验远端节点是否是该群组的合法成员。
+   *
+   * @returns true  : 是成员,允许继续
+   *          false : 已确认不是成员,应该 403 拒绝
+   *          'soft': tracker 不可达且无缓存 → 软失败放行,仅记 warn
+   *
+   * (调用方把 'soft' 与 true 等同处理,但单独保留是为了语义清晰)
+   */
+  private async verifyMembership(
+    nodeId: string,
+    groupNo: string,
+    url: string,
+    clientIp: string
+  ): Promise<true | false | 'soft'> {
+    // 1) 缓存命中
+    const cached = membershipCache.get(nodeId, groupNo)
+    if (cached === true) return true
+    if (cached === false) {
+      console.warn(
+        `[p2p-serve] 403 命中负向缓存 | url=${url} ip=${clientIp} nodeId=${nodeId} groupNo=${groupNo}`
+      )
+      return false
+    }
+
+    // 2) 回源校验
+    const cfg = get_config()?.p2p
+    const isLocalTracker = !!cfg?.role?.tracker
+
+    try {
+      let allowed: boolean
+      if (isLocalTracker) {
+        // 本机就是 tracker:直接查本地 DB
+        allowed = await trackerGroupService.isMember(nodeId, groupNo)
+      } else {
+        // 本机仅 node:通过 tracker 客户端反查
+        const client = get_default_tracker_client()
+        if (!client) {
+          // 没有 tracker 配置,但请求已经带了合法握手字段
+          // → 视为软失败(仅时间戳 + 握手通过)
+          console.warn(
+            `[p2p-serve] 软失败放行(无 tracker 客户端) | url=${url} ip=${clientIp} ` +
+            `nodeId=${nodeId} groupNo=${groupNo}`
+          )
+          return 'soft'
+        }
+        allowed = await client.checkMembership(groupNo, nodeId)
+      }
+
+      membershipCache.set(nodeId, groupNo, allowed)
+      return allowed
+    } catch (err: any) {
+      // tracker 不可达 / DB 异常 → 软失败放行,只记 warn,**不**写缓存
+      console.warn(
+        `[p2p-serve] 软失败放行(tracker 校验异常) | url=${url} ip=${clientIp} ` +
+        `nodeId=${nodeId} groupNo=${groupNo} err=${err?.message || err}`
+      )
+      return 'soft'
+    }
   }
 }

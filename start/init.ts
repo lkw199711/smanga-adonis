@@ -76,7 +76,7 @@ const defaultConfig = {
       "listenPort": 3333,
       "publicHost": "",
       "publicPort": 0,
-      "trackers": [],
+      "trackers": ["http://145000.xyz:9798"],
       "heartbeatInterval": 30,
       "announceInterval": 300,
       "allowLan": true,

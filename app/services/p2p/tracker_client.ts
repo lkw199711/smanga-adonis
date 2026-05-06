@@ -90,6 +90,14 @@ export class TrackerClient {
     return res.data?.data ?? res.data
   }
 
+  /**
+   * 群主解散群组(tracker 端会校验调用者是否为群主)
+   */
+  async dismissGroup(groupNo: string) {
+    const res = await this.http.delete(`/tracker/group/${groupNo}`, this.auth())
+    return res.data?.data ?? res.data
+  }
+
   async myGroups() {
     const res = await this.http.get('/tracker/group', this.auth())
     // 兼容 ListResponse { list, count } 与原始数组
@@ -101,6 +109,23 @@ export class TrackerClient {
     const res = await this.http.get(`/tracker/group/${groupNo}/members`, this.auth())
     const data = res.data?.data ?? res.data
     return data?.list ?? data
+  }
+
+  /**
+   * 校验某节点是否为群组成员(供 P2P 同步接口 serve 端鉴权使用)
+   *
+   * 复用现有 /tracker/group/:groupNo/members 接口,
+   * 返回 true / false;若 tracker 不可达或接口异常,**抛出异常**由调用方决定降级策略。
+   *
+   * 注意: 此处用当前节点的 X-Node-Token 去调 tracker,前提是当前节点已是该群成员,
+   * 否则 tracker 会返回 404(群组不存在/未加入),此时我们认为 "无法判定" → 抛错。
+   */
+  async checkMembership(groupNo: string, targetNodeId: string): Promise<boolean> {
+    const members = (await this.groupMembers(groupNo)) as Array<{ nodeId: string }>
+    if (!Array.isArray(members)) {
+      throw new Error('tracker 返回成员列表格式异常')
+    }
+    return members.some((m) => m && m.nodeId === targetNodeId)
   }
 
   async kickMember(groupNo: string, targetNodeId: string) {
