@@ -17,7 +17,7 @@
  */
 
 import prisma from '#start/prisma'
-import { treeFilesToTasks, type TreeFileEntry } from './pull_context.js'
+import { treeFilesToTasks, type TreeFileEntry, type Seed } from './pull_context.js'
 import {
   ensureDir,
   isTransferCanceled,
@@ -55,6 +55,8 @@ export type PullMetaJobArgs = {
   files: TreeFileEntry[]
   baseDir: string
   isSubTask?: boolean
+  /** 上游已发现的 seeds(优先复用,避免重复查 tracker) */
+  inheritedSeeds?: Seed[]
 }
 
 export default class PullMetaJob {
@@ -65,7 +67,7 @@ export default class PullMetaJob {
   }
 
   async run(): Promise<void> {
-    const { transferId, mangaId, groupNo, files, baseDir, isSubTask } = this.args
+    const { transferId, mangaId, groupNo, files, baseDir, isSubTask, inheritedSeeds } = this.args
     const logTag = `p2p-pull-meta#${transferId}-m${mangaId}`
 
     if (await isTransferCanceled(transferId)) {
@@ -105,6 +107,7 @@ export default class PullMetaJob {
           shareType: 'manga',
           remoteMangaId: mangaId,
         },
+        inheritedSeeds,
         tasks,
         logTag,
         reporter,

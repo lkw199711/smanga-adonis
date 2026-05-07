@@ -43,6 +43,7 @@ import {
   safeName,
   type TreeResponseData,
   type TreeFileEntry,
+  type Seed,
 } from './pull_context.js'
 import {
   ensureDir,
@@ -50,7 +51,7 @@ import {
   createThrottledProgressReporter,
   runChildDownload,
   buildHeaders,
-  discoverSeeds,
+  resolveSeeds,
 } from './pull_shared.js'
 import { initTracker, notifyDone, transferSelfToChildren } from './pull_child_tracker.js'
 import { isMetaFile } from './pull_meta_sub_job.js'
@@ -62,6 +63,8 @@ export type PullMangaJobArgs = {
   parentDir: string
   fallbackName?: string
   isSubTask?: boolean
+  /** 上游已发现的 seeds(优先复用,避免重复查 tracker) */
+  inheritedSeeds?: Seed[]
 }
 
 export default class PullMangaJob {
@@ -72,7 +75,7 @@ export default class PullMangaJob {
   }
 
   async run(): Promise<void> {
-    const { transferId, mangaId, groupNo, parentDir, fallbackName, isSubTask } = this.args
+    const { transferId, mangaId, groupNo, parentDir, fallbackName, isSubTask, inheritedSeeds } = this.args
     const logTag = `p2p-pull-manga#${transferId}-m${mangaId}`
 
     if (await isTransferCanceled(transferId)) {
@@ -89,15 +92,21 @@ export default class PullMangaJob {
     console.log(`[${logTag}] 开始 mangaId=${mangaId} parentDir=${parentDir}`)
 
     let tree: TreeResponseData
+    // 解析后的 seeds 在后续派发 Meta/Chapter 子任务时复用,避免每个子任务都去查 tracker
+    let resolvedSeeds: Seed[] = []
     try {
       const headers = buildHeaders(groupNo)
-      const seeds = await discoverSeeds({
-        groupNo,
-        shareType: 'manga',
-        remoteMangaId: mangaId,
-      })
-      if (!seeds.length) throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
-      tree = await fetchMangaTree(seeds, headers, logTag, mangaId)
+      resolvedSeeds = await resolveSeeds(
+        inheritedSeeds,
+        {
+          groupNo,
+          shareType: 'manga',
+          remoteMangaId: mangaId,
+        },
+        logTag
+      )
+      if (!resolvedSeeds.length) throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
+      tree = await fetchMangaTree(resolvedSeeds, headers, logTag, mangaId)
     } catch (e: any) {
       const errorMsg = e?.message || String(e)
       console.error(`[${logTag}] 获取 tree 失败: ${errorMsg}`)
@@ -125,12 +134,12 @@ export default class PullMangaJob {
 
     // 分支 1:单文件漫画,直接在本 Job 内拉完,不拆子任务
     if (tree.isSingleFile) {
-      await this.handleSingleFile(tree, baseDir, logTag, isSubTask)
+      await this.handleSingleFile(tree, baseDir, logTag, isSubTask, resolvedSeeds)
       return
     }
 
     // 分支 2:目录漫画 → 拆 Meta + Chapters 子任务
-    await this.handleDirectoryManga(tree, mangaId, baseDir, logTag, isSubTask)
+    await this.handleDirectoryManga(tree, mangaId, baseDir, logTag, isSubTask, resolvedSeeds)
   }
 
   /** 单文件漫画:直接起小池拉完 */
@@ -138,7 +147,8 @@ export default class PullMangaJob {
     tree: TreeResponseData,
     baseDir: string,
     logTag: string,
-    isSubTask: boolean | undefined
+    isSubTask: boolean | undefined,
+    resolvedSeeds: Seed[]
   ): Promise<void> {
     const { transferId, groupNo, mangaId } = this.args
     const reporter = createThrottledProgressReporter(transferId)
@@ -153,6 +163,7 @@ export default class PullMangaJob {
         transferId,
         groupNo,
         discoverArgs: { groupNo, shareType: 'manga', remoteMangaId: mangaId },
+        inheritedSeeds: resolvedSeeds,
         tasks,
         logTag,
         reporter,
@@ -178,14 +189,15 @@ export default class PullMangaJob {
     mangaId: number,
     baseDir: string,
     logTag: string,
-    isSubTask: boolean | undefined
+    isSubTask: boolean | undefined,
+    resolvedSeeds: Seed[]
   ): Promise<void> {
     const { transferId, groupNo } = this.args
 
-    // 1) 拿章节列表
+    // 1) 拿章节列表(复用已发现的 seeds)
     let chapters: Array<{ chapterId: number; chapterName: string; chapterPath?: string }> = []
     try {
-      chapters = await this.fetchChapters(groupNo, mangaId, logTag)
+      chapters = await this.fetchChapters(groupNo, mangaId, logTag, resolvedSeeds)
     } catch (e: any) {
       const errorMsg = e?.message || String(e)
       console.error(`[${logTag}] 获取 chapters 失败: ${errorMsg}`)
@@ -212,7 +224,7 @@ export default class PullMangaJob {
       await transferSelfToChildren(transferId, expectedTotal)
     }
 
-    // 5) 派发 MetaJob
+    // 5) 派发 MetaJob(透传已发现的 seeds)
     await addTask({
       taskName: `p2p-pull-meta-${mangaId}`,
       command: 'taskP2PPullMeta',
@@ -223,11 +235,12 @@ export default class PullMangaJob {
         files: metaFiles,
         baseDir,
         isSubTask: true,
+        inheritedSeeds: resolvedSeeds,
       },
       priority: TaskPriority.p2pPullMeta,
     })
 
-    // 6) 为每个 chapter 派发 ChapterJob
+    // 6) 为每个 chapter 派发 ChapterJob(透传已发现的 seeds)
     for (const ch of chapters) {
       const chBaseDir = path.join(baseDir, safeName(ch.chapterName || `chapter_${ch.chapterId}`))
       await addTask({
@@ -240,6 +253,7 @@ export default class PullMangaJob {
           baseDir: chBaseDir,
           mangaId,
           isSubTask: true,
+          inheritedSeeds: resolvedSeeds,
         },
         priority: TaskPriority.p2pPullChapter,
       })
@@ -256,17 +270,22 @@ export default class PullMangaJob {
   private async fetchChapters(
     groupNo: string,
     mangaId: number,
-    logTag: string
+    logTag: string,
+    inheritedSeeds?: Seed[]
   ): Promise<Array<{ chapterId: number; chapterName: string; chapterPath?: string }>> {
     const { withSeedFailover } = await import('./pull_tree_fetcher.js')
     const axios = (await import('axios')).default
 
     const headers = buildHeaders(groupNo)
-    const seeds = await discoverSeeds({
-      groupNo,
-      shareType: 'manga',
-      remoteMangaId: mangaId,
-    })
+    const seeds = await resolveSeeds(
+      inheritedSeeds,
+      {
+        groupNo,
+        shareType: 'manga',
+        remoteMangaId: mangaId,
+      },
+      logTag
+    )
     if (!seeds.length) throw new Error('获取 chapters 时 seeds 为空')
 
     return withSeedFailover(seeds, `获取章节列表 (mangaId=${mangaId})`, logTag, async (seed) => {

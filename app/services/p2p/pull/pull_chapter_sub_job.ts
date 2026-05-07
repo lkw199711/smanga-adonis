@@ -21,14 +21,14 @@
 
 import prisma from '#start/prisma'
 import { fetchChapterTree } from './pull_tree_fetcher.js'
-import { treeFilesToTasks, type TreeResponseData } from './pull_context.js'
+import { treeFilesToTasks, type TreeResponseData, type Seed } from './pull_context.js'
 import {
   ensureDir,
   isTransferCanceled,
   createThrottledProgressReporter,
   runChildDownload,
   buildHeaders,
-  discoverSeeds,
+  resolveSeeds,
 } from './pull_shared.js'
 import { notifyDone } from './pull_child_tracker.js'
 
@@ -39,6 +39,8 @@ export type PullChapterJobArgs = {
   baseDir: string
   mangaId: number
   isSubTask?: boolean
+  /** 上游已发现的 seeds(优先复用,避免重复查 tracker) */
+  inheritedSeeds?: Seed[]
 }
 
 export default class PullChapterJob {
@@ -49,7 +51,7 @@ export default class PullChapterJob {
   }
 
   async run(): Promise<void> {
-    const { transferId, chapterId, baseDir, groupNo, mangaId, isSubTask } = this.args
+    const { transferId, chapterId, baseDir, groupNo, mangaId, isSubTask, inheritedSeeds } = this.args
     const logTag = `p2p-pull-chapter#${transferId}-c${chapterId}`
 
     if (await isTransferCanceled(transferId)) {
@@ -70,7 +72,7 @@ export default class PullChapterJob {
 
     try {
       // 1. 获取 tree(通过内部 seeds failover)
-      const tree = await this.fetchTree(chapterId, groupNo, mangaId, logTag)
+      const tree = await this.fetchTree(chapterId, groupNo, mangaId, logTag, inheritedSeeds)
       if (!tree || !tree.files?.length) {
         console.warn(`[${logTag}] tree 为空,视为成功但无文件`)
       } else {
@@ -83,6 +85,7 @@ export default class PullChapterJob {
             shareType: 'chapter',
             remoteMangaId: mangaId,
           },
+          inheritedSeeds,
           tasks,
           logTag,
           reporter,
@@ -113,14 +116,19 @@ export default class PullChapterJob {
     chapterId: number,
     groupNo: string,
     mangaId: number,
-    logTag: string
+    logTag: string,
+    inheritedSeeds?: Seed[]
   ): Promise<TreeResponseData> {
     const headers = buildHeaders(groupNo)
-    const seeds = await discoverSeeds({
-      groupNo,
-      shareType: 'chapter',
-      remoteMangaId: mangaId,
-    })
+    const seeds = await resolveSeeds(
+      inheritedSeeds,
+      {
+        groupNo,
+        shareType: 'chapter',
+        remoteMangaId: mangaId,
+      },
+      logTag
+    )
     if (!seeds.length) {
       throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
     }

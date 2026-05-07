@@ -32,6 +32,7 @@ import {
   discoverSeeds,
 } from './pull_shared.js'
 import { initTracker } from './pull_child_tracker.js'
+import type { Seed } from './pull_context.js'
 
 export type PullMediaJobArgs = {
   transferId: number
@@ -75,15 +76,17 @@ export default class PullMediaJob {
     ensureDir(parentDir)
 
     let mangas: Array<{ mangaId: number; mangaName: string }> = []
+    // 发现到的 seeds 保存下来,派发 MangaJob 时透传,避免每本 manga 都去查一次 tracker
+    let discoveredSeeds: Seed[] = []
     try {
       const headers = buildHeaders(groupNo)
-      const seeds = await discoverSeeds({
+      discoveredSeeds = await discoverSeeds({
         groupNo,
         shareType: 'media',
         remoteMediaId: mediaId,
       })
-      if (!seeds.length) throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
-      const raw = await fetchMediaMangas(seeds, headers, logTag, mediaId)
+      if (!discoveredSeeds.length) throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
+      const raw = await fetchMediaMangas(discoveredSeeds, headers, logTag, mediaId)
       mangas = raw
         .filter((m: any) => m && m.mangaId)
         .map((m: any) => ({
@@ -123,6 +126,7 @@ export default class PullMediaJob {
           parentDir,
           fallbackName: m.mangaName,
           isSubTask: true,
+          inheritedSeeds: discoveredSeeds,
         },
         priority: TaskPriority.p2pPullManga,
       })

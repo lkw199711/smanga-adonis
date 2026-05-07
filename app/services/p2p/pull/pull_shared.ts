@@ -57,6 +57,31 @@ function pickBaseUrl(seed: {
 }
 
 /**
+ * seeds 解析:优先使用上游已发现的 seeds(避免对每本 manga / 每章节都去查一次 tracker),
+ * 仅在未透传时回落到 tracker 查询。
+ *
+ * 设计目的(关键):
+ *  - 上游 MediaJob 已用 shareType=media 拿到了权威的 seeds,这些节点都对该 media 做过共享,
+ *    其下所有 manga / chapter 也属于该 media,因此可直接复用而不必让 tracker 维护
+ *    "manga→media 归属"这种会随时变脏的派生信息。
+ *  - 只有在用户从分享列表直接拉某一本 manga / 单章节(没有 media 父任务的入口)时,
+ *    才会落到 discoverSeeds 兜底,此时对端必然做了 manga 级共享,索引就能命中。
+ */
+export async function resolveSeeds(
+  inheritedSeeds: Seed[] | undefined,
+  fallbackArgs: DiscoverSeedsArgs,
+  logTag?: string
+): Promise<Seed[]> {
+  if (inheritedSeeds && inheritedSeeds.length) {
+    if (logTag) {
+      console.log(`[${logTag}] 复用上游 seeds: ${inheritedSeeds.length} 个`)
+    }
+    return inheritedSeeds
+  }
+  return discoverSeeds(fallbackArgs)
+}
+
+/**
  * 通过 Tracker 发现 seeds 池
  */
 export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
@@ -320,6 +345,8 @@ export async function runChildDownload(opts: {
   transferId: number
   groupNo: string
   discoverArgs: DiscoverSeedsArgs
+  /** 上游已发现的 seeds。提供时优先复用,避免重复查 tracker */
+  inheritedSeeds?: Seed[]
   tasks: FileTask[]
   logTag: string
   reporter: ReturnType<typeof createThrottledProgressReporter>
@@ -341,7 +368,7 @@ export async function runChildDownload(opts: {
   }
 
   const headers = buildHeaders(opts.groupNo)
-  const seeds = await discoverSeeds(opts.discoverArgs)
+  const seeds = await resolveSeeds(opts.inheritedSeeds, opts.discoverArgs, opts.logTag)
   if (!seeds.length) {
     throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
   }
