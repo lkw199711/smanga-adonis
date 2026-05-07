@@ -267,6 +267,9 @@ router.post('/tracker/group/:groupNo/invite', [TrackerGroupsController, 'invite'
 router.post('/tracker/group/:groupNo/announce', [TrackerSharesController, 'announce'])
 router.get('/tracker/group/:groupNo/shares', [TrackerSharesController, 'index'])
 router.get('/tracker/group/:groupNo/seeds', [TrackerSharesController, 'seeds'])
+// 共享清单(manifest)
+router.get('/tracker/group/:groupNo/manifests', [TrackerSharesController, 'manifests'])
+router.get('/tracker/group/:groupNo/manifest', [TrackerSharesController, 'manifest'])
 
 // ============================================================
 // Tracker 管理员路由 (/tracker-admin/*)
@@ -341,6 +344,11 @@ router.post('/p2p/share/announce', [P2PSharesController, 'announce'])
 router.get('/p2p/peer/members/:groupNo', [P2PPeersController, 'members'])
 router.get('/p2p/peer/shares/:groupNo', [P2PPeersController, 'shares'])
 router.get('/p2p/peer/cache/:groupNo', [P2PPeersController, 'cache'])
+// P2P 共享清单(manifest)
+router.get('/p2p/peer/manifests/:groupNo', [P2PPeersController, 'manifests'])
+router.get('/p2p/peer/manifest/:groupNo', [P2PPeersController, 'manifest'])
+router.get('/p2p/peer/manifest/:groupNo/manga-tree', [P2PPeersController, 'mangaTree'])
+router.get('/p2p/peer/manifest/:groupNo/chapter-tree', [P2PPeersController, 'chapterTree'])
 
 // P2P 传输任务
 router.get('/p2p/transfer', [P2PTransfersController, 'index'])

@@ -162,6 +162,79 @@ export class TrackerClient {
   }
 
   /**
+   * 拉取群组内所有节点的 manifest 摘要(支持 since 增量)
+   */
+  async listManifests(
+    groupNo: string,
+    opts: { since?: number; nodeId?: string } = {}
+  ): Promise<{
+    list: Array<{
+      trackerShareManifestId: number
+      nodeId: string
+      nodeName: string | null
+      online: number
+      shareType: string
+      remoteMediaId: number | null
+      remoteMangaId: number | null
+      version: number
+      contentHash: string
+      payloadTruncated: number
+      payloadSize: number
+      shareName: string
+      coverUrl: string | null
+      coverSize: number | null
+      describe: string | null
+      mangaCount: number
+      chapterCount: number
+      totalSize: string | null
+      updateTime: number
+    }>
+    count: number
+    serverTime: number
+  }> {
+    const params: any = {}
+    if (opts.since) params.since = opts.since
+    if (opts.nodeId) params.nodeId = opts.nodeId
+    const res = await this.http.get(`/tracker/group/${groupNo}/manifests`, this.auth({ params }))
+    return res.data?.data ?? res.data
+  }
+
+  /**
+   * 拉取单个 manifest 详情(完整 payload)
+   */
+  async getManifest(
+    groupNo: string,
+    params: {
+      nodeId: string
+      shareType: 'media' | 'manga' | string
+      remoteMediaId?: number | null
+      remoteMangaId?: number | null
+    }
+  ): Promise<{
+    trackerShareManifestId: number
+    nodeId: string
+    shareType: string
+    remoteMediaId: number | null
+    remoteMangaId: number | null
+    version: number
+    contentHash: string
+    payloadTruncated: number
+    payloadSize: number
+    shareName: string
+    coverUrl: string | null
+    coverSize: number | null
+    describe: string | null
+    mangaCount: number
+    chapterCount: number
+    totalSize: string | null
+    payload: string
+    updateTime: number
+  }> {
+    const res = await this.http.get(`/tracker/group/${groupNo}/manifest`, this.auth({ params }))
+    return res.data?.data ?? res.data
+  }
+
+  /**
    * 按资源查询群内拥有该资源的节点(多源 P2P 拉取用)
    */
   async findSeeds(

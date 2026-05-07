@@ -68,6 +68,24 @@ export async function purgeLocalGroupByGroupNo(groupNo: string): Promise<{
       groupExisted: false,
     }
   }
+  // 先把本群组关联的 local shares id 查出来,用于清理孤儿 manifest 缓存
+  const localShares = await prisma.p2p_local_share.findMany({
+    where: { p2pGroupId: local.p2pGroupId },
+    select: { p2pLocalShareId: true },
+  })
+  const localShareIds = localShares.map((s) => s.p2pLocalShareId)
+
+  if (localShareIds.length > 0) {
+    await prisma.p2p_local_share_manifest.deleteMany({
+      where: { p2pLocalShareId: { in: localShareIds } },
+    })
+  }
+
+  // 清理拉取端缓存的本群组 peer manifest(来自群内其他节点的 manifest)
+  await prisma.p2p_peer_share_manifest.deleteMany({
+    where: { p2pGroupId: local.p2pGroupId },
+  })
+
   const [shares, peers, transfers] = await Promise.all([
     prisma.p2p_local_share.deleteMany({ where: { p2pGroupId: local.p2pGroupId } }),
     prisma.p2p_peer_cache.deleteMany({ where: { p2pGroupId: local.p2pGroupId } }),

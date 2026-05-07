@@ -153,6 +153,30 @@ export type AnnouncePayload = {
     coverUrl?: string
     mangaCount?: number
     totalSize?: number
+    /**
+     * 共享清单(可选,有变化时上报)
+     * tracker 端接收到后会写入 tracker_share_manifest,
+     * 并生成时间戳 version 返回给节点
+     */
+    manifest?: {
+      contentHash: string
+      payloadSize: number
+      payloadTruncated: number
+      payload: string // 序列化后的 JSON 字符串
+    }
+  }>
+}
+
+/** announce 响应:tracker 端返回每个 share 最新的 version */
+export type AnnounceResult = {
+  shares: Array<{
+    shareType: string
+    remoteMediaId?: number | null
+    remoteMangaId?: number | null
+    /** 该 share 在 tracker 端的最新 version(毫秒时间戳) */
+    version: number
+    /** 该 share 当前 contentHash(若上报时未变化,这里是 tracker 已存的旧 hash) */
+    contentHash: string
   }>
 }
 

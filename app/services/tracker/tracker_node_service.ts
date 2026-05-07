@@ -244,12 +244,61 @@ class TrackerNodeService {
       },
     })
 
+    // 粗粒度 manifest 变更通知:该节点所在各群内,自上次心跳以来有 manifest 变化
+    const notifications: Array<{ type: string; data?: any }> = []
+    const lastHeartbeat = existing.lastHeartbeat
+    if (lastHeartbeat) {
+      try {
+        const memberships = await prisma.tracker_membership.findMany({
+          where: { nodeId },
+          select: { trackerGroupId: true },
+        })
+        const groupIds = memberships.map((m) => m.trackerGroupId)
+        if (groupIds.length) {
+          const changes = await prisma.tracker_share_manifest.groupBy({
+            by: ['trackerGroupId'],
+            where: {
+              trackerGroupId: { in: groupIds },
+              updateTime: { gt: lastHeartbeat },
+            },
+            _count: { trackerShareManifestId: true },
+            _max: { updateTime: true },
+          })
+          if (changes.length) {
+            const groups = await prisma.tracker_group.findMany({
+              where: { trackerGroupId: { in: changes.map((c) => c.trackerGroupId) } },
+              select: { trackerGroupId: true, groupNo: true },
+            })
+            const gMap = new Map(groups.map((g) => [g.trackerGroupId, g.groupNo]))
+            for (const c of changes) {
+              const groupNo = gMap.get(c.trackerGroupId)
+              if (!groupNo) continue
+              notifications.push({
+                type: 'manifest_changed',
+                data: {
+                  groupNo,
+                  changedCount: c._count.trackerShareManifestId,
+                  serverTime: c._max.updateTime?.getTime() ?? Date.now(),
+                },
+              })
+            }
+          }
+        }
+      } catch (e) {
+        // 通知失败不影响心跳主流程
+        console.warn('[tracker] 心跳 manifest 变更检查失败:', (e as Error).message)
+      }
+    }
+
+    // reachability 失败也作为通知追加
+    if (online === 0 && verifyReason) {
+      notifications.push({ type: 'reachability_failed', data: { reason: verifyReason } })
+    }
+
     return {
       publicUrl: isLoopback ? '' : (decidedUrl || existing.publicUrl || ''),
       serverTime: Date.now(),
-      pendingNotifications: online === 0 && verifyReason
-        ? [{ type: 'reachability_failed', data: { reason: verifyReason } }]
-        : [],
+      pendingNotifications: notifications,
     }
   }
 

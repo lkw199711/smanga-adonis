@@ -12,6 +12,7 @@ import TrackerClient from './tracker_client.js'
 import p2pIdentityService from './p2p_identity_service.js'
 import { parse_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 import { reconcileGroupsWithTracker } from './p2p_group_reconcile_service.js'
+import manifestSyncService from './manifest/manifest_sync_service.js'
 
 class P2PHeartbeatService {
   private timer: NodeJS.Timeout | null = null
@@ -114,11 +115,21 @@ class P2PHeartbeatService {
                 : (runtimePort ? `${parsed.protocol}://${parsed.host}:${runtimePort}` : parsed.url)
             }
           }
-          await client.heartbeat({
+          const hb = await client.heartbeat({
             publicUrl,
             localHost: p2p.node?.lanHost || undefined,
             localPort: runtimePort,
           })
+
+          // 处理 tracker 推送的通知(粗粒度 piggyback)
+          if (hb && Array.isArray(hb.pendingNotifications)) {
+            for (const n of hb.pendingNotifications) {
+              if (n?.type === 'manifest_changed' && n?.data?.groupNo) {
+                // 异步触发该群的 manifest 增量同步,不阻塞心跳循环
+                manifestSyncService.syncGroup(String(n.data.groupNo)).catch(() => {})
+              }
+            }
+          }
         } catch (e: any) {
           const status = e?.response?.status
           // 401/403 通常意味着 tracker 不认识本节点(数据库重建/换 tracker),

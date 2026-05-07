@@ -465,9 +465,10 @@ model p2p_group {
   createTime   DateTime @default(now()) @db.DateTime(6)
   updateTime   DateTime @default(now()) @updatedAt @db.DateTime(6)
 
-  localShares p2p_local_share[]
-  peerCaches  p2p_peer_cache[]
-  transfers   p2p_transfer[]
+  localShares        p2p_local_share[]
+  peerCaches         p2p_peer_cache[]
+  transfers          p2p_transfer[]
+  peerShareManifests p2p_peer_share_manifest[]
 
   @@map("p2p_group")
 }
@@ -579,9 +580,10 @@ model tracker_group {
   createTime     DateTime     @default(now()) @db.DateTime(6)
   updateTime     DateTime     @default(now()) @updatedAt @db.DateTime(6)
 
-  memberships  tracker_membership[]
-  invites      tracker_invite[]
-  shareIndexes tracker_share_index[]
+  memberships    tracker_membership[]
+  invites        tracker_invite[]
+  shareIndexes   tracker_share_index[]
+  shareManifests tracker_share_manifest[]
 
   @@map("tracker_group")
 }
@@ -634,4 +636,80 @@ model tracker_share_index {
 
   @@unique([trackerGroupId, nodeId, shareType, remoteMediaId, remoteMangaId], map: "uniqueShareIndex")
   @@map("tracker_share_index")
+}
+
+model tracker_share_manifest {
+  trackerShareManifestId Int           @id @default(autoincrement()) @db.UnsignedInt
+  group                  tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+  trackerGroupId         Int           @db.UnsignedInt
+  nodeId                 String        @db.VarChar(64)
+  shareType              String        @default("media") @db.VarChar(32)
+  remoteMediaId          Int?          @db.UnsignedInt
+  remoteMangaId          Int?          @db.UnsignedInt
+
+  version                BigInt        @db.UnsignedBigInt
+  contentHash            String        @db.VarChar(64)
+  payloadTruncated       Int           @default(0) @db.UnsignedInt
+  payloadSize            Int           @default(0) @db.UnsignedInt
+
+  shareName              String        @db.VarChar(191)
+  coverUrl               String?       @db.VarChar(500)
+  coverSize              Int?          @db.UnsignedInt
+  describe               String?       @db.VarChar(500)
+  mangaCount             Int           @default(0) @db.UnsignedInt
+  chapterCount           Int           @default(0) @db.UnsignedInt
+  totalSize              BigInt?       @db.UnsignedBigInt
+
+  payload                String        @db.MediumText
+
+  createTime             DateTime      @default(now()) @db.DateTime(6)
+  updateTime             DateTime      @default(now()) @updatedAt @db.DateTime(6)
+
+  @@unique([trackerGroupId, nodeId, shareType, remoteMediaId, remoteMangaId], map: "uniqueShareManifest")
+  @@index([trackerGroupId, updateTime], map: "idxShareManifestUpdate")
+  @@map("tracker_share_manifest")
+}
+
+model p2p_local_share_manifest {
+  p2pLocalShareManifestId Int      @id @default(autoincrement()) @db.UnsignedInt
+  p2pLocalShareId         Int      @unique(map: "uniqueLocalShareManifest") @db.UnsignedInt
+  version                 BigInt   @db.UnsignedBigInt
+  contentHash             String   @db.VarChar(64)
+  payloadSize             Int      @default(0) @db.UnsignedInt
+  payloadTruncated        Int      @default(0) @db.UnsignedInt
+  payload                 String   @db.MediumText
+  lastAnnounceTime        DateTime @default(now()) @db.DateTime(6)
+  updateTime              DateTime @default(now()) @updatedAt @db.DateTime(6)
+
+  @@map("p2p_local_share_manifest")
+}
+
+model p2p_peer_share_manifest {
+  p2pPeerShareManifestId Int       @id @default(autoincrement()) @db.UnsignedInt
+  group                  p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pGroupId             Int       @db.UnsignedInt
+  ownerNodeId            String    @db.VarChar(64)
+  shareType              String    @default("media") @db.VarChar(32)
+  remoteMediaId          Int?      @db.UnsignedInt
+  remoteMangaId          Int?      @db.UnsignedInt
+
+  version                BigInt    @db.UnsignedBigInt
+  contentHash            String    @db.VarChar(64)
+  payloadTruncated       Int       @default(0) @db.UnsignedInt
+
+  shareName              String    @db.VarChar(191)
+  coverUrl               String?   @db.VarChar(500)
+  describe               String?   @db.VarChar(500)
+  mangaCount             Int       @default(0) @db.UnsignedInt
+  chapterCount           Int       @default(0) @db.UnsignedInt
+  totalSize              BigInt?   @db.UnsignedBigInt
+
+  payload                String?   @db.MediumText
+
+  fetchTime              DateTime  @default(now()) @db.DateTime(6)
+  updateTime             DateTime  @default(now()) @updatedAt @db.DateTime(6)
+
+  @@unique([p2pGroupId, ownerNodeId, shareType, remoteMediaId, remoteMangaId], map: "uniquePeerShareManifest")
+  @@index([p2pGroupId, updateTime], map: "idxPeerShareManifestUpdate")
+  @@map("p2p_peer_share_manifest")
 }

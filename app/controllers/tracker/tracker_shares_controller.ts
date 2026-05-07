@@ -51,6 +51,53 @@ export default class TrackerSharesController {
   }
 
   /**
+   * GET /tracker/group/:groupNo/manifests?since=&nodeId=
+   * 批量拉取该群所有节点的 manifest 摘要(不含 payload)
+   * - since: 毫秒时间戳,只返回 updateTime > since 的(增量)
+   * - nodeId: 仅查指定节点(可选)
+   */
+  async manifests({ params, request, response }: HttpContext) {
+    try {
+      const { since, nodeId } = request.only(['since', 'nodeId'])
+      const data = await trackerShareService.listManifestSummaries(
+        params.groupNo,
+        {
+          since: since ? Number(since) : undefined,
+          nodeId: nodeId || undefined,
+        }
+      )
+      return response.json(new SResponse({ code: 0, message: '', data }))
+    } catch (err: any) {
+      log_tracker_error('manifest.list', err)
+      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+    }
+  }
+
+  /**
+   * GET /tracker/group/:groupNo/manifest?nodeId=&shareType=&remoteMediaId=&remoteMangaId=
+   * 拉取单个 manifest 的完整 payload
+   */
+  async manifest({ params, request, response }: HttpContext) {
+    try {
+      const { nodeId, shareType, remoteMediaId, remoteMangaId } = request.only([
+        'nodeId', 'shareType', 'remoteMediaId', 'remoteMangaId',
+      ])
+      if (!nodeId || !shareType) throw new Error('nodeId 和 shareType 必填')
+
+      const data = await trackerShareService.getManifestDetail(params.groupNo, {
+        nodeId,
+        shareType,
+        remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
+        remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
+      })
+      return response.json(new SResponse({ code: 0, message: '', data }))
+    } catch (err: any) {
+      log_tracker_error('manifest.detail', err)
+      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+    }
+  }
+
+  /**
    * GET /tracker/group/:groupNo/shares?page=&pageSize=&keyword=
    */
   async index({ params, request, response }: HttpContext) {

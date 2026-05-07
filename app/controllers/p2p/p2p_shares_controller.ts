@@ -14,7 +14,8 @@ import { get_config } from '#utils/index'
 import TrackerClient from '#services/p2p/tracker_client'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import { log_p2p_error } from '#utils/p2p_log'
-import type { AnnouncePayload } from '#type/p2p'
+import type { AnnouncePayload, AnnounceResult } from '#type/p2p'
+import { buildShareManifest } from '#services/p2p/manifest/manifest_builder'
 
 function get_client(): TrackerClient | null {
   const cfg = get_config()?.p2p
@@ -31,6 +32,11 @@ function get_client(): TrackerClient | null {
 
 /**
  * 根据本地 p2p_local_share 组装并上报到 tracker
+ *
+ * 升级版(支持共享清单 manifest):
+ *  1. 对每个 share 调用 buildShareManifest 生成 manifest
+ *  2. 与 p2p_local_share_manifest 缓存的 contentHash 比对,变化才把 manifest 塞进 payload
+ *  3. announce 成功后,用 tracker 返回的 version 回写 p2p_local_share_manifest 缓存
  */
 async function announce_group(groupNo: string) {
   try {
@@ -41,24 +47,114 @@ async function announce_group(groupNo: string) {
     const shares = await prisma.p2p_local_share.findMany({
       where: { p2pGroupId: group.p2pGroupId, enable: 1 },
     })
-    const payload: AnnouncePayload = {
-      shares: await Promise.all(
-        shares.map(async (s) => {
-          let mangaCount: number | undefined
-          if (s.shareType === 'media' && s.mediaId) {
-            mangaCount = await prisma.manga.count({ where: { mediaId: s.mediaId } })
-          }
-          return {
-            shareType: s.shareType,
-            remoteMediaId: s.mediaId || undefined,
-            remoteMangaId: s.mangaId || undefined,
-            shareName: s.shareName,
-            mangaCount,
-          }
+
+    // 预先查出所有现存 manifest 缓存(按 p2pLocalShareId 索引)
+    const localShareIds = shares.map((s) => s.p2pLocalShareId)
+    const cachedManifests = localShareIds.length
+      ? await prisma.p2p_local_share_manifest.findMany({
+          where: { p2pLocalShareId: { in: localShareIds } },
         })
-      ),
+      : []
+    const cacheByShareId = new Map(cachedManifests.map((m) => [m.p2pLocalShareId, m]))
+
+    type BuiltShare = {
+      share: typeof shares[number]
+      mangaCount: number | undefined
+      manifest: Awaited<ReturnType<typeof buildShareManifest>>
+      changed: boolean
     }
-    await client.announceShares(groupNo, payload)
+
+    const built: BuiltShare[] = await Promise.all(
+      shares.map(async (s): Promise<BuiltShare> => {
+        let mangaCount: number | undefined
+        if (s.shareType === 'media' && s.mediaId) {
+          mangaCount = await prisma.manga.count({ where: { mediaId: s.mediaId } })
+        }
+
+        const manifest = await buildShareManifest({
+          p2pLocalShareId: s.p2pLocalShareId,
+          shareType: s.shareType,
+          mediaId: s.mediaId,
+          mangaId: s.mangaId,
+          shareName: s.shareName,
+        })
+
+        let changed = false
+        if (manifest) {
+          const cached = cacheByShareId.get(s.p2pLocalShareId)
+          changed = !cached || cached.contentHash !== manifest.contentHash
+        }
+
+        return { share: s, mangaCount, manifest, changed }
+      })
+    )
+
+    // 组装 announce payload
+    const payload: AnnouncePayload = {
+      shares: built.map(({ share: s, mangaCount, manifest, changed }) => {
+        const item: AnnouncePayload['shares'][number] = {
+          shareType: s.shareType,
+          remoteMediaId: s.mediaId || undefined,
+          remoteMangaId: s.mangaId || undefined,
+          shareName: s.shareName,
+          mangaCount,
+        }
+        // 仅当 manifest 生成成功且 hash 变化才上报(节省带宽)
+        if (manifest && changed) {
+          item.coverUrl = manifest.payload.share.coverUrl || undefined
+          item.totalSize = manifest.payload.stats.totalSize
+          item.manifest = {
+            contentHash: manifest.contentHash,
+            payloadSize: manifest.payloadSize,
+            payloadTruncated: manifest.payloadTruncated ? 1 : 0,
+            payload: manifest.payloadJson,
+          }
+        }
+        return item
+      }),
+    }
+
+    const result = (await client.announceShares(groupNo, payload)) as AnnounceResult | undefined
+
+    // 把 tracker 返回的 version 回写到本地 manifest 缓存
+    //   - 只有当本次 manifest 生成成功且 changed 时才需要更新缓存
+    //   - 老的 tracker 不返回 result.shares,这种情况下用客户端时间戳作降级 version
+    const versionByKey = new Map<string, { version: number; contentHash: string }>()
+    if (result && Array.isArray(result.shares)) {
+      for (const r of result.shares) {
+        const k = `${r.shareType}|${r.remoteMediaId ?? ''}|${r.remoteMangaId ?? ''}`
+        versionByKey.set(k, { version: Number(r.version), contentHash: r.contentHash })
+      }
+    }
+
+    for (const { share: s, manifest, changed } of built) {
+      if (!manifest || !changed) continue
+      const key = `${s.shareType}|${s.mediaId ?? ''}|${s.mangaId ?? ''}`
+      const fromTracker = versionByKey.get(key)
+      const version = BigInt(fromTracker?.version || Date.now())
+      const contentHash = fromTracker?.contentHash || manifest.contentHash
+
+      await prisma.p2p_local_share_manifest.upsert({
+        where: { p2pLocalShareId: s.p2pLocalShareId },
+        create: {
+          p2pLocalShareId: s.p2pLocalShareId,
+          version,
+          contentHash,
+          payloadSize: manifest.payloadSize,
+          payloadTruncated: manifest.payloadTruncated ? 1 : 0,
+          payload: manifest.payloadJson,
+          lastAnnounceTime: new Date(),
+        },
+        update: {
+          version,
+          contentHash,
+          payloadSize: manifest.payloadSize,
+          payloadTruncated: manifest.payloadTruncated ? 1 : 0,
+          payload: manifest.payloadJson,
+          lastAnnounceTime: new Date(),
+        },
+      })
+    }
   } catch (e: any) {
     log_p2p_error('share.announce(后台异步)', e)
   }
@@ -262,6 +358,10 @@ export default class P2PSharesController {
       return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
     }
     try {
+      // 先清理关联的 manifest 缓存(无外键级联,需手动)
+      await prisma.p2p_local_share_manifest.deleteMany({
+        where: { p2pLocalShareId: id },
+      })
       await prisma.p2p_local_share.delete({ where: { p2pLocalShareId: id } })
 
       const group = await prisma.p2p_group.findUnique({ where: { p2pGroupId: existed.p2pGroupId } })
