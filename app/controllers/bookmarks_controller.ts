@@ -173,7 +173,7 @@ export default class BookmarksController {
     const bookmarks = await prisma.bookmark.findMany({
       where: {
         bookmarkId: {
-          in: bookmarkIds.map((id) => Number(id))
+          in: bookmarkIds.map((id: string) => Number(id))
         }
       }
     })
@@ -189,7 +189,7 @@ export default class BookmarksController {
     const deleteResponse = await prisma.bookmark.deleteMany({
       where: {
         bookmarkId: {
-          in: bookmarkIds.map((id) => Number(id))
+          in: bookmarkIds.map((id: string) => Number(id))
         }
       }
     })

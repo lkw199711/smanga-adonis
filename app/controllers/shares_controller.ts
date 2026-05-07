@@ -155,7 +155,7 @@ export default class SharesController {
             })
 
             // 检查章节是否有外置封面
-            chapters.forEach((chapter) => {
+            chapters.forEach((chapter: any) => {
                 const dirOutExt = chapter.chapterPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '');
 
                 if (sourceWebsite === 'toptoon') {
@@ -284,7 +284,7 @@ export default class SharesController {
         })
 
         // 检查章节是否有外置封面
-        chapters.forEach((chapter) => {
+        chapters.forEach((chapter: any) => {
             const dirOutExt = chapter.chapterPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '');
 
             if (sourceWebsite === 'toptoon') {
@@ -352,7 +352,7 @@ export default class SharesController {
             },
         })
 
-        mangas.forEach((manga) => {
+        mangas.forEach((manga: any) => {
             const dirOutExt = manga.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
             const dirMeta = dirOutExt + '-smanga-info'
             const dirMetaNew = dirOutExt + '/.smanga'

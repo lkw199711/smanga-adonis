@@ -72,6 +72,7 @@ const syncApi = {
     }
 }
 
+// @ts-ignore - 保留以备后续下载文件场景使用
 async function download_file1(serverUrl: string, filePath: string, savePath: string): Promise<void> {
     try {
         // 创建写入流

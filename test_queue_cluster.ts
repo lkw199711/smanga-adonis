@@ -13,11 +13,11 @@ const appProcess = fork(path.join(__dirname, 'server.js'), [], {
 });
 
 // 监听子进程输出
-appProcess.stdout.on('data', (data) => {
+appProcess.stdout.on('data', (data: Buffer) => {
   console.log(`[应用输出]: ${data}`);
 });
 
-appProcess.stderr.on('data', (data) => {
+appProcess.stderr.on('data', (data: Buffer) => {
   console.error(`[应用错误]: ${data}`);
 });
 

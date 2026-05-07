@@ -1,7 +1,7 @@
 import { join } from 'path'
 import * as fs from 'fs'
 import prisma from './prisma.js'
-import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config, read_json } from '#utils/index'
+import { path_compress, path_poster, path_bookmark, s_delete, path_cache, get_os, get_config, set_config } from '#utils/index'
 import { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron, create_tracker_cleanup_cron } from '#services/cron_service'
 import { v4 as uuidv4 } from 'uuid'
 

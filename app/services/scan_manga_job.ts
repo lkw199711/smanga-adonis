@@ -14,11 +14,11 @@ import {
   path_meta,
 } from '#utils/index'
 import { S } from '../utils/convertText.js'
-import { extract_cover, extract_metadata, extractFirstImageSyncOrder } from '#utils/unzip'
+import { extract_cover, extract_metadata } from '#utils/unzip'
 import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
 import { TaskPriority } from '../type/index.js'
-import { addTask, scanQueue } from '#services/queue_service'
+import { addTask } from '#services/queue_service'
 import { error_log, insert_manga_scan_log } from '#utils/log'
 import { path as sqlPathType, media as sqlMediaType } from '@prisma/client'
 import { metaKeyType } from '../type/index.js'
@@ -38,6 +38,7 @@ export default class ScanMangaJob {
   private cachePath: string = ''
   private nonNumericChapterCounter: number | null = null
   private meta: any = null
+  // @ts-ignore - 保留以便后续扫描忽略隐藏文件特性使用
   private ignoreHiddenFiles: boolean
   private tagColor: string
   private isCloudMedia: boolean = false
@@ -941,7 +942,6 @@ export default class ScanMangaJob {
     const posterName = `${posterPath}/smanga_manga_${this.mangaRecord.mangaId}.jpg`
     // 压缩目标图片大小
     const maxSizeKB = get_config()?.compress?.poster ?? 300
-    const doNotCopyCover = get_config()?.scan?.doNotCopyCover ?? 1
     // 源封面
     let sourcePoster = ''
     const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')

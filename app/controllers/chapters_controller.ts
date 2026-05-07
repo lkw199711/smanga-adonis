@@ -4,7 +4,7 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
-import { path_compress, order_params, extract_numbers, delay, get_config, s_delete } from '#utils/index'
+import { path_compress, order_params, extract_numbers, get_config, s_delete } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { unzipFile } from '#utils/unzip'
@@ -243,7 +243,7 @@ export default class ChaptersController {
             compressStatus: 'compressed',
           },
         })
-        .catch((error: any) => {
+        .catch((_error: any) => {
           imagesResponse = new SResponse({
             code: 0,
             message: '',
@@ -294,7 +294,7 @@ export default class ChaptersController {
             compressStatus: 'compressing',
           },
         })
-        .catch((error: any) => {
+        .catch((_error: any) => {
           imagesResponse = new SResponse({
             code: 0,
             message: '',

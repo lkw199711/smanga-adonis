@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { get_config } from '#utils/index'
 // import { TaskPriority } from '#type/index'
 import { SResponse } from '#interfaces/response'
 import { createRequire } from 'module'
@@ -9,7 +8,7 @@ import * as fs from 'fs'
 const unrar = require('node-unrar-js')
 import { is_img, write_log } from '#utils/index'
 import { extract7z, Un7z } from '#utils/un7z'
-import { unzipFile, extractFirstImageSyncOrder, extract_metadata } from '#utils/unzip'
+import { unzipFile, extract_metadata } from '#utils/unzip'
 const AdmZip = require('adm-zip')
 // import { createCanvas, loadImage } from 'canvas'
 import sharp from 'sharp';
@@ -17,7 +16,6 @@ import { parseStringPromise } from 'xml2js'
 
 export default class TestsController {
   public async index({ response }: HttpContext) {
-    const config = get_config()
     const str = 'A:\\06download\\02韩漫'
     const fsStat = fs.statSync(str)
     const mtimeMs = fsStat.mtime
@@ -203,20 +201,18 @@ export default class TestsController {
   }
 
   public async zip2({ response }: HttpContext) {
-    const rarFilePath = 'D:\\第1話.cbz'
     const rarFilePath1 = 'A:\\06download\\00漫画\\黄金拼图\\乌菈菈迷路帖\\第1话 第一话.cbz'
-    const outputDir = 'A:\\05temp\\09test\\解压后'
 
     const zip = new AdmZip(rarFilePath1)
 
     const ComicInfo = zip.readAsText('ComicInfo.xml')
-    const ComicInfoJson = await parseStringPromise(ComicInfo)
+    await parseStringPromise(ComicInfo)
 
-    const entries = zip.getEntries()
+    zip.getEntries()
     console.log(ComicInfo)
 
     const json = await extract_metadata(rarFilePath1)
-    
+
 
     response.status(200).send(json)
   }
@@ -231,7 +227,7 @@ async function mergeImages(imagePaths: string[], outputPath: string, targetWidth
     const buffers = await Promise.all(images);
 
     // 创建合并后的图像
-    const composite = await sharp({
+    await sharp({
       create: {
         width: (targetWidth + gap) * images.length - gap, // 总宽度，减去最后一个间隙
         height: targetHeight, // 高度

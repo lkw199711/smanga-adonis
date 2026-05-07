@@ -7,7 +7,7 @@
  */
 import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
-import { addTask, scanQueue } from '#services/queue_service'
+import { addTask } from '#services/queue_service'
 
 export default class DeleteMediaJob {
   private mediaId: number

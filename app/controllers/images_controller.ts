@@ -2,7 +2,6 @@ import { is_img, path_poster } from '#utils/index'
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 import path from 'path'
-import { randomUUID } from 'crypto'
 import { SResponse } from '#interfaces/response'
 
 export default class ImagesController {

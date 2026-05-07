@@ -3,7 +3,7 @@ import { ListResponse, SResponse } from '../interfaces/response.js'
 import { scanQueue } from '#services/queue_service'
 
 export default class TasksController {
-  async select({ request, response }: HttpContext) {
+  async select({ response }: HttpContext) {
     // const list = await scanQueue.getJobs(['active', 'waiting', 'completed', 'failed', 'delayed'])
     const list = await scanQueue.getJobs(['active', 'waiting'])
     // const count = await scanQueue.getJobCountByTypes(['active', 'waiting'])

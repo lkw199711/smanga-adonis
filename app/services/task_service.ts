@@ -90,41 +90,41 @@ export default class TaskProcess {
    */
   public async process(task: Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput) {
     try {
-      const argsVal = sql_parse_json(task.args as string)
+      const argsVal = sql_parse_json(task.args as string) as any
 
       switch (task.command) {
         case 'taskScanPath':
           //扫描任务调用
           console.log('执行扫描任务')
-          await scan_job(argsVal)
+          await new scan_job(argsVal).run()
           break
         case 'taskScanManga':
           console.log('执行扫描漫画任务')
           //扫描漫画任务调用
-          await scan_manga_job(argsVal)
+          await new scan_manga_job(argsVal).run()
           break
         case 'deleteMedia':
           //删除媒体库
           console.log('删除媒体库')
-          await delete_media_job(argsVal)
+          await new delete_media_job(argsVal).run()
           break
         case 'deletePath':
           //删除路径
           console.log('删除路径')
-          await delete_path_job(argsVal)
+          await new delete_path_job(argsVal).run()
           break
         case 'deleteManga':
           //删除漫画
           console.log('删除漫画')
-          await delete_manga_job(argsVal)
+          await new delete_manga_job(argsVal).run()
           break
         case 'deleteChapter':
           //删除章节
           console.log('删除章节')
-          await delete_chapter_job(argsVal)
+          await new delete_chapter_job(argsVal).run()
           break
         case 'copyPoster':
-          await copy_poster_job(argsVal);
+          await new copy_poster_job(argsVal).run();
         default:
           break
       }

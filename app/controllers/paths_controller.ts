@@ -4,7 +4,6 @@ import { ListResponse, SResponse } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { create_scan_cron } from '#services/cron_service'
-import { delay } from '#utils/index'
 import fs from 'fs'
 
 export default class PathsController {
