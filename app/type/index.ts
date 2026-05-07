@@ -14,6 +14,7 @@ enum TaskPriority {
   p2pPullMedia = 600000,
   p2pPullManga = 610000,
   p2pPullChapter = 620000,
+  p2pPullMeta = 615000,
   clearCompress = 1000000,
   default = 900000,
 }

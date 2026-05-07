@@ -1,22 +1,30 @@
 /**
- * 拉取元数据目录子任务
+ * 拉取元数据 Bull Job(C 方案:独立 Bull 任务)
  *
- * 职责:
- *  - 从已获取的漫画 tree 中筛出"元数据相关文件"并单独入池
- *  - 目的是让元数据先于/与正文数据一起就绪,前端扫描阶段可尽早拿到封面与信息
+ * command: 'taskP2PPullMeta'
  *
- * 识别为元数据的文件(按 relPath 匹配,大小写不敏感):
- *  - `.smanga/`  目录下所有文件(smanga 私有元数据,如封面、标签)
- *  - `series.json`  系列元数据(Kavita/Komga 规范)
- *  - `ComicInfo.xml`  章节/系列内信息(广泛使用)
- *  - `cover.*`  根目录封面
+ * args:
+ *  - transferId:   父 p2p_transfer 主键
+ *  - groupNo:      群号
+ *  - mangaId:      所属漫画 id(用于 seeds 发现)
+ *  - files:        由父 MangaJob 已筛好的元数据文件清单(TreeFileEntry[])
+ *  - baseDir:      本地保存目录(与漫画主体一致,不套层)
+ *  - isSubTask:    true=父任务的子任务(完成后 notifyDone);false=独立任务(罕见)
  *
- * 依赖:需要调用方提供已经 fetch 到的 tree(避免重复请求)
+ * 设计要点:
+ *  - 本 Job 不自己 fetch tree(由父 MangaJob 已拉过并按元数据规则筛好传入),避免重复请求
+ *  - 但仍独立发现 seeds 并起小下载池,保留多 seed 并行能力
  */
 
-import path from 'path'
-import type { IPullSubJob, PullContext, TreeResponseData } from './pull_context.js'
-import { treeToFileTasks, enqueueTasks } from './pull_context.js'
+import prisma from '#start/prisma'
+import { treeFilesToTasks, type TreeFileEntry } from './pull_context.js'
+import {
+  ensureDir,
+  isTransferCanceled,
+  createThrottledProgressReporter,
+  runChildDownload,
+} from './pull_shared.js'
+import { notifyDone } from './pull_child_tracker.js'
 
 /** 判断 relPath 是否为元数据文件 */
 export function isMetaFile(relPath: string): boolean {
@@ -40,39 +48,108 @@ export function isMetaFile(relPath: string): boolean {
   return false
 }
 
-export class PullMetaSubJob implements IPullSubJob {
-  readonly name = 'PullMetaSubJob'
+export type PullMetaJobArgs = {
+  transferId: number
+  groupNo: string
+  mangaId: number
+  files: TreeFileEntry[]
+  baseDir: string
+  isSubTask?: boolean
+}
 
-  /**
-   * @param tree     已经 fetch 到的漫画 tree(通常由 PullMangaSubJob 拿到后传入)
-   * @param baseDir  本地保存根目录(与漫画主体保持一致,不重复套层)
-   */
-  constructor(
-    private tree: TreeResponseData,
-    private baseDir: string
-  ) {}
+export default class PullMetaJob {
+  private args: PullMetaJobArgs
 
-  async prepare(ctx: PullContext): Promise<number> {
-    if (await ctx.isCanceled()) return 0
+  constructor(args: PullMetaJobArgs) {
+    this.args = args
+  }
 
-    if (!this.tree || !this.tree.files?.length) return 0
-    if (this.tree.isSingleFile) {
-      // 单文件漫画(如 xxx.zip),漫画目录里不会有独立元数据文件
-      return 0
+  async run(): Promise<void> {
+    const { transferId, mangaId, groupNo, files, baseDir, isSubTask } = this.args
+    const logTag = `p2p-pull-meta#${transferId}-m${mangaId}`
+
+    if (await isTransferCanceled(transferId)) {
+      console.log(`[${logTag}] 已取消,跳过`)
+      if (isSubTask) {
+        await notifyDone(transferId, { ok: false, downloadedBytes: 0, canceled: true })
+      }
+      return
     }
 
-    const metaTasks = treeToFileTasks(this.tree, this.baseDir, isMetaFile)
-    if (!metaTasks.length) {
-      console.log(`[${ctx.logTag}] ${this.name} 无元数据文件 baseDir=${path.basename(this.baseDir)}`)
-      return 0
+    // 空清单直接视为成功(常见于单文件漫画)
+    if (!files || !files.length) {
+      console.log(`[${logTag}] 元数据文件清单为空,直接完成`)
+      if (isSubTask) {
+        await notifyDone(transferId, { ok: true, downloadedBytes: 0 })
+      } else {
+        await this.finalizeStandalone(transferId, true, 0)
+      }
+      return
     }
 
-    enqueueTasks(ctx, metaTasks)
-    const bytes = metaTasks.reduce((a, t) => a + (t.size || 0), 0)
-    console.log(
-      `[${ctx.logTag}] ${this.name} 入池完成 baseDir=${path.basename(this.baseDir)} ` +
-      `files=${metaTasks.length} bytes=${bytes}`
-    )
-    return metaTasks.length
+    console.log(`[${logTag}] 开始 files=${files.length} baseDir=${baseDir}`)
+    ensureDir(baseDir)
+
+    const reporter = createThrottledProgressReporter(transferId)
+    let downloadedBytes = 0
+    let ok = true
+    let errorMsg: string | undefined
+
+    try {
+      const tasks = treeFilesToTasks(files, baseDir)
+      downloadedBytes = await runChildDownload({
+        transferId,
+        groupNo,
+        discoverArgs: {
+          groupNo,
+          shareType: 'manga',
+          remoteMangaId: mangaId,
+        },
+        tasks,
+        logTag,
+        reporter,
+      })
+      console.log(`[${logTag}] 完成 bytes=${downloadedBytes}`)
+    } catch (e: any) {
+      ok = false
+      errorMsg = e?.message || String(e)
+      console.error(`[${logTag}] 失败: ${errorMsg}`)
+      await reporter.flush().catch(() => {})
+    }
+
+    if (isSubTask) {
+      await notifyDone(transferId, { ok, downloadedBytes, error: errorMsg })
+    } else {
+      await this.finalizeStandalone(transferId, ok, downloadedBytes, errorMsg)
+    }
+  }
+
+  private async finalizeStandalone(
+    transferId: number,
+    ok: boolean,
+    _downloadedBytes: number,
+    errorMsg?: string
+  ) {
+    const tag = `p2p-pull-meta#${transferId}`
+    try {
+      const cur = await prisma.p2p_transfer.findUnique({
+        where: { p2pTransferId: transferId },
+        select: { status: true },
+      })
+      const isCanceled = cur?.status === 'canceled'
+
+      await prisma.p2p_transfer.update({
+        where: { p2pTransferId: transferId },
+        data: {
+          status: isCanceled ? 'canceled' : ok ? 'success' : 'failed',
+          progress: ok && !isCanceled ? 100 : undefined,
+          error: ok ? null : errorMsg || 'unknown error',
+          endTime: new Date(),
+          speedBps: 0,
+        },
+      })
+    } catch (e: any) {
+      console.warn(`[${tag}] finalize 失败: ${e?.message || e}`)
+    }
   }
 }

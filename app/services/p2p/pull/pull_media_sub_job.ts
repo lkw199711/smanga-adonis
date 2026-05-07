@@ -1,75 +1,167 @@
 /**
- * 拉取媒体库子任务
+ * 拉取媒体库 Bull Job(C 方案:独立 Bull 任务 + 派生 MangaJob)
  *
- * 职责:
- *  1. 调对端 /p2p/serve/media/:id/mangas 获取该媒体库下的全部漫画列表
- *  2. 为每本漫画派生一个 PullMangaSubJob,把它们串行展开(仅限 tree 阶段)
- *     - tree 阶段串行:避免同时对对端发起 N 个 /tree 请求,平滑压力
- *     - 下载阶段并行:所有 FileTask 入同一个 pool,多 seed 多 worker 同时消费
+ * command: 'taskP2PPullMedia'
  *
- * 这里的"串行 tree + 并行下载"设计正是方案 B 的核心:子任务只是内存中的逻辑
- * 阶段,不破坏下游多节点并行下载的特性。
+ * args:
+ *  - transferId:  父 p2p_transfer 主键(就是 media transfer 本身)
+ *  - groupNo:     群号
+ *  - mediaId:     对端 media 库 id
+ *  - parentDir:   本地保存根目录(通常是 transfer.receivedPath)
+ *
+ * 行为:
+ *  1. 发现 seeds(media 维度)
+ *  2. 调 /media/:id/mangas 拿漫画列表
+ *  3. initTracker(transferId, expected=N_mangas) —— 初始以\"漫画本数\"作为预期
+ *     (后续每本目录漫画的 MangaJob 会调 transferSelfToChildren 动态扩展)
+ *  4. 为每本漫画 addTask('taskP2PPullManga', {isSubTask: true})
+ *  5. MediaJob 返回,真正完成由底层 Meta/Chapter/单文件 Manga 的 notifyDone 聚合
+ *
+ * 无子任务的情形:
+ *  - 媒体库下 0 本漫画 → 不 initTracker,直接 finalize success
  */
 
-import type { IPullSubJob, PullContext } from './pull_context.js'
+import prisma from '#start/prisma'
+import { addTask } from '#services/queue_service'
+import { TaskPriority } from '../../../type/index.js'
 import { fetchMediaMangas } from './pull_tree_fetcher.js'
-import { PullMangaSubJob } from './pull_manga_sub_job.js'
+import {
+  ensureDir,
+  isTransferCanceled,
+  buildHeaders,
+  discoverSeeds,
+} from './pull_shared.js'
+import { initTracker } from './pull_child_tracker.js'
 
-export class PullMediaSubJob implements IPullSubJob {
-  readonly name = 'PullMediaSubJob'
+export type PullMediaJobArgs = {
+  transferId: number
+  groupNo: string
+  mediaId: number
+  parentDir: string
+}
 
-  /**
-   * @param mediaId   对端媒体库 id
-   * @param parentDir 本地父级目录(通常为 ctx.receivedPath)
-   */
-  constructor(
-    private mediaId: number,
-    private parentDir: string
-  ) {}
+export default class PullMediaJob {
+  private args: PullMediaJobArgs
 
-  async prepare(ctx: PullContext): Promise<number> {
-    if (await ctx.isCanceled()) {
-      console.log(`[${ctx.logTag}] ${this.name} 已取消 mediaId=${this.mediaId}`)
-      return 0
+  constructor(args: PullMediaJobArgs) {
+    this.args = args
+  }
+
+  async run(): Promise<void> {
+    const { transferId, mediaId, groupNo, parentDir } = this.args
+    const logTag = `p2p-pull-media#${transferId}-M${mediaId}`
+
+    if (await isTransferCanceled(transferId)) {
+      console.log(`[${logTag}] 已取消,跳过`)
+      return
     }
 
-    console.log(`[${ctx.logTag}] ${this.name} 开始 mediaId=${this.mediaId}`)
+    console.log(`[${logTag}] 开始 mediaId=${mediaId} parentDir=${parentDir}`)
 
-    let mangas: any[] = []
+    // 把 transfer 状态切换为 running(独立入口调用本 Job 时)
+    await prisma.p2p_transfer
+      .update({
+        where: { p2pTransferId: transferId },
+        data: {
+          status: 'running',
+          startTime: new Date(),
+          progress: 0,
+          downloadedBytes: 0n,
+          speedBps: 0,
+        },
+      })
+      .catch(() => {})
+
+    ensureDir(parentDir)
+
+    let mangas: Array<{ mangaId: number; mangaName: string }> = []
     try {
-      mangas = await fetchMediaMangas(ctx.seeds, ctx.headers, ctx.logTag, this.mediaId)
-    } catch (err: any) {
-      // 媒体库列表都拿不到视为致命错误,交由父任务处理
-      throw new Error(`获取媒体库漫画列表失败 mediaId=${this.mediaId}: ${err?.message || err}`)
+      const headers = buildHeaders(groupNo)
+      const seeds = await discoverSeeds({
+        groupNo,
+        shareType: 'media',
+        remoteMediaId: mediaId,
+      })
+      if (!seeds.length) throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
+      const raw = await fetchMediaMangas(seeds, headers, logTag, mediaId)
+      mangas = raw
+        .filter((m: any) => m && m.mangaId)
+        .map((m: any) => ({
+          mangaId: Number(m.mangaId),
+          mangaName: String(m.mangaName || ''),
+        }))
+    } catch (e: any) {
+      const msg = e?.message || String(e)
+      console.error(`[${logTag}] 获取漫画列表失败: ${msg}`)
+      await this.fail(transferId, msg)
+      return
     }
 
     if (!mangas.length) {
-      console.warn(`[${ctx.logTag}] ${this.name} mediaId=${this.mediaId} 漫画列表为空`)
-      return 0
+      console.warn(`[${logTag}] 漫画列表为空,直接完成`)
+      await this.finalize(transferId, true, 0, '媒体库下无漫画')
+      return
     }
 
-    console.log(
-      `[${ctx.logTag}] ${this.name} mediaId=${this.mediaId} 共 ${mangas.length} 本漫画,开始逐本展开 tree`
-    )
+    // 以漫画本数作为初始 expected;MangaJob 处理目录漫画时会 transferSelfToChildren 动态扩展
+    initTracker(transferId, mangas.length, 0)
 
-    let total = 0
+    console.log(`[${logTag}] 共 ${mangas.length} 本漫画,派发 MangaJob 子任务`)
+
     for (const m of mangas) {
-      if (await ctx.isCanceled()) {
-        console.log(`[${ctx.logTag}] ${this.name} 展开过程中检测到取消,中止后续漫画`)
+      if (await isTransferCanceled(transferId)) {
+        console.log(`[${logTag}] 派发过程中检测到取消,中止`)
         break
       }
-      if (!m?.mangaId) continue
-      const mangaJob = new PullMangaSubJob(
-        Number(m.mangaId),
-        this.parentDir,
-        m.mangaName
-      )
-      total += await mangaJob.prepare(ctx)
+      await addTask({
+        taskName: `p2p-pull-manga-${m.mangaId}`,
+        command: 'taskP2PPullManga',
+        args: {
+          transferId,
+          groupNo,
+          mangaId: m.mangaId,
+          parentDir,
+          fallbackName: m.mangaName,
+          isSubTask: true,
+        },
+        priority: TaskPriority.p2pPullManga,
+      })
     }
 
-    console.log(
-      `[${ctx.logTag}] ${this.name} 完成 mediaId=${this.mediaId} 共入池 ${total} 个文件`
-    )
-    return total
+    console.log(`[${logTag}] 派发完成,等待子任务结算`)
+  }
+
+  private async fail(transferId: number, msg: string) {
+    await prisma.p2p_transfer
+      .update({
+        where: { p2pTransferId: transferId },
+        data: { status: 'failed', error: msg, endTime: new Date(), speedBps: 0 },
+      })
+      .catch(() => {})
+  }
+
+  private async finalize(
+    transferId: number,
+    ok: boolean,
+    _downloadedBytes: number,
+    note?: string
+  ) {
+    const cur = await prisma.p2p_transfer.findUnique({
+      where: { p2pTransferId: transferId },
+      select: { status: true },
+    })
+    const isCanceled = cur?.status === 'canceled'
+    await prisma.p2p_transfer
+      .update({
+        where: { p2pTransferId: transferId },
+        data: {
+          status: isCanceled ? 'canceled' : ok ? 'success' : 'failed',
+          progress: ok && !isCanceled ? 100 : undefined,
+          error: ok ? note || null : note || 'unknown error',
+          endTime: new Date(),
+          speedBps: 0,
+        },
+      })
+      .catch(() => {})
   }
 }

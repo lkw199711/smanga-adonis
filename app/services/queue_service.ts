@@ -13,6 +13,10 @@ import SyncChapterJob from './sync_chapter_job.js'
 import CompressChapterJob from './compress_chapter_job.js'
 import ClearCompressJob from './clear_compress_job.js'
 import P2PPullJob from './p2p/p2p_pull_job.js'
+import PullMediaJob from './p2p/pull/pull_media_sub_job.js'
+import PullMangaJob from './p2p/pull/pull_manga_sub_job.js'
+import PullChapterJob from './p2p/pull/pull_chapter_sub_job.js'
+import PullMetaJob from './p2p/pull/pull_meta_sub_job.js'
 import { get_config } from '#utils/index'
 
 import Bull from 'bull'
@@ -92,6 +96,20 @@ scanQueue.process('sync', queueConfig.concurrency, async (job: any) => {
   await task_process(command, args)
 })
 
+// ============ P2P 专用队列 process ============
+// 背景:默认 concurrency=1 会把 p2p 任务跟 sync 任务挤在一起串行跑,
+// 而 p2p 拉取是\"IO 密集型 + 可多任务并行\",需要独立的并发配置。
+// 默认值参考 p2p.node.maxConcurrentPulls(若未配置回落到 queueConfig.concurrency)
+const p2pConcurrency =
+  Number(get_config()?.p2p?.node?.maxConcurrentPulls) || queueConfig.concurrency || 2
+console.log(`[queue] p2p concurrency = ${p2pConcurrency}`)
+
+scanQueue.process('p2p', p2pConcurrency, async (job: any) => {
+  const { command, args } = job.data
+
+  await task_process(command, args)
+})
+
 // 处理默认任务
 scanQueue.process(queueConfig.concurrency, async (job: any) => {
   const { command, args } = job.data
@@ -153,6 +171,18 @@ async function task_process(command: string, args: any) {
       break
     case 'taskP2PPull':
       await new P2PPullJob(args).run()
+      break
+    case 'taskP2PPullMedia':
+      await new PullMediaJob(args).run()
+      break
+    case 'taskP2PPullManga':
+      await new PullMangaJob(args).run()
+      break
+    case 'taskP2PPullChapter':
+      await new PullChapterJob(args).run()
+      break
+    case 'taskP2PPullMeta':
+      await new PullMetaJob(args).run()
       break
     default:
       break
@@ -256,8 +286,8 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
       taskQueue = 'sync'
     } else if (/compress/.test(taskName)) {
       taskQueue = 'compress'
-    } else if (/p2p/.test(taskName)) {
-      taskQueue = 'sync'
+    } else if (/p2p/i.test(taskName) || /^taskP2P/.test(command)) {
+      taskQueue = 'p2p'
     }
 
     scanQueue.add(
