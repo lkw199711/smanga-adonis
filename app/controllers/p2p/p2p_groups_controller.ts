@@ -319,11 +319,22 @@ export default class P2PGroupsController {
         call_with_reregister(client, (c) => c.myGroups()),
       ])
       const remote = (myGroups as any[]).find((g) => g.groupNo === groupNo) || null
+
+      // 安全考虑:成员列表中的 publicUrl 是节点的对外地址,
+      // 暴露给所有客户机会带来扫描/直连风险,故在面向用户接口里剥离;
+      // tracker 侧返回的字段保持不动,p2p 拉取流程内部仍可使用 publicUrl。
+      const sanitizedMembers = Array.isArray(members)
+        ? (members as any[]).map((m) => {
+            const { publicUrl: _omit, ...rest } = m || {}
+            return rest
+          })
+        : members
+
       return response.json(
         new SResponse({
           code: 0,
           message: '',
-          data: { local, members, remote, fromTracker: true },
+          data: { local, members: sanitizedMembers, remote, fromTracker: true },
         })
       )
     } catch (e: any) {

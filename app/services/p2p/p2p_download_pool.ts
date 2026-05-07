@@ -457,24 +457,43 @@ export class P2PDownloadPool {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 
     const slicePath = ctx.slicePathPrefix + slice.index
+    const expectBytes = slice.end - slice.start + 1
+
+    // 断点续传:残留分片若 size 与期望一致,视为上次已完成该分片,直接复用
+    let written = 0
     if (fs.existsSync(slicePath)) {
-      // 残留分片,删掉重下(避免 size 错位)
-      try { fs.unlinkSync(slicePath) } catch {}
+      try {
+        const st = fs.statSync(slicePath)
+        if (st.size === expectBytes) {
+          console.log(
+            `[${this.opts.logTag || 'p2p-pool'}] 复用已下载分片 ` +
+            `${path.basename(ctx.localPath)} slice=${slice.index}/${ctx.totalSlices}`
+          )
+          // 跳过下载,直接视为该分片完成
+          written = 0
+        } else {
+          // 尺寸不对,删掉重下
+          try { fs.unlinkSync(slicePath) } catch {}
+        }
+      } catch {
+        try { fs.unlinkSync(slicePath) } catch {}
+      }
     }
 
-    const expectBytes = slice.end - slice.start + 1
-    const written = await this.streamToFile(
-      seed,
-      task.remoteAbsPath,
-      slicePath,
-      { start: slice.start, end: slice.end }
-    )
-
-    if (written !== expectBytes) {
-      try { fs.unlinkSync(slicePath) } catch {}
-      throw new Error(
-        `slice ${slice.index} size 不一致: 期望=${expectBytes} 实际=${written}`
+    if (!fs.existsSync(slicePath)) {
+      written = await this.streamToFile(
+        seed,
+        task.remoteAbsPath,
+        slicePath,
+        { start: slice.start, end: slice.end }
       )
+
+      if (written !== expectBytes) {
+        try { fs.unlinkSync(slicePath) } catch {}
+        throw new Error(
+          `slice ${slice.index} size 不一致: 期望=${expectBytes} 实际=${written}`
+        )
+      }
     }
 
     // 该分片完成,累计 doneCount
