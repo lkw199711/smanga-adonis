@@ -16,6 +16,7 @@ import {
 } from '../p2p_download_pool.js'
 import type { DiscoverSeedsArgs, PullHeaders } from './pull_context.js'
 import { normalize_public_url } from '#utils/ip_resolver'
+import { reconcileSingleGroupIfMissing } from '../p2p_group_reconcile_service.js'
 
 export type PullBaseArgs = {
   /** 父 p2p_transfer 主键 */
@@ -103,7 +104,22 @@ export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
     queryParams.remoteMangaId = args.remoteMangaId
   }
 
-  const raw = await tracker.findSeeds(args.groupNo, queryParams)
+  let raw: any[] = []
+  try {
+    raw = await tracker.findSeeds(args.groupNo, queryParams)
+  } catch (e: any) {
+    // 检测 "群组不存在/已停用" 这类错误 → 触发单群对账兜底,清理本地幽灵群
+    const status = e?.response?.status
+    const remoteMsg: string = e?.response?.data?.message || ''
+    const isGroupMissing =
+      status === 404 ||
+      /群组不存在|已停用|group.*not.*found/i.test(remoteMsg)
+    if (isGroupMissing) {
+      // 异步清理,不阻塞当前抛错流程(本次拉取就是要失败的)
+      reconcileSingleGroupIfMissing(args.groupNo).catch(() => {})
+    }
+    throw e
+  }
   const seeds: Seed[] = []
   for (const r of raw || []) {
     const baseUrl = pickBaseUrl(r)

@@ -11,10 +11,15 @@ import { get_config } from '#utils/index'
 import TrackerClient from './tracker_client.js'
 import p2pIdentityService from './p2p_identity_service.js'
 import { parse_public_url, is_reportable_public_url } from '#utils/ip_resolver'
+import { reconcileGroupsWithTracker } from './p2p_group_reconcile_service.js'
 
 class P2PHeartbeatService {
   private timer: NodeJS.Timeout | null = null
   private running = false
+  /** 心跳计数器,用于按节拍触发 reconcile */
+  private tickCount = 0
+  /** 每 N 个心跳节拍触发一次群组对账(默认 10 次,30s 心跳即 5 分钟一次) */
+  private static RECONCILE_TICKS = 10
 
   /**
    * 启动心跳循环
@@ -139,6 +144,23 @@ class P2PHeartbeatService {
         }
       })
     )
+
+    // 每 N 个心跳节拍触发一次本地群组对账,清理 tracker 已删除但本地仍存在的"幽灵群"
+    // 走 reconcileGroupsWithTracker 内部已对 tracker 不可达做了"不删除"保护,无需额外保护
+    this.tickCount += 1
+    if (this.tickCount >= P2PHeartbeatService.RECONCILE_TICKS) {
+      this.tickCount = 0
+      try {
+        const r = await reconcileGroupsWithTracker()
+        if (r.ok && r.removed.length) {
+          console.log(`[p2p] 心跳对账清理孤儿群 ${r.removed.length} 个`)
+        }
+      } catch (e: any) {
+        if (process.env.P2P_DEBUG) {
+          console.warn('[p2p] 心跳对账失败', e?.message)
+        }
+      }
+    }
   }
 }
 

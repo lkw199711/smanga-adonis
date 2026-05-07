@@ -19,6 +19,10 @@ import { get_config } from '#utils/index'
 import TrackerClient from '#services/p2p/tracker_client'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import { log_p2p_error } from '#utils/p2p_log'
+import {
+  reconcileGroupsWithTracker,
+  purgeLocalGroupByGroupNo,
+} from '#services/p2p/p2p_group_reconcile_service'
 
 function get_client(): TrackerClient | null {
   const cfg = get_config()?.p2p
@@ -211,64 +215,57 @@ export default class P2PGroupsController {
       log_p2p_error('group.leave.tracker(忽略,继续清理本地)', e)
     }
 
-    const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
-    if (local) {
-      await prisma.p2p_local_share.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
-      await prisma.p2p_peer_cache.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
-      await prisma.p2p_transfer.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
-      await prisma.p2p_group.delete({ where: { p2pGroupId: local.p2pGroupId } })
-    }
+    await purgeLocalGroupByGroupNo(groupNo)
 
     return response.json(new SResponse({ code: 0, message: '已退出' }))
   }
 
   /**
    * POST /api/p2p/group/refresh
-   * 从 tracker 同步群列表到本地
+   * 从 tracker 同步群列表到本地,并级联清理本地"幽灵群组"(tracker 已删除但本地仍存在)
+   *
+   * 策略:
+   *  - tracker 返回的群 → upsert 本地
+   *  - 本地有但 tracker 没有的 → 级联清理 p2p_local_share / p2p_peer_cache / p2p_transfer / p2p_group
+   *  - tracker 调用失败:不做任何删除,避免误删(返回 ok=false)
+   *
+   * 响应 data.removed 用于前端提示"群组 XX 已被解散,N 条共享已清理"
    */
   async refresh({ response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
+    const cfg = get_config()?.p2p
+    if (!cfg?.enable || !cfg?.role?.node) {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
     }
 
-    try {
-      const remoteGroups: any[] = await call_with_reregister(client, (c) => c.myGroups())
-      const id = p2pIdentityService.getIdentity()!
-      const cfg = get_config()?.p2p
-
-      for (const rg of remoteGroups) {
-        // 兜底:若 tracker 未返回 ownerNodeId,且当前节点是 owner 角色,则使用本节点 id;否则置空字符串避免 prisma 校验失败
-        const isSelfOwner = rg.role === 'owner'
-        const ownerNodeId: string = rg.ownerNodeId || (isSelfOwner ? id.nodeId : '')
-        const isOwner = ownerNodeId === id.nodeId ? 1 : 0
-
-        await prisma.p2p_group.upsert({
-          where: { groupNo: rg.groupNo },
-          update: {
-            groupName: rg.groupName,
-            describe: rg.describe || null,
-            ownerNodeId,
-            isOwner,
-            memberCount: rg.memberCount || 0,
-            lastSyncTime: new Date(),
-          },
-          create: {
-            groupNo: rg.groupNo,
-            groupName: rg.groupName,
-            describe: rg.describe || null,
-            ownerNodeId,
-            isOwner,
-            trackerUrl: p2pIdentityService.pickTrackerUrl(cfg) || '',
-            memberCount: rg.memberCount || 0,
-          },
-        })
+    // reconcile 服务内部会自动处理 401/403 的身份重注册场景(沿用 buildClient + 失败返回)
+    // 对于身份失效需重注册的情形:先走一次 call_with_reregister 触发重注册,再做 reconcile
+    let result = await reconcileGroupsWithTracker()
+    if (!result.ok && /unauthorized|节点不存在|节点令牌/i.test(result.error || '')) {
+      try {
+        await p2pIdentityService.invalidateAndReregister()
+        result = await reconcileGroupsWithTracker()
+      } catch (e: any) {
+        log_p2p_error('group.refresh.auto-reregister', e)
       }
-      return response.json(new SResponse({ code: 0, message: '同步完成', data: { count: remoteGroups.length } }))
-    } catch (e: any) {
-      log_p2p_error('group.refresh', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '同步失败' }))
     }
+
+    if (!result.ok) {
+      return response.status(500).json(
+        new SResponse({ code: 1, message: result.error || '同步失败' })
+      )
+    }
+
+    return response.json(
+      new SResponse({
+        code: 0,
+        message: '同步完成',
+        data: {
+          count: result.remoteCount,
+          upserted: result.upserted,
+          removed: result.removed,
+        },
+      })
+    )
   }
 
   /**
@@ -432,13 +429,7 @@ export default class P2PGroupsController {
     }
 
     // tracker 端已经成功 → 清理本机数据
-    const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
-    if (local) {
-      await prisma.p2p_local_share.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
-      await prisma.p2p_peer_cache.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
-      await prisma.p2p_transfer.deleteMany({ where: { p2pGroupId: local.p2pGroupId } })
-      await prisma.p2p_group.delete({ where: { p2pGroupId: local.p2pGroupId } })
-    }
+    await purgeLocalGroupByGroupNo(groupNo)
 
     return response.json(new SResponse({ code: 0, message: '群组已解散' }))
   }
