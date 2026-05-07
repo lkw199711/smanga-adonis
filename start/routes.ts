@@ -286,6 +286,8 @@ router.get('client-user-config', [UsersController, 'config'])
 router.get('serve-config', [ConfigsController, 'get'])
 router.put('serve-config', [ConfigsController, 'set'])
 router.put('user-config', [ConfigsController, 'user_config'])
+// 手动触发节点向 Tracker 重新注册 (管理员)
+router.post('/p2p/node/register-now', [ConfigsController, 'register_node_now'])
 
 // 资源文件
 router.get('/file/apk', [FilesController, 'apk'])

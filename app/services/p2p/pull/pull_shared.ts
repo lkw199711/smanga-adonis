@@ -15,6 +15,7 @@ import {
   type Seed,
 } from '../p2p_download_pool.js'
 import type { DiscoverSeedsArgs, PullHeaders } from './pull_context.js'
+import { normalize_public_url } from '#utils/ip_resolver'
 
 export type PullBaseArgs = {
   /** 父 p2p_transfer 主键 */
@@ -38,15 +39,16 @@ export function buildHeaders(groupNo: string): PullHeaders {
 
 /**
  * 拼装 seed 的可访问 baseUrl(public 优先,local 回落)
+ * publicUrl 已由 tracker 保证为 "http(s)://host:port" 形态,直接规范化使用
  */
 function pickBaseUrl(seed: {
-  publicHost: string | null
-  publicPort: number | null
+  publicUrl: string | null
   localHost: string | null
   localPort: number | null
 }): string {
-  if (seed.publicHost && seed.publicPort) {
-    return `http://${seed.publicHost}:${seed.publicPort}`.replace(/\/+$/, '')
+  if (seed.publicUrl) {
+    const normalized = normalize_public_url(seed.publicUrl)
+    if (normalized) return normalized
   }
   if (seed.localHost && seed.localPort) {
     return `http://${seed.localHost}:${seed.localPort}`.replace(/\/+$/, '')

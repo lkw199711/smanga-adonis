@@ -49,8 +49,17 @@ export type P2PNodeConfig = {
   nodeToken: string
   nodeName: string
   listenPort: number
-  publicHost: string
-  publicPort: number
+  /**
+   * 节点对外可达 URL(统一字段,替代旧的 publicHost + publicPort)
+   * 支持格式:
+   *   "example.com"
+   *   "example.com:9798"
+   *   "http://example.com:9798"
+   *   "https://example.com"
+   *   "1.2.3.4:9798"
+   * 留空表示未配置(由 tracker 端 request.ip() 推断)
+   */
+  publicUrl: string
   trackers: string[]
   heartbeatInterval: number
   announceInterval: number
@@ -92,10 +101,11 @@ export type P2PConfig = {
 export type NodeRegisterPayload = {
   nodeName?: string
   version?: string
-  /** 节点对外可达的 host(公网/反向代理域名),由节点自报;不传时 tracker 用 request.ip() */
-  publicHost?: string
-  /** 节点对外可达的 http 端口,由节点自报;通常等于 AdonisJS 监听端口 */
-  publicPort?: number
+  /**
+   * 节点对外可达 URL(合并 publicHost + publicPort)
+   * 由节点自报;不传时 tracker 用 request.ip() 推断 host,端口取 localPort
+   */
+  publicUrl?: string
   localHost?: string
   localPort?: number
   inviteCode?: string
@@ -104,18 +114,19 @@ export type NodeRegisterPayload = {
 export type NodeRegisterResult = {
   nodeId: string
   nodeToken: string
-  publicHost: string
+  /** tracker 最终采纳的 publicUrl(可能是节点自报,也可能是 tracker 根据 request.ip 推断) */
+  publicUrl: string
 }
 
 export type HeartbeatPayload = {
-  publicHost?: string
-  publicPort?: number
+  /** 节点对外可达 URL,通常与注册时一致;允许变更(例如公网 IP 漂移) */
+  publicUrl?: string
   localHost?: string
   localPort?: number
 }
 
 export type HeartbeatResult = {
-  publicHost: string
+  publicUrl: string
   serverTime: number
   pendingNotifications: Array<{ type: string; data?: any }>
 }

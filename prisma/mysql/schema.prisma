@@ -495,8 +495,7 @@ model p2p_peer_cache {
   p2pGroupId     Int       @db.UnsignedInt
   nodeId         String    @db.VarChar(64)
   nodeName       String?   @db.VarChar(191)
-  publicHost     String?   @db.VarChar(191)
-  publicPort     Int?      @db.UnsignedInt
+  publicUrl      String?   @db.VarChar(255)
   localHost      String?   @db.VarChar(191)
   localPort      Int?      @db.UnsignedInt
   online         Int       @default(0) @db.UnsignedInt
@@ -546,8 +545,7 @@ model tracker_node {
   nodeId        String    @unique(map: "uniqueTrackerNodeId") @db.VarChar(64)
   nodeToken     String    @db.VarChar(128)
   nodeName      String?   @db.VarChar(191)
-  publicHost    String?   @db.VarChar(191)
-  publicPort    Int?      @db.UnsignedInt
+  publicUrl     String?   @db.VarChar(255)
   localHost     String?   @db.VarChar(191)
   localPort     Int?      @db.UnsignedInt
   version       String?   @db.VarChar(32)

@@ -20,6 +20,7 @@ import { get_config, set_config } from '#utils/index'
 import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
 import { log_p2p_error } from '#utils/p2p_log'
+import { normalize_public_url, parse_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 
 export type P2PIdentity = {
   nodeId: string
@@ -40,25 +41,21 @@ function resolveLocalPort(p2p: any): number | undefined {
 }
 
 /**
- * 解析节点对外可达的 publicPort:
- * - 配置中明确指定了 publicPort(>0) 则用它(公网/反代场景)
- * - 否则回落到实际监听端口(同机/局域网场景足够)
+ * 解析节点对外可达 publicUrl:
+ *  - 用户在 smanga.json 配置了真实可达地址(非 loopback)才上报
+ *  - 端口未显式指定时,回落到本次实际监听端口,补齐为 "http://host:port"
+ *  - 否则返回 undefined,交给 tracker 用 request.ip() 推断
  */
-function resolvePublicPort(p2p: any): number | undefined {
-  const cfgPub = p2p?.node?.publicPort
-  if (cfgPub && cfgPub > 0) return cfgPub
-  return resolveLocalPort(p2p)
-}
-
-/**
- * 解析节点对外可达 publicHost:
- * 仅当配置里填写了真实公网域名/IP 才上报;否则交给 tracker 用 request.ip()
- * (127.0.0.1 视为未配置,不上报以免污染 tracker)
- */
-function resolvePublicHost(p2p: any): string | undefined {
-  const h = p2p?.node?.publicHost
-  if (!h || h === '127.0.0.1' || h === 'localhost' || h === '0.0.0.0') return undefined
-  return h
+function resolvePublicUrl(p2p: any): string | undefined {
+  const raw = p2p?.node?.publicUrl
+  if (!is_reportable_public_url(raw)) return undefined
+  const parsed = parse_public_url(raw)
+  if (!parsed) return undefined
+  if (parsed.port) return parsed.url
+  // 用户没填端口,自动用本机监听端口补齐,避免 tracker 端拼不出 baseUrl
+  const fallback = resolveLocalPort(p2p)
+  if (fallback) return `${parsed.protocol}://${parsed.host}:${fallback}`
+  return parsed.url
 }
 
 class P2PIdentityService {
@@ -151,8 +148,7 @@ class P2PIdentityService {
       const res = await client.register({
         nodeName,
         version: 'smanga-adonis',
-        publicHost: resolvePublicHost(p2p),
-        publicPort: resolvePublicPort(p2p),
+        publicUrl: resolvePublicUrl(p2p),
         localHost: p2p.node?.lanHost || undefined,
         localPort: resolveLocalPort(p2p),
       })
@@ -161,12 +157,12 @@ class P2PIdentityService {
       config.p2p.node.nodeId = res.nodeId
       config.p2p.node.nodeToken = res.nodeToken
       config.p2p.node.nodeName = nodeName
-      if (res.publicHost) {
-        config.p2p.node.publicHost = res.publicHost
+      if (res.publicUrl) {
+        config.p2p.node.publicUrl = normalize_public_url(res.publicUrl)
       }
       set_config(config)
 
-      console.log(`[p2p] 节点自动注册成功 nodeId=${res.nodeId} publicHost=${res.publicHost}`)
+      console.log(`[p2p] 节点自动注册成功 nodeId=${res.nodeId} publicUrl=${res.publicUrl}`)
       return {
         nodeId: res.nodeId,
         nodeToken: res.nodeToken,
@@ -218,8 +214,7 @@ class P2PIdentityService {
     try {
       const client = new TrackerClient(url, nodeId, nodeToken)
       await client.heartbeat({
-        publicHost: resolvePublicHost(p2p),
-        publicPort: resolvePublicPort(p2p),
+        publicUrl: resolvePublicUrl(p2p),
         localHost: p2p?.node?.lanHost || undefined,
         localPort: resolveLocalPort(p2p),
       })
@@ -322,8 +317,8 @@ class P2PIdentityService {
    * 本地直注册:自行生成 nodeId/rawToken,写入 tracker_node 表,并回写 smanga.json
    * 用于 "本机既是 node 又是 tracker" 的一体机场景,避免 HTTP 自调
    *
-   * publicHost 决策:
-   *  - 用户在 smanga.json 配置了 p2p.node.publicHost(且非 127.0.0.1) -> 直接采用
+   * publicUrl 决策:
+   *  - 用户在 smanga.json 配置了 p2p.node.publicUrl(且 host 非 loopback) -> 规范化后采用
    *  - 否则置 null(留空),等节点首次心跳/外部请求时由 tracker 侧识别
    *    (一体机自连无法识别外部 IP,这一步交给后续真实远程心跳来填补)
    */
@@ -333,14 +328,14 @@ class P2PIdentityService {
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
     const port = resolveLocalPort(p2p) || null
-    const cfgPublicHost = resolvePublicHost(p2p) // 已过滤掉 127.0.0.1 / localhost / 0.0.0.0
+    const cfgPublicUrl = resolvePublicUrl(p2p) // 已过滤掉 loopback
 
-    if (!cfgPublicHost) {
+    if (!cfgPublicUrl) {
       console.warn(
-        '[p2p] 本地直注册:未配置 p2p.node.publicHost,publicHost 将先置空。\n' +
+        '[p2p] 本地直注册:未配置 p2p.node.publicUrl,publicUrl 将先置空。\n' +
         '       如本机需要被外部节点访问,请在 smanga.json 设置:\n' +
-        '         p2p.node.publicHost = "你的公网IP或域名"\n' +
-        '         p2p.node.publicPort = 对外端口(NAT 后需做端口映射)'
+        '         p2p.node.publicUrl = "你的公网IP或域名[:端口]"\n' +
+        '       示例: "example.com:9798" 或 "http://1.2.3.4:9798"'
       )
     }
 
@@ -349,8 +344,7 @@ class P2PIdentityService {
         nodeId,
         nodeToken: tokenHash,
         nodeName: nodeName || null,
-        publicHost: cfgPublicHost || null,
-        publicPort: cfgPublicHost ? (resolvePublicPort(p2p) || port) : null,
+        publicUrl: cfgPublicUrl || null,
         localHost: p2p?.node?.lanHost || '127.0.0.1',
         localPort: port,
         version: 'smanga-adonis',
@@ -360,7 +354,7 @@ class P2PIdentityService {
       },
     })
 
-    // 回写配置(仅 nodeId/nodeToken/nodeName,publicHost 不主动写入 127.0.0.1)
+    // 回写配置(仅 nodeId/nodeToken/nodeName,publicUrl 不主动写入 loopback)
     const config = get_config()
     config.p2p.node.nodeId = nodeId
     config.p2p.node.nodeToken = rawToken
@@ -383,7 +377,7 @@ class P2PIdentityService {
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
     const port = resolveLocalPort(p2p) || null
-    const cfgPublicHost = resolvePublicHost(p2p)
+    const cfgPublicUrl = resolvePublicUrl(p2p)
 
     await prisma.tracker_node.upsert({
       where: { nodeId },
@@ -394,15 +388,14 @@ class P2PIdentityService {
         lastHeartbeat: new Date(),
         // 同机自愈时强制刷新端口,保证 seeds 能拼出正确 baseUrl
         ...(port !== null && { localPort: port }),
-        ...(port !== null && { publicPort: resolvePublicPort(p2p) || port }),
+        ...(cfgPublicUrl && { publicUrl: cfgPublicUrl }),
       },
       create: {
         nodeId,
         nodeToken: tokenHash,
         nodeName: p2p?.node?.nodeName || null,
-        // 仅当配置里显式给了真实公网 host(非 127.0.0.1)才入库,避免污染
-        publicHost: cfgPublicHost || null,
-        publicPort: cfgPublicHost ? (resolvePublicPort(p2p) || port) : null,
+        // 仅当配置里显式给了真实可达 URL(非 loopback)才入库,避免污染
+        publicUrl: cfgPublicUrl || null,
         localHost: p2p?.node?.lanHost || '127.0.0.1',
         localPort: port,
         version: 'smanga-adonis',

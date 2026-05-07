@@ -3,7 +3,7 @@
  *
  * 用途:
  *  - 节点向 tracker 发起 register/heartbeat 时,tracker 会主动反向 GET 本接口
- *  - tracker 校验返回内容里的 challenge 是否与发送的一致 -> 确认节点 publicHost:publicPort 真实可达
+ *  - tracker 校验返回内容里的 challenge 是否与发送的一致 -> 确认节点 publicUrl 真实可达
  *
  * 设计要点:
  *  - 路径 /p2p/verify/echo 与 /p2p/serve/* 隔离,不走 P2PPeerAuthMiddleware

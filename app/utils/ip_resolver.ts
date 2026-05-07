@@ -168,3 +168,95 @@ export function is_reportable_public_host(host: string | undefined | null): bool
   }
   return true
 }
+
+// ========================= publicUrl 工具 =========================
+//
+// 用户可填多种格式:
+//   "example.com"
+//   "example.com:9798"
+//   "http://example.com:9798"
+//   "https://example.com"
+//   "1.2.3.4"
+//   "1.2.3.4:9798"
+// 内部统一使用 normalize_public_url 规范化为 "http(s)://host[:port]"(去尾部斜杠)
+// parse_public_url 进一步拆出 host/port/protocol,便于可达性探测等场景复用
+
+export type ParsedPublicUrl = {
+  /** 协议 http / https,未填时默认 http */
+  protocol: 'http' | 'https'
+  /** 纯 host(不含端口),可能是域名或 IP */
+  host: string
+  /** 端口号;未显式指定时返回 undefined(由调用方决定回落) */
+  port?: number
+  /** 规范化后的完整 URL: protocol://host[:port] */
+  url: string
+}
+
+/**
+ * 规范化用户填写的 publicUrl
+ * 返回去除首尾空白、尾部斜杠的字符串;解析失败返回空串
+ *
+ * 规则:
+ *  - 若原串包含 "://" 视为完整 URL
+ *  - 否则按 "host" 或 "host:port" 处理,默认补上 "http://"
+ *  - IPv6 需要用户自行加 [ ],本函数不做特殊拆分
+ */
+export function normalize_public_url(raw: string | undefined | null): string {
+  if (!raw) return ''
+  const s = String(raw).trim().replace(/\/+$/, '')
+  if (!s) return ''
+  if (/^https?:\/\//i.test(s)) {
+    return s
+  }
+  // 没有协议头,默认 http
+  return `http://${s}`
+}
+
+/**
+ * 解析 publicUrl 为结构化字段
+ *  - 解析失败(空串或非法) -> 返回 null
+ *  - 端口未显式指定 -> port 为 undefined
+ */
+export function parse_public_url(raw: string | undefined | null): ParsedPublicUrl | null {
+  const normalized = normalize_public_url(raw)
+  if (!normalized) return null
+  try {
+    const u = new URL(normalized)
+    const protocol = u.protocol === 'https:' ? 'https' : 'http'
+    const host = u.hostname
+    if (!host) return null
+    const port = u.port ? Number(u.port) : undefined
+    const hasPort = port !== undefined && Number.isFinite(port) && port > 0
+    const url = hasPort ? `${protocol}://${host}:${port}` : `${protocol}://${host}`
+    return { protocol, host, port: hasPort ? port : undefined, url }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 节点自报的 publicUrl 是否值得入库
+ *  - 为空/解析失败 -> false
+ *  - host 为 loopback / 0.0.0.0 -> false
+ *  - 其它 -> true
+ */
+export function is_reportable_public_url(raw: string | undefined | null): boolean {
+  const parsed = parse_public_url(raw)
+  if (!parsed) return false
+  return is_reportable_public_host(parsed.host)
+}
+
+/**
+ * 把 publicUrl 转成 "host:port" 形态(不含协议头),兼容老代码场景
+ *  - 若 publicUrl 未指定端口则需外部给默认端口
+ */
+export function public_url_to_host_port(
+  raw: string | undefined | null,
+  defaultPort?: number
+): { host: string; port: number } | null {
+  const parsed = parse_public_url(raw)
+  if (!parsed) return null
+  const port = parsed.port ?? defaultPort
+  if (!port || !Number.isFinite(port) || port <= 0) return null
+  return { host: parsed.host, port }
+}

@@ -490,8 +490,7 @@ model p2p_peer_cache {
   p2pGroupId     Int
   nodeId         String
   nodeName       String?
-  publicHost     String?
-  publicPort     Int?
+  publicUrl      String?
   localHost      String?
   localPort      Int?
   online         Int       @default(0)
@@ -539,8 +538,7 @@ model tracker_node {
   nodeId        String               @unique(map: "uniqueTrackerNodeId")
   nodeToken     String
   nodeName      String?
-  publicHost    String?
-  publicPort    Int?
+  publicUrl     String?
   localHost     String?
   localPort     Int?
   version       String?

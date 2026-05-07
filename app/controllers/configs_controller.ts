@@ -133,8 +133,7 @@ export default class ConfigsController {
           node: {
             nodeName: '',
             listenPort: 19798,
-            publicHost: '',
-            publicPort: 0,
+            publicUrl: '',
             trackers: [],
             heartbeatInterval: 30,
           },
@@ -171,18 +170,14 @@ export default class ConfigsController {
 
     if (key === 'p2p.node.nodeName') {
       config.p2p.node.nodeName = String(value || '').trim()
-      // nodeName 仅作为元数据展示,变更时下次心跳会随 publicHost 一起上报
+      // nodeName 仅作为元数据展示,变更时下次心跳会随 publicUrl 一起上报
     }
 
-    if (key === 'p2p.node.publicHost') {
-      const host = String(value || '').trim()
-      config.p2p.node.publicHost = host
-      needIdentityRefresh = true
-    }
-
-    if (key === 'p2p.node.publicPort') {
-      const n = Number(value)
-      config.p2p.node.publicPort = Number.isFinite(n) && n >= 0 ? n : 0
+    if (key === 'p2p.node.publicUrl') {
+      // 允许用户填 "host" / "host:port" / "http(s)://host[:port]"
+      // 这里仅去首尾空白和尾部斜杠,规范化工作交给服务层的 normalize_public_url
+      const raw = String(value || '').trim().replace(/\/+$/, '')
+      config.p2p.node.publicUrl = raw
       needIdentityRefresh = true
     }
 
@@ -272,6 +267,61 @@ export default class ConfigsController {
 
     const configResponse = new SResponse({ code: 0, message: '设置成功', data: config })
     return configResponse
+  }
+
+  /**
+   * 手动触发节点注册
+   * - 校验 admin 权限
+   * - 校验 p2p.enable 且 p2p.role.node 为 true
+   * - 调用 p2pIdentityService.invalidateAndReregister() 重新注册
+   * - 成功返回新的 nodeId; 失败返回 tracker 端给出的具体原因
+   */
+  public async register_node_now({ request, response }: HttpContext) {
+    const user = (request as any).user
+    if (user?.role !== 'admin') {
+      return response
+        .status(403)
+        .json(new SResponse({ code: 1, message: '无权限', status: 'error' }))
+    }
+
+    const cfg = get_config()?.p2p
+    if (!cfg?.enable) {
+      return response.json(
+        new SResponse({ code: 1, message: '请先开启 P2P(启用 P2P 开关)', status: 'error' })
+      )
+    }
+    if (!cfg?.role?.node) {
+      return response.json(
+        new SResponse({
+          code: 1,
+          message: '请先开启"作为节点(Node)"角色',
+          status: 'error',
+        })
+      )
+    }
+
+    try {
+      const identity = await p2pIdentityService.invalidateAndReregister()
+      return response.json(
+        new SResponse({
+          code: 0,
+          message: '节点注册成功',
+          data: {
+            nodeId: identity?.nodeId,
+            nodeName: identity?.nodeName,
+          },
+        })
+      )
+    } catch (err: any) {
+      const reason = err?.message || String(err) || '未知错误'
+      return response.json(
+        new SResponse({
+          code: 1,
+          message: reason,
+          status: 'error',
+        })
+      )
+    }
   }
 
   public async user_config({ request, response }: HttpContext) {

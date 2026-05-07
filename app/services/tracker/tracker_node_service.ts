@@ -2,7 +2,12 @@ import prisma from '#start/prisma'
 import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
 import { get_config } from '#utils/index'
-import { is_reportable_public_host, type ResolveIpResult } from '#utils/ip_resolver'
+import {
+  is_reportable_public_host,
+  normalize_public_url,
+  parse_public_url,
+  type ResolveIpResult,
+} from '#utils/ip_resolver'
 import trackerReachabilityService from './tracker_reachability_service.js'
 import type {
   NodeRegisterPayload,
@@ -12,20 +17,42 @@ import type {
 } from '#type/p2p'
 
 /**
- * publicHost 决策(tracker 侧):
+ * publicUrl 决策(tracker 侧):
  *
  * 节点自报 vs 服务器侧识别,取舍优先级:
- *  1. 节点自报且通过 is_reportable_public_host 校验 -> 直接采用(支持反向代理/域名场景)
- *  2. 否则采用 tracker 解析到的客户端真实 IP(resolve_client_ip 结果)
- *     - 仅接受 public 类别;private/loopback 视为无公网可达端点
+ *  1. 节点自报的 publicUrl 若 host 非 loopback 且能解析出端口 -> 规范化后采用
+ *     (兼容节点只填了 "host" 的场景:需要 payload.localPort 作为端口回落)
+ *  2. 否则采用 tracker 解析到的客户端真实公网 IP + 节点上报的 localPort
  *  3. 都拿不到则返回 null
+ *
+ * 返回结果保证:
+ *  - 若非 null,则同时含 host + port,可直接用于 reachability 探测和入库
  */
-function decide_public_host(
+function decide_public_url(
   reported: string | undefined | null,
-  clientIp: ResolveIpResult
-): string | null {
-  if (is_reportable_public_host(reported)) return String(reported).trim()
-  if (clientIp.ip && clientIp.category === 'public') return clientIp.ip
+  clientIp: ResolveIpResult,
+  localPort: number | null | undefined
+): { url: string; host: string; port: number } | null {
+  // 1) 节点自报
+  const reportedParsed = parse_public_url(reported)
+  if (reportedParsed && is_reportable_public_host(reportedParsed.host)) {
+    const port = reportedParsed.port ?? (localPort && localPort > 0 ? localPort : undefined)
+    if (port) {
+      return {
+        url: `${reportedParsed.protocol}://${reportedParsed.host}:${port}`,
+        host: reportedParsed.host,
+        port,
+      }
+    }
+  }
+  // 2) tracker 侧识别的公网 IP + 节点上报的 localPort
+  if (clientIp.ip && clientIp.category === 'public' && localPort && localPort > 0) {
+    return {
+      url: `http://${clientIp.ip}:${localPort}`,
+      host: clientIp.ip,
+      port: localPort,
+    }
+  }
   return null
 }
 
@@ -38,9 +65,9 @@ class TrackerNodeService {
    * 节点注册
    *
    * 强制公网可达验证:
-   *  - 必须提供可用的 publicHost + publicPort (自报或 tracker 识别)
+   *  - 必须能确定一个 publicUrl(节点自报 或 tracker 识别)
    *  - tracker 主动反向 GET peer /p2p/verify/echo,challenge 校验通过才允许入库
-   *  - 本机自连(clientIp=loopback)豁免验证,但同样不写入 publicHost(仅本地调试用)
+   *  - 本机自连(clientIp=loopback)豁免验证,但同样不写入 publicUrl(仅本地调试用)
    *  - 本项目不支持内网/NAT 节点,验证失败直接抛错
    */
   async register(
@@ -73,42 +100,38 @@ class TrackerNodeService {
       throw new Error('Tracker 节点数量已达上限')
     }
 
-    // publicHost / publicPort 决策
-    const publicHost = decide_public_host(payload.publicHost, clientIp)
-    const publicPort = payload.publicPort || null
+    // publicUrl 决策
     const isLoopback = clientIp.category === 'loopback'
+    const decided = decide_public_url(payload.publicUrl, clientIp, payload.localPort)
 
-    // 非本机场景:必须同时具备 publicHost + publicPort,且能反向可达
+    // 非本机场景:必须能确定可达 publicUrl,且能反向可达
     if (!isLoopback) {
-      if (!publicHost) {
+      if (!decided) {
         throw new Error(
           '无法确定节点的公网地址。请确认:\n' +
-          '  1. 本机具有公网 IP 或配置了反向代理域名(p2p.node.publicHost)\n' +
-          '  2. 若在 NAT 后,请做好端口映射并填写真实公网 IP\n' +
+          '  1. 本机具有公网 IP 或配置了反向代理域名(p2p.node.publicUrl)\n' +
+          '  2. 若在 NAT 后,请做好端口映射并填写真实公网地址\n' +
           '  本项目不支持纯内网/CGNAT 节点接入'
         )
       }
-      if (!publicPort) {
-        throw new Error('缺少 publicPort。请在节点配置 p2p.node.publicPort 为对外可访问端口')
-      }
 
-      const check = await trackerReachabilityService.verify({ host: publicHost, port: publicPort })
+      const check = await trackerReachabilityService.verify({ host: decided.host, port: decided.port })
       if (!check.ok) {
         console.warn(
-          `[tracker] 注册反向验证失败 host=${publicHost}:${publicPort} reason=${check.reason}`
+          `[tracker] 注册反向验证失败 publicUrl=${decided.url} reason=${check.reason}`
         )
         throw new Error(
           `节点公网可达性验证失败: ${check.reason}\n` +
-          `tracker 无法从 ${publicHost}:${publicPort} 拿到正确 challenge 回包。\n` +
+          `tracker 无法从 ${decided.url} 拿到正确 challenge 回包。\n` +
           '请确认:\n' +
           '  - 节点服务正常运行且监听端口正确\n' +
           '  - 防火墙/安全组已放行该端口\n' +
           '  - NAT 后做好端口映射\n' +
-          '  - publicHost 可从 tracker 所在网络正常访问'
+          '  - publicUrl 可从 tracker 所在网络正常访问'
         )
       }
       console.log(
-        `[tracker] 注册反向验证通过 host=${publicHost}:${publicPort} elapsed=${check.elapsedMs}ms`
+        `[tracker] 注册反向验证通过 publicUrl=${decided.url} elapsed=${check.elapsedMs}ms`
       )
     } else {
       console.log(`[tracker] 检测到本机自连(loopback),跳过反向验证`)
@@ -119,14 +142,15 @@ class TrackerNodeService {
     const rawToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '')
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
+    const persistUrl = isLoopback ? null : (decided?.url || null)
+
     await prisma.tracker_node.create({
       data: {
         nodeId,
         nodeToken: tokenHash,
         nodeName: payload.nodeName || null,
-        // 本机自连情况下不入公网 host,避免污染 seeds 列表
-        publicHost: isLoopback ? null : publicHost,
-        publicPort: isLoopback ? null : publicPort,
+        // 本机自连情况下不入公网 url,避免污染 seeds 列表
+        publicUrl: persistUrl,
         localHost: payload.localHost || null,
         localPort: payload.localPort || null,
         version: payload.version || null,
@@ -138,14 +162,14 @@ class TrackerNodeService {
 
     console.log(
       `[tracker] 节点注册成功 nodeId=${nodeId} ` +
-      `publicHost=${isLoopback ? 'null(loopback)' : publicHost} publicPort=${isLoopback ? 'null' : publicPort} ` +
+      `publicUrl=${persistUrl || 'null(loopback)'} ` +
       `ipSource=${clientIp.source} ipCategory=${clientIp.category}`
     )
 
     return {
       nodeId,
       nodeToken: rawToken,
-      publicHost: isLoopback ? '' : (publicHost || ''),
+      publicUrl: persistUrl || '',
     }
   }
 
@@ -153,7 +177,7 @@ class TrackerNodeService {
    * 心跳
    *
    * 反向验证策略(分轻重):
-   *  - 端点没变化(publicHost/publicPort 与数据库一致)→ 不重复探测,仅刷新 lastHeartbeat
+   *  - 端点没变化(publicUrl 与数据库一致)→ 不重复探测,仅刷新 lastHeartbeat
    *  - 端点变化 / 之前 online=0 → 再做一次反向验证:
    *      - 通过:更新端点并 online=1
    *      - 失败:保持 online=0 并记录原因(不抛错,允许节点继续跑并在后续心跳重试)
@@ -169,41 +193,39 @@ class TrackerNodeService {
       throw new Error('节点不存在')
     }
 
-    const publicHost = decide_public_host(payload.publicHost, clientIp)
-    const publicPort = payload.publicPort ?? existing.publicPort ?? null
     const isLoopback = clientIp.category === 'loopback'
+    const decided = decide_public_url(payload.publicUrl, clientIp, payload.localPort)
+    const decidedUrl = decided?.url || null
 
-    // 端点是否变化
-    const endpointChanged =
-      (publicHost !== null && publicHost !== existing.publicHost) ||
-      (payload.publicPort !== undefined && payload.publicPort !== existing.publicPort)
+    // 端点是否变化(仅在本次心跳能定出 url 时才比较)
+    const existingUrl = normalize_public_url(existing.publicUrl || '') || null
+    const endpointChanged = decidedUrl !== null && decidedUrl !== existingUrl
     const wasOffline = existing.online !== 1
 
     let online = 1
     let verifyReason: string | undefined
 
     if (!isLoopback) {
-      // 触发验证的条件:端点变化 或 之前不在线(需要重新探测)
-      if (!publicHost || !publicPort) {
+      if (!decided) {
         online = 0
-        verifyReason = '缺少 publicHost/publicPort'
+        verifyReason = '缺少 publicUrl'
       } else if (endpointChanged || wasOffline) {
         const check = await trackerReachabilityService.verify({
-          host: publicHost,
-          port: publicPort,
+          host: decided.host,
+          port: decided.port,
           expectNodeId: nodeId,
         })
         if (check.ok) {
           online = 1
           console.log(
-            `[tracker] 心跳反向验证通过 nodeId=${nodeId} host=${publicHost}:${publicPort} ` +
+            `[tracker] 心跳反向验证通过 nodeId=${nodeId} publicUrl=${decided.url} ` +
             `elapsed=${check.elapsedMs}ms (${endpointChanged ? '端点变更' : '离线恢复'})`
           )
         } else {
           online = 0
           verifyReason = check.reason
           console.warn(
-            `[tracker] 心跳反向验证失败 nodeId=${nodeId} host=${publicHost}:${publicPort} reason=${check.reason}`
+            `[tracker] 心跳反向验证失败 nodeId=${nodeId} publicUrl=${decided.url} reason=${check.reason}`
           )
         }
       }
@@ -215,15 +237,15 @@ class TrackerNodeService {
       data: {
         online,
         lastHeartbeat: new Date(),
-        ...(publicHost !== null && { publicHost: isLoopback ? null : publicHost }),
-        ...(payload.publicPort !== undefined && { publicPort: isLoopback ? null : payload.publicPort }),
+        // 仅当本次心跳解析到有效 url 时才更新,避免用 null 覆盖已有端点
+        ...(decidedUrl !== null && { publicUrl: isLoopback ? null : decidedUrl }),
         ...(payload.localHost !== undefined && { localHost: payload.localHost }),
         ...(payload.localPort !== undefined && { localPort: payload.localPort }),
       },
     })
 
     return {
-      publicHost: isLoopback ? '' : (publicHost || existing.publicHost || ''),
+      publicUrl: isLoopback ? '' : (decidedUrl || existing.publicUrl || ''),
       serverTime: Date.now(),
       pendingNotifications: online === 0 && verifyReason
         ? [{ type: 'reachability_failed', data: { reason: verifyReason } }]

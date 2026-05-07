@@ -10,6 +10,7 @@
 import { get_config } from '#utils/index'
 import TrackerClient from './tracker_client.js'
 import p2pIdentityService from './p2p_identity_service.js'
+import { parse_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 
 class P2PHeartbeatService {
   private timer: NodeJS.Timeout | null = null
@@ -92,21 +93,24 @@ class P2PHeartbeatService {
         try {
           const client = new TrackerClient(url, identity.nodeId, identity.nodeToken)
           // 同步上报当前实际监听端口(优先 process.env.PORT)
-          // 以便 tracker 里的 publicPort/localPort 始终指向正在监听的端口
+          // 以便 tracker 里的 publicUrl/localPort 始终指向正在监听的端口
           const envPort = Number(process.env.PORT)
           const runtimePort = Number.isFinite(envPort) && envPort > 0
             ? envPort
             : (p2p.node?.listenPort || p2p.node?.lanPort || undefined)
-          const cfgPublicHost = p2p.node?.publicHost
-          const publicHost = cfgPublicHost && cfgPublicHost !== '127.0.0.1'
-            && cfgPublicHost !== 'localhost' && cfgPublicHost !== '0.0.0.0'
-            ? cfgPublicHost
-            : undefined
-          const cfgPublicPort = p2p.node?.publicPort
-          const publicPort = cfgPublicPort && cfgPublicPort > 0 ? cfgPublicPort : runtimePort
+          // 计算 publicUrl:用户填了真实可达地址才上报;未指定端口时用 runtimePort 补齐
+          let publicUrl: string | undefined = undefined
+          const cfgPublicUrl = p2p.node?.publicUrl
+          if (is_reportable_public_url(cfgPublicUrl)) {
+            const parsed = parse_public_url(cfgPublicUrl)
+            if (parsed) {
+              publicUrl = parsed.port
+                ? parsed.url
+                : (runtimePort ? `${parsed.protocol}://${parsed.host}:${runtimePort}` : parsed.url)
+            }
+          }
           await client.heartbeat({
-            publicHost,
-            publicPort,
+            publicUrl,
             localHost: p2p.node?.lanHost || undefined,
             localPort: runtimePort,
           })
