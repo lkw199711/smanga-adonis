@@ -76,7 +76,16 @@ export default class PullChapterJob {
       if (!tree || !tree.files?.length) {
         console.warn(`[${logTag}] tree 为空,视为成功但无文件`)
       } else {
-        const tasks = treeFilesToTasks(tree.files, baseDir)
+        const mainTasks = treeFilesToTasks(tree.files, baseDir)
+        // sideFiles(章节同级外置封面):
+        //  - 独立拉章节场景(isSubTask=false):由本任务负责,落到 tree.parentDir(章节父目录)
+        //  - 作为 MangaJob 子任务(isSubTask=true):MangaJob 已通过 MetaJob 统一拉取 sideFiles,
+        //    本任务忽略避免重复下载
+        const sideTasks =
+          !isSubTask && tree.sideFiles && tree.sideFiles.length && tree.parentDir
+            ? treeFilesToTasks(tree.sideFiles, tree.parentDir)
+            : []
+        const tasks = [...mainTasks, ...sideTasks]
         downloadedBytes = await runChildDownload({
           transferId,
           groupNo,
@@ -91,7 +100,9 @@ export default class PullChapterJob {
           reporter,
         })
       }
-      console.log(`[${logTag}] 完成 files=${tree?.files?.length || 0} bytes=${downloadedBytes}`)
+      console.log(
+        `[${logTag}] 完成 files=${tree?.files?.length || 0} side=${(!isSubTask && tree?.sideFiles?.length) || 0} bytes=${downloadedBytes}`
+      )
     } catch (e: any) {
       ok = false
       errorMsg = e?.message || String(e)

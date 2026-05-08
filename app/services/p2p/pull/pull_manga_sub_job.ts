@@ -142,7 +142,7 @@ export default class PullMangaJob {
     await this.handleDirectoryManga(tree, mangaId, baseDir, logTag, isSubTask, resolvedSeeds)
   }
 
-  /** 单文件漫画:直接起小池拉完 */
+  /** 单文件漫画:直接起小池拉完(主文件 + sideFiles 一起下) */
   private async handleSingleFile(
     tree: TreeResponseData,
     baseDir: string,
@@ -150,7 +150,7 @@ export default class PullMangaJob {
     isSubTask: boolean | undefined,
     resolvedSeeds: Seed[]
   ): Promise<void> {
-    const { transferId, groupNo, mangaId } = this.args
+    const { transferId, groupNo, mangaId, parentDir } = this.args
     const reporter = createThrottledProgressReporter(transferId)
     let downloadedBytes = 0
     let ok = true
@@ -158,7 +158,14 @@ export default class PullMangaJob {
 
     try {
       const { treeFilesToTasks } = await import('./pull_context.js')
-      const tasks = treeFilesToTasks(tree.files, baseDir)
+      // 主文件:落到 baseDir(单文件场景 baseDir == parentDir,relPath = basename)
+      const mainTasks = treeFilesToTasks(tree.files, baseDir)
+      // sideFiles:落到 parentDir(漫画父目录),relPath 已是相对父目录的路径
+      const sideTasks =
+        tree.sideFiles && tree.sideFiles.length
+          ? treeFilesToTasks(tree.sideFiles, parentDir)
+          : []
+      const tasks = [...mainTasks, ...sideTasks]
       downloadedBytes = await runChildDownload({
         transferId,
         groupNo,
@@ -168,7 +175,9 @@ export default class PullMangaJob {
         logTag,
         reporter,
       })
-      console.log(`[${logTag}] (单文件) 完成 bytes=${downloadedBytes}`)
+      console.log(
+        `[${logTag}] (单文件) 完成 main=${mainTasks.length} side=${sideTasks.length} bytes=${downloadedBytes}`
+      )
     } catch (e: any) {
       ok = false
       errorMsg = e?.message || String(e)
@@ -192,7 +201,7 @@ export default class PullMangaJob {
     isSubTask: boolean | undefined,
     resolvedSeeds: Seed[]
   ): Promise<void> {
-    const { transferId, groupNo } = this.args
+    const { transferId, groupNo, parentDir } = this.args
 
     // 1) 拿章节列表(复用已发现的 seeds)
     let chapters: Array<{ chapterId: number; chapterName: string; chapterPath?: string }> = []
@@ -209,22 +218,25 @@ export default class PullMangaJob {
       return
     }
 
-    // 2) 从 tree.files 里筛元数据(.smanga/、series.json 等)
+    // 2) 从 tree.files 里筛元数据(.smanga/、series.json、根目录封面等)
     const metaFiles: TreeFileEntry[] = tree.files.filter((f) => isMetaFile(f.relPath))
+    // sideFiles 由 MetaJob 一并下载(漫画同级外置封面 / smanga-info / 章节同级外置封面)
+    const sideFiles: TreeFileEntry[] = tree.sideFiles || []
 
     // 3) 计算 expectedTotal = 1(meta) + chapters.length
     const expectedTotal = 1 + chapters.length
 
     // 4) 独立任务(isSubTask=false):本 transferId 就是父,需要 initTracker
     //    作为 media 子任务(isSubTask=true):父 tracker 已由 MediaJob init 过,
-    //    此处调用 transferSelfToChildren 把\"本 MangaJob 的 1 个预期位\"替换为 expectedTotal 个
+    //    此处调用 transferSelfToChildren 把"本 MangaJob 的 1 个预期位"替换为 expectedTotal 个
     if (!isSubTask) {
       initTracker(transferId, expectedTotal, Number(tree.totalBytes || 0))
     } else {
       await transferSelfToChildren(transferId, expectedTotal)
     }
 
-    // 5) 派发 MetaJob(透传已发现的 seeds)
+    // 5) 派发 MetaJob(透传已发现的 seeds + sideFiles)
+    //    sideFiles 的 relPath 以 parentDir 为根,所以 sideBaseDir = parentDir
     await addTask({
       taskName: `p2p-pull-meta-${mangaId}`,
       command: 'taskP2PPullMeta',
@@ -234,6 +246,8 @@ export default class PullMangaJob {
         mangaId,
         files: metaFiles,
         baseDir,
+        sideFiles,
+        sideBaseDir: parentDir,
         isSubTask: true,
         inheritedSeeds: resolvedSeeds,
       },
@@ -241,8 +255,15 @@ export default class PullMangaJob {
     })
 
     // 6) 为每个 chapter 派发 ChapterJob(透传已发现的 seeds)
+    //    单文件章节(.zip/.cbz/.cbr/.rar/.7z/.pdf/.epub):chBaseDir = baseDir,
+    //      章节 tree 返回的 relPath = basename(zip),直接落到漫画目录根下,不再套一层
+    //    目录型章节:chBaseDir = baseDir/<chapterName>,保留章节文件夹层级
     for (const ch of chapters) {
-      const chBaseDir = path.join(baseDir, safeName(ch.chapterName || `chapter_${ch.chapterId}`))
+      const isSingleFileChapter =
+        !!ch.chapterPath && /\.(zip|cbz|cbr|rar|7z|pdf|epub)$/i.test(ch.chapterPath)
+      const chBaseDir = isSingleFileChapter
+        ? baseDir
+        : path.join(baseDir, safeName(ch.chapterName || `chapter_${ch.chapterId}`))
       await addTask({
         taskName: `p2p-pull-chapter-${ch.chapterId}`,
         command: 'taskP2PPullChapter',
