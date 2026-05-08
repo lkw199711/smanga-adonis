@@ -302,43 +302,9 @@ export default class P2PServeController {
         }
       }
 
-      // 3) 目录型漫画:每个章节的\"同级外置封面\"(位于 mangaPath 内部,章节同级)
-      //    只在目录型漫画里查一次章节列表即可
-      if (!isSingleFile) {
-        const chapters = await prisma.chapter
-          .findMany({ where: { mangaId } })
-          .catch(() => [] as any[])
-        for (const ch of chapters) {
-          if (!ch.chapterPath) continue
-          // 章节基名:目录保留全名,文件去扩展名
-          let chBase = path.basename(ch.chapterPath)
-          const chExtMatch = /\.(cbr|cbz|zip|7z|epub|rar|pdf)$/i.exec(chBase)
-          if (chExtMatch) chBase = chBase.slice(0, chBase.length - chExtMatch[0].length)
-
-          // 章节外置封面所在目录 = 章节父目录(通常就是 mangaPath)
-          const chSiblingDir = path.dirname(ch.chapterPath)
-          // sideFiles 的 relPath 以 mangaParentDir 为根
-          // 所以章节同级封面需要前缀 = <mangaName>/<chapter父目录相对 mangaPath 的路径>
-          const chSiblingRelToManga = path.relative(mangaPath, chSiblingDir).split(path.sep).join('/')
-          const relDirPrefix = chSiblingRelToManga
-            ? `${path.basename(mangaPath)}/${chSiblingRelToManga}`
-            : path.basename(mangaPath)
-          // 去重:章节同级封面如果已经在 files 里(目录型漫画递归已覆盖),就不重复加
-          const beforeCount = sideFiles.length
-          list_side_cover_files(chSiblingDir, chBase, sideFiles, relDirPrefix)
-          // 对于目录型漫画,章节同级文件本就在 files 里,把重复项剔除
-          // 统一策略:sideFiles 只保留 mangaPath 之外的项
-          while (sideFiles.length > beforeCount) {
-            const last = sideFiles[sideFiles.length - 1]
-            const insideManga = last.absPath.startsWith(mangaPath + path.sep) || last.absPath === mangaPath
-            if (insideManga) {
-              sideFiles.pop()
-            } else {
-              break
-            }
-          }
-        }
-      }
+      // 3) 章节同级外置封面(位于 mangaPath 内部)已由 walk_dir_files 收录到 files 中,
+      //    客户端 MangaJob 会从 tree.files 里筛"非章节内部文件"统一下载,
+      //    sideFiles 仅承载 mangaPath *外部* 的文件(漫画同级外置封面 / smanga-info 目录)
 
       const totalBytes =
         files.reduce((acc, f) => acc + (f.size || 0), 0) +

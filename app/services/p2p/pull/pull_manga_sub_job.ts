@@ -54,7 +54,6 @@ import {
   resolveSeeds,
 } from './pull_shared.js'
 import { initTracker, notifyDone, transferSelfToChildren } from './pull_child_tracker.js'
-import { isMetaFile } from './pull_meta_sub_job.js'
 
 export type PullMangaJobArgs = {
   transferId: number
@@ -218,15 +217,53 @@ export default class PullMangaJob {
       return
     }
 
-    // 2) 从 tree.files 里筛元数据(.smanga/、series.json、根目录封面等)
-    const metaFiles: TreeFileEntry[] = tree.files.filter((f) => isMetaFile(f.relPath))
-    // sideFiles 由 MetaJob 一并下载(漫画同级外置封面 / smanga-info / 章节同级外置封面)
+    // 2) 计算"章节内部前缀集合",用于把章节内部文件从 metaFiles 中剔除
+    //    - 目录型章节:相对 mangaPath 的目录前缀(以 / 结尾),其下所有文件都归章节
+    //    - 单文件章节(zip 等):相对 mangaPath 的文件名(精确匹配)
+    //    chapter.chapterPath 是绝对路径,使用 mangaPath 做相对化
+    const mangaPath = tree.mangaPath || ''
+    const chapterDirPrefixes: string[] = []
+    const chapterFileExacts: Set<string> = new Set()
+    for (const ch of chapters) {
+      if (!ch.chapterPath || !mangaPath) continue
+      let rel = ''
+      try {
+        rel = path.relative(mangaPath, ch.chapterPath).split(path.sep).join('/')
+      } catch {
+        continue
+      }
+      if (!rel || rel.startsWith('..')) continue
+      const isSingleFileChapter = /\.(zip|cbz|cbr|rar|7z|pdf|epub)$/i.test(ch.chapterPath)
+      if (isSingleFileChapter) {
+        chapterFileExacts.add(rel)
+      } else {
+        chapterDirPrefixes.push(rel.endsWith('/') ? rel : rel + '/')
+      }
+    }
+    const isInsideAnyChapter = (relPath: string): boolean => {
+      const norm = relPath.replace(/\\/g, '/')
+      if (chapterFileExacts.has(norm)) return true
+      for (const p of chapterDirPrefixes) {
+        if (norm.startsWith(p)) return true
+      }
+      return false
+    }
+
+    // 3) 从 tree.files 里筛出"非章节内部"的文件,作为 MetaJob 的下载清单
+    //    覆盖范围:
+    //      - .smanga/* / series.json / ComicInfo.xml / 根目录封面
+    //      - 章节同级外置封面(如 Vol.1.jpg、第01话.png)
+    //      - 漫画根目录其他散文件(banner、fanart 等)
+    //    这些都不在 chapter.tree 里,必须由 MangaJob 这一侧负责
+    const metaFiles: TreeFileEntry[] = tree.files.filter((f) => !isInsideAnyChapter(f.relPath))
+    // sideFiles 由 MetaJob 一并下载(漫画同级外置封面 / smanga-info)
+    //   注:对端已保证 sideFiles 中不含 mangaPath 内部文件,与 metaFiles 不会重叠
     const sideFiles: TreeFileEntry[] = tree.sideFiles || []
 
-    // 3) 计算 expectedTotal = 1(meta) + chapters.length
+    // 4) 计算 expectedTotal = 1(meta) + chapters.length
     const expectedTotal = 1 + chapters.length
 
-    // 4) 独立任务(isSubTask=false):本 transferId 就是父,需要 initTracker
+    // 5) 独立任务(isSubTask=false):本 transferId 就是父,需要 initTracker
     //    作为 media 子任务(isSubTask=true):父 tracker 已由 MediaJob init 过,
     //    此处调用 transferSelfToChildren 把"本 MangaJob 的 1 个预期位"替换为 expectedTotal 个
     if (!isSubTask) {
@@ -235,7 +272,7 @@ export default class PullMangaJob {
       await transferSelfToChildren(transferId, expectedTotal)
     }
 
-    // 5) 派发 MetaJob(透传已发现的 seeds + sideFiles)
+    // 6) 派发 MetaJob(透传已发现的 seeds + sideFiles)
     //    sideFiles 的 relPath 以 parentDir 为根,所以 sideBaseDir = parentDir
     await addTask({
       taskName: `p2p-pull-meta-${mangaId}`,
@@ -254,7 +291,7 @@ export default class PullMangaJob {
       priority: TaskPriority.p2pPullMeta,
     })
 
-    // 6) 为每个 chapter 派发 ChapterJob(透传已发现的 seeds)
+    // 7) 为每个 chapter 派发 ChapterJob(透传已发现的 seeds)
     //    单文件章节(.zip/.cbz/.cbr/.rar/.7z/.pdf/.epub):chBaseDir = baseDir,
     //      章节 tree 返回的 relPath = basename(zip),直接落到漫画目录根下,不再套一层
     //    目录型章节:chBaseDir = baseDir/<chapterName>,保留章节文件夹层级
