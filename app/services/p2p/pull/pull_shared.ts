@@ -40,7 +40,8 @@ export function buildHeaders(groupNo: string): PullHeaders {
 
 /**
  * 拼装 seed 的可访问 baseUrl(public 优先,local 回落)
- * publicUrl 已由 tracker 保证为 "http(s)://host:port" 形态,直接规范化使用
+ * publicUrl 已由 tracker 保证为 "http(s)://host:port[/path]" 形态,直接规范化使用
+ * 支持经 webui 反代的场景(如 http://1.2.3.4:9797/api),后续子路径会拼在该 baseUrl 之后
  */
 function pickBaseUrl(seed: {
   publicUrl: string | null

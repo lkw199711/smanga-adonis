@@ -104,7 +104,7 @@ class P2PHeartbeatService {
           const runtimePort = Number.isFinite(envPort) && envPort > 0
             ? envPort
             : (p2p.node?.listenPort || p2p.node?.lanPort || undefined)
-          // 计算 publicUrl:用户填了真实可达地址才上报;未指定端口时用 runtimePort 补齐
+          // 计算 publicUrl:用户填了真实可达地址才上报;未指定端口时用 runtimePort 补齐,并保留 path 前缀
           let publicUrl: string | undefined = undefined
           const cfgPublicUrl = p2p.node?.publicUrl
           if (is_reportable_public_url(cfgPublicUrl)) {
@@ -112,7 +112,9 @@ class P2PHeartbeatService {
             if (parsed) {
               publicUrl = parsed.port
                 ? parsed.url
-                : (runtimePort ? `${parsed.protocol}://${parsed.host}:${runtimePort}` : parsed.url)
+                : (runtimePort
+                    ? `${parsed.protocol}://${parsed.host}:${runtimePort}${parsed.pathPrefix}`
+                    : parsed.url)
             }
           }
           const hb = await client.heartbeat({

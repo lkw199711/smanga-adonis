@@ -53,8 +53,9 @@ function resolvePublicUrl(p2p: any): string | undefined {
   if (!parsed) return undefined
   if (parsed.port) return parsed.url
   // 用户没填端口,自动用本机监听端口补齐,避免 tracker 端拼不出 baseUrl
+  // 注意: path 前缀(pathPrefix)要保留,支持用户配置 "example.com/api" 这类反代场景
   const fallback = resolveLocalPort(p2p)
-  if (fallback) return `${parsed.protocol}://${parsed.host}:${fallback}`
+  if (fallback) return `${parsed.protocol}://${parsed.host}:${fallback}${parsed.pathPrefix}`
   return parsed.url
 }
 

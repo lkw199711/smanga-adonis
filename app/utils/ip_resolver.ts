@@ -178,17 +178,21 @@ export function is_reportable_public_host(host: string | undefined | null): bool
 //   "https://example.com"
 //   "1.2.3.4"
 //   "1.2.3.4:9798"
-// 内部统一使用 normalize_public_url 规范化为 "http(s)://host[:port]"(去尾部斜杠)
-// parse_public_url 进一步拆出 host/port/protocol,便于可达性探测等场景复用
+//   "1.2.3.4:9797/api"           ← 经反代场景,path 前缀会被保留
+//   "https://example.com/smanga"
+// 内部统一使用 normalize_public_url 规范化为 "http(s)://host[:port][/path]"(去尾部斜杠)
+// parse_public_url 进一步拆出 host/port/protocol/pathPrefix,便于可达性探测等场景复用
 
 export type ParsedPublicUrl = {
   /** 协议 http / https,未填时默认 http */
   protocol: 'http' | 'https'
   /** 纯 host(不含端口),可能是域名或 IP */
   host: string
-  /** 端口号;未显式指定时返回 undefined(由调用方决定回落) */
+  /** 端口号;未显式指定时返回undefined(由调用方决定回落) */
   port?: number
-  /** 规范化后的完整 URL: protocol://host[:port] */
+  /** path 前缀(如反代场景的 /api),无则为空串;保证以 / 开头、无尾部 / */
+  pathPrefix: string
+  /** 规范化后的完整 URL: protocol://host[:port][/path] */
   url: string
 }
 
@@ -198,7 +202,7 @@ export type ParsedPublicUrl = {
  *
  * 规则:
  *  - 若原串包含 "://" 视为完整 URL
- *  - 否则按 "host" 或 "host:port" 处理,默认补上 "http://"
+ *  - 否则按 "host" / "host:port" / "host:port/path" 处理,默认补上 "http://"
  *  - IPv6 需要用户自行加 [ ],本函数不做特殊拆分
  */
 export function normalize_public_url(raw: string | undefined | null): string {
@@ -216,6 +220,7 @@ export function normalize_public_url(raw: string | undefined | null): string {
  * 解析 publicUrl 为结构化字段
  *  - 解析失败(空串或非法) -> 返回 null
  *  - 端口未显式指定 -> port 为 undefined
+ *  - path 部分会保留为 pathPrefix(无 path 时为空串)
  */
 export function parse_public_url(raw: string | undefined | null): ParsedPublicUrl | null {
   const normalized = normalize_public_url(raw)
@@ -227,8 +232,20 @@ export function parse_public_url(raw: string | undefined | null): ParsedPublicUr
     if (!host) return null
     const port = u.port ? Number(u.port) : undefined
     const hasPort = port !== undefined && Number.isFinite(port) && port > 0
-    const url = hasPort ? `${protocol}://${host}:${port}` : `${protocol}://${host}`
-    return { protocol, host, port: hasPort ? port : undefined, url }
+
+    // 提取 path 前缀,去掉首尾空白和尾部 /,保留首部 /
+    let pathPrefix = (u.pathname || '').replace(/\/+$/, '')
+    if (pathPrefix === '/' || pathPrefix === '') pathPrefix = ''
+
+    const hostPart = hasPort ? `${host}:${port}` : host
+    const url = `${protocol}://${hostPart}${pathPrefix}`
+    return {
+      protocol,
+      host,
+      port: hasPort ? port : undefined,
+      pathPrefix,
+      url,
+    }
   } catch {
     return null
   }

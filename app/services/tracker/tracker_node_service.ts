@@ -17,40 +17,65 @@ import type {
 } from '#type/p2p'
 
 /**
+ * 兜底 publicUrl 的默认形态
+ *
+ * 用户的推荐部署方案:webui (smanga-express) 反代 /api -> 后端(9798)。
+ * 这样用户只暴露 9797 即可,不必理解"前端/后端端口"区分。
+ * 因此节点未自报 publicUrl 时,tracker 侧直接假设走反代: http://{clientIp}:9797/api
+ *
+ * 若用户采用非默认部署(比如只暴露后端 9798),则应自行在 smanga.json
+ * 配置 p2p.node.publicUrl 覆盖,此处兜底不生效。
+ */
+const FALLBACK_WEBUI_PORT = 9797
+const FALLBACK_WEBUI_PATH = '/api'
+
+/**
  * publicUrl 决策(tracker 侧):
  *
  * 节点自报 vs 服务器侧识别,取舍优先级:
  *  1. 节点自报的 publicUrl 若 host 非 loopback 且能解析出端口 -> 规范化后采用
- *     (兼容节点只填了 "host" 的场景:需要 payload.localPort 作为端口回落)
- *  2. 否则采用 tracker 解析到的客户端真实公网 IP + 节点上报的 localPort
- *  3. 都拿不到则返回 null
+ *     (path 前缀会被保留,支持 http://host:9797/api 这类反代场景)
+ *  2. 否则采用 tracker 解析到的客户端真实公网 IP + 节点上报的 localPort (后端直连)
+ *  3. 再否则:最终兜底使用 http://{公网 IP}:9797/api (推荐的 webui 反代路径)
+ *     仅在 clientIp 为 public 时生效
+ *  4. 都拿不到则返回 null
  *
- * 返回结果保证:
- *  - 若非 null,则同时含 host + port,可直接用于 reachability 探测和入库
+ * 返回结果 url 字段为完整 baseUrl(含 path 前缀),后续 reachability 与 seeds
+ * 直接基于该 baseUrl 拼接子路径。
  */
 function decide_public_url(
   reported: string | undefined | null,
   clientIp: ResolveIpResult,
   localPort: number | null | undefined
 ): { url: string; host: string; port: number } | null {
-  // 1) 节点自报
+  // 1) 节点自报(带 path 前缀时会完整保留在 url 里)
   const reportedParsed = parse_public_url(reported)
   if (reportedParsed && is_reportable_public_host(reportedParsed.host)) {
     const port = reportedParsed.port ?? (localPort && localPort > 0 ? localPort : undefined)
     if (port) {
-      return {
-        url: `${reportedParsed.protocol}://${reportedParsed.host}:${port}`,
-        host: reportedParsed.host,
-        port,
-      }
+      // parse_public_url 已将 url 规范为 protocol://host:port[/path];
+      // 这里若原本未显式给端口(reportedParsed.port = undefined)则需要把 localPort 并进 url
+      const url =
+        reportedParsed.port !== undefined
+          ? reportedParsed.url
+          : `${reportedParsed.protocol}://${reportedParsed.host}:${port}${reportedParsed.pathPrefix}`
+      return { url, host: reportedParsed.host, port }
     }
   }
-  // 2) tracker 侧识别的公网 IP + 节点上报的 localPort
+  // 2) tracker 侧识别的公网 IP + 节点上报的 localPort(后端直连)
   if (clientIp.ip && clientIp.category === 'public' && localPort && localPort > 0) {
     return {
       url: `http://${clientIp.ip}:${localPort}`,
       host: clientIp.ip,
       port: localPort,
+    }
+  }
+  // 3) 最终兜底:公网 IP + 推荐的 webui 反代端口/路径
+  if (clientIp.ip && clientIp.category === 'public') {
+    return {
+      url: `http://${clientIp.ip}:${FALLBACK_WEBUI_PORT}${FALLBACK_WEBUI_PATH}`,
+      host: clientIp.ip,
+      port: FALLBACK_WEBUI_PORT,
     }
   }
   return null
@@ -115,7 +140,7 @@ class TrackerNodeService {
         )
       }
 
-      const check = await trackerReachabilityService.verify({ host: decided.host, port: decided.port })
+      const check = await trackerReachabilityService.verify({ baseUrl: decided.url })
       if (!check.ok) {
         console.warn(
           `[tracker] 注册反向验证失败 publicUrl=${decided.url} reason=${check.reason}`
@@ -211,8 +236,7 @@ class TrackerNodeService {
         verifyReason = '缺少 publicUrl'
       } else if (endpointChanged || wasOffline) {
         const check = await trackerReachabilityService.verify({
-          host: decided.host,
-          port: decided.port,
+          baseUrl: decided.url,
           expectNodeId: nodeId,
         })
         if (check.ok) {
