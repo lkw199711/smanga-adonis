@@ -73,7 +73,7 @@ class TrackerReachabilityService {
     const challenge = crypto.randomBytes(16).toString('hex')
     // 用 join_url_path 拼接,避免 baseUrl 末尾 / 与 subPath 起始 / 重复
     const url = join_url_path(normalizedBase, '/p2p/verify/echo')
-
+    console.log(`[tracker] verifyReachable: ${url}?challenge=${challenge}`)
     try {
       const resp = await axios.get(url, {
         params: { challenge, nodeId: expectNodeId || '' },
@@ -134,6 +134,7 @@ class TrackerReachabilityService {
       } else {
         reason = `${code || 'unknown'}: ${err?.message}`
       }
+      console.log(`[tracker] verifyReachable failed: ${reason}`)
       return { ok: false, reason, elapsedMs: Date.now() - started }
     }
   }
