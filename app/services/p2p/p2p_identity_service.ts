@@ -6,6 +6,11 @@
  *  - 注册成功后将 nodeId/nodeToken/nodeName 写回 smanga.json
  *  - 提供给其他服务统一的身份读取入口
  *
+ * publicUrl 语义(重构后):
+ *  - 完全由用户在 smanga.json 的 p2p.node.publicUrl 配置,节点/tracker 不再做端口拆分/替换
+ *  - 仅在上报时做一次规范化(补 http:// 前缀、去尾部斜杠)
+ *  - tracker 侧也直接信任这个 URL,不再拼接 localHost/localPort
+ *
  * 注意:
  *  - nodeToken 仅首次注册由 Tracker 明文返回,之后仅持久化在本地配置;
  *    Tracker 侧只存 sha256(token),无法恢复。
@@ -20,7 +25,7 @@ import { get_config, set_config } from '#utils/index'
 import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
 import { log_p2p_error } from '#utils/p2p_log'
-import { normalize_public_url, parse_public_url, is_reportable_public_url } from '#utils/ip_resolver'
+import { normalize_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 
 export type P2PIdentity = {
   nodeId: string
@@ -29,34 +34,15 @@ export type P2PIdentity = {
 }
 
 /**
- * 解析节点本次运行对外的监听端口:
- * 优先读 process.env.PORT (AdonisJS 实际监听端口),否则回落 smanga.json 的 p2p.node.listenPort/lanPort
- * 保证 register/heartbeat 上报的端口与 HTTP serve 实际监听一致
- */
-function resolveLocalPort(p2p: any): number | undefined {
-  const envPort = Number(process.env.PORT)
-  if (Number.isFinite(envPort) && envPort > 0) return envPort
-  const cfgPort = p2p?.node?.listenPort || p2p?.node?.lanPort
-  return cfgPort && cfgPort > 0 ? cfgPort : undefined
-}
-
-/**
  * 解析节点对外可达 publicUrl:
- *  - 用户在 smanga.json 配置了真实可达地址(非 loopback)才上报
- *  - 端口未显式指定时,回落到本次实际监听端口,补齐为 "http://host:port"
- *  - 否则返回 undefined,交给 tracker 用 request.ip() 推断
+ *  - 取 smanga.json 的 p2p.node.publicUrl 原值
+ *  - 仅做 normalize_public_url(补 http://、去尾部斜杠)
+ *  - host 为 loopback / 空 -> 返回 undefined(不入库)
  */
 function resolvePublicUrl(p2p: any): string | undefined {
   const raw = p2p?.node?.publicUrl
   if (!is_reportable_public_url(raw)) return undefined
-  const parsed = parse_public_url(raw)
-  if (!parsed) return undefined
-  if (parsed.port) return parsed.url
-  // 用户没填端口,自动用本机监听端口补齐,避免 tracker 端拼不出 baseUrl
-  // 注意: path 前缀(pathPrefix)要保留,支持用户配置 "example.com/api" 这类反代场景
-  const fallback = resolveLocalPort(p2p)
-  if (fallback) return `${parsed.protocol}://${parsed.host}:${fallback}${parsed.pathPrefix}`
-  return parsed.url
+  return normalize_public_url(raw)
 }
 
 class P2PIdentityService {
@@ -150,8 +136,6 @@ class P2PIdentityService {
         nodeName,
         version: 'smanga-adonis',
         publicUrl: resolvePublicUrl(p2p),
-        localHost: p2p.node?.lanHost || undefined,
-        localPort: resolveLocalPort(p2p),
       })
 
       // 回写配置
@@ -216,8 +200,6 @@ class P2PIdentityService {
       const client = new TrackerClient(url, nodeId, nodeToken)
       await client.heartbeat({
         publicUrl: resolvePublicUrl(p2p),
-        localHost: p2p?.node?.lanHost || undefined,
-        localPort: resolveLocalPort(p2p),
       })
       return true
     } catch (e: any) {
@@ -273,11 +255,11 @@ class P2PIdentityService {
    *
    * 与 invalidateAndReregister 的差异:
    *  - 若本地 nodeId/nodeToken 在 tracker 仍然有效 → 不生成新 nodeId,
-   *    仅把最新 publicUrl / localHost / localPort / nodeName 推送到 tracker(心跳+更新)
+   *    仅把最新 publicUrl / nodeName 推送到 tracker(心跳+更新)
    *  - 若身份失效或本地无身份 → 才走完整重注册流程
    *
    * 这样可避免每次手动点击都产生一个新的节点记录、污染 tracker 节点表,
-   * 也能让用户修改端口/publicUrl/节点名后一键"同步到 tracker"。
+   * 也能让用户修改 publicUrl/节点名后一键"同步到 tracker"。
    */
   async manualRegister(): Promise<{
     identity: P2PIdentity
@@ -320,7 +302,7 @@ class P2PIdentityService {
   /**
    * 将本地配置里的最新端点信息推送到 tracker
    *  - 本机 tracker: 直接写 tracker_node 表
-   *  - 远端 tracker: heartbeat 覆盖 publicUrl/端口,updateNode 覆盖 nodeName
+   *  - 远端 tracker: heartbeat 覆盖 publicUrl,updateNode 覆盖 nodeName
    *
    * 任一子步骤失败都直接抛错给调用方,让用户看到具体原因。
    */
@@ -346,11 +328,9 @@ class P2PIdentityService {
 
     const client = new TrackerClient(url, nodeId, nodeToken)
 
-    // heartbeat 会触发 tracker 端反向可达性校验并更新 publicUrl/端口
+    // heartbeat 会触发 tracker 端反向可达性校验并更新 publicUrl
     await client.heartbeat({
       publicUrl: resolvePublicUrl(p2p),
-      localHost: p2p?.node?.lanHost || undefined,
-      localPort: resolveLocalPort(p2p),
     })
 
     // nodeName 通过 updateNode 同步(heartbeat 不处理 nodeName)
@@ -422,15 +402,14 @@ class P2PIdentityService {
     const rawToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '')
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
-    const port = resolveLocalPort(p2p) || null
     const cfgPublicUrl = resolvePublicUrl(p2p) // 已过滤掉 loopback
 
     if (!cfgPublicUrl) {
       console.warn(
         '[p2p] 本地直注册:未配置 p2p.node.publicUrl,publicUrl 将先置空。\n' +
         '       如本机需要被外部节点访问,请在 smanga.json 设置:\n' +
-        '         p2p.node.publicUrl = "你的公网IP或域名[:端口]"\n' +
-        '       示例: "example.com:9798" 或 "http://1.2.3.4:9798"'
+        '         p2p.node.publicUrl = "你的公网IP或域名[:端口][/path]"\n' +
+        '       示例: "example.com:9797/api" 或 "http://1.2.3.4:9798"'
       )
     }
 
@@ -440,8 +419,6 @@ class P2PIdentityService {
         nodeToken: tokenHash,
         nodeName: nodeName || null,
         publicUrl: cfgPublicUrl || null,
-        localHost: p2p?.node?.lanHost || '127.0.0.1',
-        localPort: port,
         version: 'smanga-adonis',
         userAgent: 'local-init',
         online: 1,
@@ -471,7 +448,6 @@ class P2PIdentityService {
 
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
-    const port = resolveLocalPort(p2p) || null
     const cfgPublicUrl = resolvePublicUrl(p2p)
 
     await prisma.tracker_node.upsert({
@@ -481,8 +457,6 @@ class P2PIdentityService {
         nodeToken: tokenHash,
         online: 1,
         lastHeartbeat: new Date(),
-        // 同机自愈时强制刷新端口,保证 seeds 能拼出正确 baseUrl
-        ...(port !== null && { localPort: port }),
         ...(cfgPublicUrl && { publicUrl: cfgPublicUrl }),
       },
       create: {
@@ -491,8 +465,6 @@ class P2PIdentityService {
         nodeName: p2p?.node?.nodeName || null,
         // 仅当配置里显式给了真实可达 URL(非 loopback)才入库,避免污染
         publicUrl: cfgPublicUrl || null,
-        localHost: p2p?.node?.lanHost || '127.0.0.1',
-        localPort: port,
         version: 'smanga-adonis',
         userAgent: 'local-sync',
         online: 1,

@@ -471,8 +471,6 @@ class TrackerShareService {
           nodeName: n.nodeName,
           online: n.online,
           publicUrl: n.publicUrl,
-          localHost: n.localHost,
-          localPort: n.localPort,
           lastHeartbeat: n.lastHeartbeat,
           shareName: r.shareName,
         }

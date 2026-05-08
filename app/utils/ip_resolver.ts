@@ -171,39 +171,19 @@ export function is_reportable_public_host(host: string | undefined | null): bool
 
 // ========================= publicUrl 工具 =========================
 //
-// 用户可填多种格式:
-//   "example.com"
-//   "example.com:9798"
-//   "http://example.com:9798"
-//   "https://example.com"
-//   "1.2.3.4"
-//   "1.2.3.4:9798"
-//   "1.2.3.4:9797/api"           ← 经反代场景,path 前缀会被保留
-//   "https://example.com/smanga"
-// 内部统一使用 normalize_public_url 规范化为 "http(s)://host[:port][/path]"(去尾部斜杠)
-// parse_public_url 进一步拆出 host/port/protocol/pathPrefix,便于可达性探测等场景复用
-
-export type ParsedPublicUrl = {
-  /** 协议 http / https,未填时默认 http */
-  protocol: 'http' | 'https'
-  /** 纯 host(不含端口),可能是域名或 IP */
-  host: string
-  /** 端口号;未显式指定时返回undefined(由调用方决定回落) */
-  port?: number
-  /** path 前缀(如反代场景的 /api),无则为空串;保证以 / 开头、无尾部 / */
-  pathPrefix: string
-  /** 规范化后的完整 URL: protocol://host[:port][/path] */
-  url: string
-}
+// 设计原则(简化版):
+//  - 完全信任用户填写的 publicUrl,不做拆分/端口替换/path 拼接猜测
+//  - 仅做两件事:
+//      1) 自动补全 http:// 前缀(用户只填 host 或 host:port 时)
+//      2) 规范化尾部斜杠(去掉末尾的一个或多个 /)
+//  - 拼接 P2P 接口子路径时统一走 join_url_path,避免双斜杠
 
 /**
  * 规范化用户填写的 publicUrl
- * 返回去除首尾空白、尾部斜杠的字符串;解析失败返回空串
- *
- * 规则:
- *  - 若原串包含 "://" 视为完整 URL
- *  - 否则按 "host" / "host:port" / "host:port/path" 处理,默认补上 "http://"
- *  - IPv6 需要用户自行加 [ ],本函数不做特殊拆分
+ *  - 去除首尾空白
+ *  - 去除尾部斜杠
+ *  - 若未带 http(s):// 协议头,自动补上 http://
+ *  - 解析失败/空串返回空串
  */
 export function normalize_public_url(raw: string | undefined | null): string {
   if (!raw) return ''
@@ -217,63 +197,37 @@ export function normalize_public_url(raw: string | undefined | null): string {
 }
 
 /**
- * 解析 publicUrl 为结构化字段
- *  - 解析失败(空串或非法) -> 返回 null
- *  - 端口未显式指定 -> port 为 undefined
- *  - path 部分会保留为 pathPrefix(无 path 时为空串)
+ * 节点自报的 publicUrl 是否值得入库
+ *  - 为空/解析失败 -> false
+ *  - host 为 loopback / 0.0.0.0 / localhost -> false
+ *  - 其它 -> true
  */
-export function parse_public_url(raw: string | undefined | null): ParsedPublicUrl | null {
+export function is_reportable_public_url(raw: string | undefined | null): boolean {
   const normalized = normalize_public_url(raw)
-  if (!normalized) return null
+  if (!normalized) return false
   try {
     const u = new URL(normalized)
-    const protocol = u.protocol === 'https:' ? 'https' : 'http'
-    const host = u.hostname
-    if (!host) return null
-    const port = u.port ? Number(u.port) : undefined
-    const hasPort = port !== undefined && Number.isFinite(port) && port > 0
-
-    // 提取 path 前缀,去掉首尾空白和尾部 /,保留首部 /
-    let pathPrefix = (u.pathname || '').replace(/\/+$/, '')
-    if (pathPrefix === '/' || pathPrefix === '') pathPrefix = ''
-
-    const hostPart = hasPort ? `${host}:${port}` : host
-    const url = `${protocol}://${hostPart}${pathPrefix}`
-    return {
-      protocol,
-      host,
-      port: hasPort ? port : undefined,
-      pathPrefix,
-      url,
-    }
+    return is_reportable_public_host(u.hostname)
   } catch {
-    return null
+    return false
   }
 }
 
 /**
- * 节点自报的 publicUrl 是否值得入库
- *  - 为空/解析失败 -> false
- *  - host 为 loopback / 0.0.0.0 -> false
- *  - 其它 -> true
+ * 将一个子路径安全地拼接到 baseUrl 上:
+ *  - baseUrl 末尾可能带或不带 /,subPath 开头也可能带或不带 /
+ *  - 结果保证只有一个 / 作为分隔符,不会出现 "//"
+ *
+ * 示例:
+ *   join_url_path('http://a.com:9797/api', '/p2p/verify/echo')
+ *     -> 'http://a.com:9797/api/p2p/verify/echo'
+ *   join_url_path('http://a.com:9797/api/', 'p2p/verify/echo')
+ *     -> 'http://a.com:9797/api/p2p/verify/echo'
  */
-export function is_reportable_public_url(raw: string | undefined | null): boolean {
-  const parsed = parse_public_url(raw)
-  if (!parsed) return false
-  return is_reportable_public_host(parsed.host)
-}
-
-/**
- * 把 publicUrl 转成 "host:port" 形态(不含协议头),兼容老代码场景
- *  - 若 publicUrl 未指定端口则需外部给默认端口
- */
-export function public_url_to_host_port(
-  raw: string | undefined | null,
-  defaultPort?: number
-): { host: string; port: number } | null {
-  const parsed = parse_public_url(raw)
-  if (!parsed) return null
-  const port = parsed.port ?? defaultPort
-  if (!port || !Number.isFinite(port) || port <= 0) return null
-  return { host: parsed.host, port }
+export function join_url_path(baseUrl: string, subPath: string): string {
+  const base = String(baseUrl || '').replace(/\/+$/, '')
+  const sub = String(subPath || '').replace(/^\/+/, '')
+  if (!base) return sub ? `/${sub}` : ''
+  if (!sub) return base
+  return `${base}/${sub}`
 }

@@ -13,10 +13,9 @@ export default class TrackerNodesController {
    * POST /tracker/node/register
    *
    * publicUrl 策略:
-   *  - 节点自报(payload.publicUrl)优先,但必须能解析出非本地 host
-   *  - 其次由 tracker 侧通过 request 头链解析客户端真实 IP(resolve_client_ip)
-   *    + 节点上报的 localPort 拼成 publicUrl
-   *  - 最后结果以 "http(s)://host:port" 形态记录进 node 表
+   *  - 完全信任节点自报的 publicUrl (http(s)://host:port[/path])
+   *  - tracker 侧仅做规范化(自动补 http:// 前缀、去尾斜杠)与反向可达性验证
+   *  - 不再基于 request.ip / localPort 做任何推断
    */
   async register(ctx: HttpContext) {
     const { request, response } = ctx
@@ -25,8 +24,6 @@ export default class TrackerNodesController {
         'nodeName',
         'version',
         'publicUrl',
-        'localHost',
-        'localPort',
         'inviteCode',
       ])
       const clientIp = resolve_client_ip(ctx)
@@ -50,7 +47,7 @@ export default class TrackerNodesController {
     const { request, response } = ctx
     try {
       const nodeId = (request as any).trackerNodeId as string
-      const payload = request.only(['publicUrl', 'localHost', 'localPort'])
+      const payload = request.only(['publicUrl'])
       const clientIp = resolve_client_ip(ctx)
 
       const result = await trackerNodeService.heartbeat(nodeId, payload, clientIp)

@@ -1,11 +1,12 @@
 /**
  * Tracker 节点反向可达性验证服务
  *
- * 工作流:
- *  1. register / heartbeat 时 tracker 决定出节点的 baseUrl
- *     (节点自报 publicUrl > 公网IP+localPort 直连 > 公网IP+9797/api 反代兜底)
+ * 工作流(简化版):
+ *  1. register / heartbeat 时 tracker 直接拿到节点自报的 publicUrl
+ *     (经 normalize_public_url 规范化:补 http://、去尾斜杠)
  *  2. tracker 生成一次性 challenge(16 字节 hex)
- *  3. tracker 主动 GET {baseUrl}/p2p/verify/echo?challenge=xxx
+ *  3. tracker 主动 GET {publicUrl}/p2p/verify/echo?challenge=xxx
+ *     - 拼接通过 join_url_path 完成,保证不会出现双斜杠
  *  4. 节点回显 challenge -> tracker 比对 -> 一致即视为"真实可达的公网端点"
  *
  * 失败场景统一视为不可达:
@@ -19,7 +20,11 @@
 
 import axios from 'axios'
 import crypto from 'crypto'
-import { is_reportable_public_host, parse_public_url } from '#utils/ip_resolver'
+import {
+  is_reportable_public_url,
+  join_url_path,
+  normalize_public_url,
+} from '#utils/ip_resolver'
 
 export type VerifyReachableParams = {
   /**
@@ -55,34 +60,19 @@ class TrackerReachabilityService {
     const { baseUrl, expectNodeId } = params
     const timeoutMs = params.timeoutMs ?? 5000
 
-    // 解析 baseUrl 做基本合法性校验(必须是 http(s):// 且 host 非 loopback)
-    const parsed = parse_public_url(baseUrl)
-    if (!parsed) {
+    // 信任客户端 url:仅做 normalize + host 合法性校验
+    if (!is_reportable_public_url(baseUrl)) {
       return {
         ok: false,
-        reason: `baseUrl 非法: ${baseUrl}`,
+        reason: `baseUrl 非法或为本地地址: ${baseUrl}`,
         elapsedMs: Date.now() - started,
       }
     }
-    if (!is_reportable_public_host(parsed.host)) {
-      return {
-        ok: false,
-        reason: `publicHost 非法或为本地地址: ${parsed.host}`,
-        elapsedMs: Date.now() - started,
-      }
-    }
-    const port = parsed.port
-    if (!port || port <= 0 || port > 65535) {
-      return {
-        ok: false,
-        reason: `publicPort 非法: ${port}`,
-        elapsedMs: Date.now() - started,
-      }
-    }
+    const normalizedBase = normalize_public_url(baseUrl)
 
     const challenge = crypto.randomBytes(16).toString('hex')
-    // baseUrl 已规范化为无尾部 /,直接拼 /p2p/verify/echo
-    const url = `${parsed.url}/p2p/verify/echo`
+    // 用 join_url_path 拼接,避免 baseUrl 末尾 / 与 subPath 起始 / 重复
+    const url = join_url_path(normalizedBase, '/p2p/verify/echo')
 
     try {
       const resp = await axios.get(url, {
@@ -131,17 +121,16 @@ class TrackerReachabilityService {
       const code = err?.code
       const status = err?.response?.status
       let reason: string
-      const target = parsed.url
       if (status) {
-        reason = `HTTP ${status} (${err?.response?.statusText || ''}) ${target}`
+        reason = `HTTP ${status} (${err?.response?.statusText || ''}) ${url}`
       } else if (code === 'ECONNREFUSED') {
-        reason = `连接被拒绝 (端口未开放或服务未运行): ${target}`
+        reason = `连接被拒绝 (端口未开放或服务未运行): ${url}`
       } else if (code === 'ETIMEDOUT' || code === 'ECONNABORTED') {
-        reason = `连接超时 (>${timeoutMs}ms): ${target}`
+        reason = `连接超时 (>${timeoutMs}ms): ${url}`
       } else if (code === 'ENOTFOUND') {
-        reason = `域名解析失败: ${parsed.host}`
+        reason = `域名解析失败: ${url}`
       } else if (code === 'EHOSTUNREACH' || code === 'ENETUNREACH') {
-        reason = `网络不可达: ${target}`
+        reason = `网络不可达: ${url}`
       } else {
         reason = `${code || 'unknown'}: ${err?.message}`
       }

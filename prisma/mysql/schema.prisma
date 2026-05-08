@@ -497,8 +497,6 @@ model p2p_peer_cache {
   nodeId         String    @db.VarChar(64)
   nodeName       String?   @db.VarChar(191)
   publicUrl      String?   @db.VarChar(255)
-  localHost      String?   @db.VarChar(191)
-  localPort      Int?      @db.UnsignedInt
   online         Int       @default(0) @db.UnsignedInt
   version        String?   @db.VarChar(32)
   lastSeen       DateTime? @db.DateTime(6)
@@ -547,8 +545,6 @@ model tracker_node {
   nodeToken     String    @db.VarChar(128)
   nodeName      String?   @db.VarChar(191)
   publicUrl     String?   @db.VarChar(255)
-  localHost     String?   @db.VarChar(191)
-  localPort     Int?      @db.UnsignedInt
   version       String?   @db.VarChar(32)
   userAgent     String?   @db.VarChar(255)
   online        Int       @default(0) @db.UnsignedInt

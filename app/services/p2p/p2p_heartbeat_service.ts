@@ -10,7 +10,7 @@
 import { get_config } from '#utils/index'
 import TrackerClient from './tracker_client.js'
 import p2pIdentityService from './p2p_identity_service.js'
-import { parse_public_url, is_reportable_public_url } from '#utils/ip_resolver'
+import { normalize_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 import { reconcileGroupsWithTracker } from './p2p_group_reconcile_service.js'
 import manifestSyncService from './manifest/manifest_sync_service.js'
 
@@ -98,30 +98,14 @@ class P2PHeartbeatService {
       list.map(async (url) => {
         try {
           const client = new TrackerClient(url, identity.nodeId, identity.nodeToken)
-          // 同步上报当前实际监听端口(优先 process.env.PORT)
-          // 以便 tracker 里的 publicUrl/localPort 始终指向正在监听的端口
-          const envPort = Number(process.env.PORT)
-          const runtimePort = Number.isFinite(envPort) && envPort > 0
-            ? envPort
-            : (p2p.node?.listenPort || p2p.node?.lanPort || undefined)
-          // 计算 publicUrl:用户填了真实可达地址才上报;未指定端口时用 runtimePort 补齐,并保留 path 前缀
+          // publicUrl 完全信任用户配置:仅做 normalize(补 http://、去尾斜杠)
+          // 不再拆分 host/port、不再用本机 listenPort 覆盖,避免与用户填的反代地址冲突
           let publicUrl: string | undefined = undefined
           const cfgPublicUrl = p2p.node?.publicUrl
           if (is_reportable_public_url(cfgPublicUrl)) {
-            const parsed = parse_public_url(cfgPublicUrl)
-            if (parsed) {
-              publicUrl = parsed.port
-                ? parsed.url
-                : (runtimePort
-                    ? `${parsed.protocol}://${parsed.host}:${runtimePort}${parsed.pathPrefix}`
-                    : parsed.url)
-            }
+            publicUrl = normalize_public_url(cfgPublicUrl)
           }
-          const hb = await client.heartbeat({
-            publicUrl,
-            localHost: p2p.node?.lanHost || undefined,
-            localPort: runtimePort,
-          })
+          const hb = await client.heartbeat({ publicUrl })
 
           // 处理 tracker 推送的通知(粗粒度 piggyback)
           if (hb && Array.isArray(hb.pendingNotifications)) {

@@ -53,8 +53,6 @@ export default class P2PPeersController {
             update: {
               nodeName: m.nodeName || null,
               publicUrl: m.publicUrl || null,
-              localHost: m.localHost || null,
-              localPort: m.localPort || null,
               online: m.online ? 1 : 0,
               version: m.version || null,
               lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
@@ -64,8 +62,6 @@ export default class P2PPeersController {
               nodeId: m.nodeId,
               nodeName: m.nodeName || null,
               publicUrl: m.publicUrl || null,
-              localHost: m.localHost || null,
-              localPort: m.localPort || null,
               online: m.online ? 1 : 0,
               version: m.version || null,
               lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,

@@ -496,8 +496,6 @@ model p2p_peer_cache {
   nodeId         String
   nodeName       String?
   publicUrl      String?
-  localHost      String?
-  localPort      Int?
   online         Int       @default(0)
   version        String?
   lastSeen       DateTime?
@@ -546,8 +544,6 @@ model tracker_node {
   nodeToken     String
   nodeName      String?
   publicUrl     String?
-  localHost     String?
-  localPort     Int?
   version       String?
   userAgent     String?
   online        Int       @default(0)
