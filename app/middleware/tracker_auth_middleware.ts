@@ -67,6 +67,19 @@ export default class TrackerAuthMiddleware {
       )
     }
 
+    // 在线检查豁免: 心跳接口允许离线节点调用,否则节点被标记离线后永远无法恢复(死锁)
+    // 心跳成功后 tracker 会自动将 online 置 1,恢复正常
+    const isHeartbeat = url === '/tracker/node/heartbeat'
+    if (node.online !== 1 && !isHeartbeat) {
+      return response.status(403).json(
+        new SResponse({
+          code: 1,
+          message: '节点离线，不允许操作',
+          status: 'offline',
+        })
+      )
+    }
+
     // 校验 token hash
     const tokenHash = crypto.createHash('sha256').update(nodeToken).digest('hex')
     if (tokenHash !== node.nodeToken) {
