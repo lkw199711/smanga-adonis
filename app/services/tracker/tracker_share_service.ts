@@ -89,8 +89,10 @@ class TrackerShareService {
     const remoteMediaId = s.remoteMediaId ?? null
     const remoteMangaId = s.remoteMangaId ?? null
 
+    // 注: schema 中 @@unique([...], map: "uniqueShareManifest")
+    // map 仅作为数据库索引名;Prisma Client 实际复合键名按字段名拼接
     const whereUnique = {
-      uniqueShareManifest: {
+      trackerGroupId_nodeId_shareType_remoteMediaId_remoteMangaId: {
         trackerGroupId,
         nodeId,
         shareType,
@@ -326,7 +328,7 @@ class TrackerShareService {
 
     const row = await prisma.tracker_share_manifest.findUnique({
       where: {
-        uniqueShareManifest: {
+        trackerGroupId_nodeId_shareType_remoteMediaId_remoteMangaId: {
           trackerGroupId: group.trackerGroupId,
           nodeId: params.nodeId,
           shareType: params.shareType,

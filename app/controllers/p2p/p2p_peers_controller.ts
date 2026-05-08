@@ -218,7 +218,9 @@ export default class P2PPeersController {
       try {
         await prisma.p2p_peer_share_manifest.upsert({
           where: {
-            uniquePeerShareManifest: {
+            // 注: schema 中 @@unique([...], map: "uniquePeerShareManifest")
+            // map 仅作为数据库索引名;Prisma Client 实际复合键名按字段名拼接
+            p2pGroupId_ownerNodeId_shareType_remoteMediaId_remoteMangaId: {
               p2pGroupId: group.p2pGroupId,
               ownerNodeId: m.nodeId,
               shareType: m.shareType,
