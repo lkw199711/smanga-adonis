@@ -89,19 +89,18 @@ class TrackerShareService {
     const remoteMediaId = s.remoteMediaId ?? null
     const remoteMangaId = s.remoteMangaId ?? null
 
-    // 注: schema 中 @@unique([...], map: "uniqueShareManifest")
-    // map 仅作为数据库索引名;Prisma Client 实际复合键名按字段名拼接
-    const whereUnique = {
-      trackerGroupId_nodeId_shareType_remoteMediaId_remoteMangaId: {
+    // 注: 复合唯一键中含 nullable 字段(remoteMediaId/remoteMangaId)时,
+    // Prisma 的 findUnique 会校验类型为非 null,传 null 直接 400 报错。
+    // 因此改用 findFirst 按各字段精确匹配(包括 null),功能等价。
+    const existing = await prisma.tracker_share_manifest.findFirst({
+      where: {
         trackerGroupId,
         nodeId,
         shareType,
         remoteMediaId,
         remoteMangaId,
       },
-    } as any
-
-    const existing = await prisma.tracker_share_manifest.findUnique({ where: whereUnique })
+    })
 
     // 节点未上报 manifest:返回现有记录的 version,若无记录则返回占位
     if (!s.manifest) {
@@ -326,16 +325,15 @@ class TrackerShareService {
     const group = await prisma.tracker_group.findUnique({ where: { groupNo } })
     if (!group || group.enable === 0) throw new Error('群组不存在或已停用')
 
-    const row = await prisma.tracker_share_manifest.findUnique({
+    // 同样使用 findFirst 绕过复合唯一键对 nullable 字段的限制
+    const row = await prisma.tracker_share_manifest.findFirst({
       where: {
-        trackerGroupId_nodeId_shareType_remoteMediaId_remoteMangaId: {
-          trackerGroupId: group.trackerGroupId,
-          nodeId: params.nodeId,
-          shareType: params.shareType,
-          remoteMediaId: params.remoteMediaId ?? null,
-          remoteMangaId: params.remoteMangaId ?? null,
-        },
-      } as any,
+        trackerGroupId: group.trackerGroupId,
+        nodeId: params.nodeId,
+        shareType: params.shareType,
+        remoteMediaId: params.remoteMediaId ?? null,
+        remoteMangaId: params.remoteMangaId ?? null,
+      },
     })
     if (!row) throw new Error('manifest 不存在')
 
