@@ -1,24 +1,14 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-08 21:29:33
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-16 16:08:55
- * @FilePath: \smanga-adonis\app\controllers\searches_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { order_params } from '../utils/index.js'
+import { searchMangaValidator, searchChapterValidator } from '#validators/search'
 
 export default class SearchesController {
   public async mangas({ request, response }: HttpContext) {
-    const { searchText, page, pageSize, order } = request.only([
-      'searchText',
-      'searchType',
-      'page',
-      'pageSize',
-      'order',
-    ])
+    const { searchText, page, pageSize, order } = await searchMangaValidator.validate(
+      request.qs()
+    )
 
     const userId = (request as any).userId
     const user = await prisma.user.findUnique({ where: { userId } })
@@ -53,8 +43,8 @@ export default class SearchesController {
 
     // 统计未观看章节数
     for (let i = 0; i < list.length; i++) {
-      const manga: any = list[i];
-      const mangaId = Number(manga.mangaId);
+      const manga: any = list[i]
+      const mangaId = Number(manga.mangaId)
       const chapterCount = await prisma.chapter.count({ where: { mangaId } })
       const historys = await prisma.history.groupBy({
         by: ['chapterId'],
@@ -74,12 +64,9 @@ export default class SearchesController {
   }
 
   public async chapters({ request, response }: HttpContext) {
-    const { searchText, page, pageSize, order } = request.only([
-      'searchText',
-      'page',
-      'pageSize',
-      'order',
-    ])
+    const { searchText, page, pageSize, order } = await searchChapterValidator.validate(
+      request.qs()
+    )
 
     const userId = (request as any).userId
     const user = await prisma.user.findUnique({ where: { userId } })
@@ -113,8 +100,8 @@ export default class SearchesController {
     ])
 
     for (let i = 0; i < list.length; i++) {
-      const chapter: any = list[i];
-      const chapterId = Number(chapter.chapterId);
+      const chapter: any = list[i]
+      const chapterId = Number(chapter.chapterId)
       if (chapterId) {
         chapter.latest = await prisma.latest.findFirst({
           where: { userId, chapterId },

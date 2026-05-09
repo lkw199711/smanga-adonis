@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { SResponse } from '../interfaces/response.js'
+import { sliceChartValidator } from '#validators/chart'
 
 export default class ChartsController {
   public async browse({ response }: HttpContext) {
@@ -30,7 +31,8 @@ export default class ChartsController {
   }
 
   public async tag({ request, response }: HttpContext) {
-    const { slice = 5 } = request.only(['slice'])
+    const { slice } = await sliceChartValidator.validate(request.qs())
+    const sliceNum = Number(slice ?? 5)
     const tagCounts = await prisma.mangaTag.groupBy({
       by: ['tagId'],
       _count: {
@@ -41,7 +43,7 @@ export default class ChartsController {
           tagId: 'desc',
         },
       },
-      take: Number(slice),
+      take: sliceNum,
     })
 
     const enrichedTagCounts = await Promise.all(
@@ -73,7 +75,8 @@ export default class ChartsController {
   }
 
   public async ranking({ request, response }: HttpContext) {
-    const { slice = 5 } = request.only(['slice'])
+    const { slice } = await sliceChartValidator.validate(request.qs())
+    const sliceNum = Number(slice ?? 5)
 
     const mangaRanking = await prisma.history.groupBy({
       by: ['mangaId'],
@@ -85,7 +88,7 @@ export default class ChartsController {
           mangaId: 'desc',
         },
       },
-      take: Number(slice),
+      take: sliceNum,
     })
 
     const enrichedMangaRanking = await Promise.all(

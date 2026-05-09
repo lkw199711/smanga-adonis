@@ -1,0 +1,3 @@
+﻿app/controllers/logs_controller.ts(39,13): error TS2352: Conversion of type '{ logContent: string; logType: string | undefined; logLevel: string | undefined; logTitle: string | undefined; }' to type 'logCreateInput' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ logContent: string; logType: string | undefined; logLevel: string | undefined; logTitle: string | undefined; }' is missing the following properties from type 'logCreateInput': message, version, environment
+app/controllers/tasks_controller.ts(43,26): error TS2345: Argument of type 'string[]' is not assignable to parameter of type 'string'.

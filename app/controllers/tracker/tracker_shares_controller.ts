@@ -2,6 +2,14 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { ListResponse, SResponse } from '#interfaces/response'
 import trackerShareService from '#services/tracker/tracker_share_service'
 import { log_tracker_error } from '#utils/p2p_log'
+import {
+  announceTrackerShareValidator,
+  seedsTrackerShareValidator,
+  manifestsTrackerShareValidator,
+  manifestTrackerShareValidator,
+  listTrackerShareValidator,
+  trackerGroupNoParamValidator,
+} from '#validators/tracker'
 
 /**
  * Tracker 共享索引接口
@@ -14,10 +22,11 @@ export default class TrackerSharesController {
   async announce({ params, request, response }: HttpContext) {
     try {
       const nodeId = (request as any).trackerNodeId as string
-      const payload = request.only(['shares']) as { shares: any[] }
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const payload = await announceTrackerShareValidator.validate(request.all())
       const result = await trackerShareService.announce(
         nodeId,
-        params.groupNo,
+        groupNo,
         payload as any
       )
       return response.json(new SResponse({ code: 0, message: '上报成功', data: result }))
@@ -33,11 +42,11 @@ export default class TrackerSharesController {
    */
   async seeds({ params, request, response }: HttpContext) {
     try {
-      const { shareType, remoteMediaId, remoteMangaId } = request.only([
-        'shareType', 'remoteMediaId', 'remoteMangaId',
-      ])
-      const { list, count } = await trackerShareService.findSeeds(params.groupNo, {
-        shareType,
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const { shareType, remoteMediaId, remoteMangaId } =
+        await seedsTrackerShareValidator.validate(request.qs())
+      const { list, count } = await trackerShareService.findSeeds(groupNo, {
+        shareType: shareType as any,
         remoteMediaId: remoteMediaId ? Number(remoteMediaId) : undefined,
         remoteMangaId: remoteMangaId ? Number(remoteMangaId) : undefined,
       })
@@ -58,9 +67,10 @@ export default class TrackerSharesController {
    */
   async manifests({ params, request, response }: HttpContext) {
     try {
-      const { since, nodeId } = request.only(['since', 'nodeId'])
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const { since, nodeId } = await manifestsTrackerShareValidator.validate(request.qs())
       const data = await trackerShareService.listManifestSummaries(
-        params.groupNo,
+        groupNo,
         {
           since: since ? Number(since) : undefined,
           nodeId: nodeId || undefined,
@@ -79,12 +89,12 @@ export default class TrackerSharesController {
    */
   async manifest({ params, request, response }: HttpContext) {
     try {
-      const { nodeId, shareType, remoteMediaId, remoteMangaId } = request.only([
-        'nodeId', 'shareType', 'remoteMediaId', 'remoteMangaId',
-      ])
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const { nodeId, shareType, remoteMediaId, remoteMangaId } =
+        await manifestTrackerShareValidator.validate(request.qs())
       if (!nodeId || !shareType) throw new Error('nodeId 和 shareType 必填')
 
-      const data = await trackerShareService.getManifestDetail(params.groupNo, {
+      const data = await trackerShareService.getManifestDetail(groupNo, {
         nodeId,
         shareType,
         remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
@@ -102,8 +112,9 @@ export default class TrackerSharesController {
    */
   async index({ params, request, response }: HttpContext) {
     try {
-      const { page, pageSize, keyword } = request.only(['page', 'pageSize', 'keyword'])
-      const { list, count } = await trackerShareService.listGroupShares(params.groupNo, {
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const { page, pageSize, keyword } = await listTrackerShareValidator.validate(request.qs())
+      const { list, count } = await trackerShareService.listGroupShares(groupNo, {
         page: page ? Number(page) : undefined,
         pageSize: pageSize ? Number(pageSize) : undefined,
         keyword,

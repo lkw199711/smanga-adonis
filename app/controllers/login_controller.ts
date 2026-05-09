@@ -1,16 +1,14 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-07-15 19:01:33
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-06 15:30:03
- * @FilePath: \smanga-adonis\app\controllers\login_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
 import { get_config } from '#utils/index'
 import { v4 as uuidv4 } from 'uuid'
+import {
+  idParamLoginValidator,
+  createLoginValidator,
+  updateLoginValidator,
+} from '#validators/login'
 
 export default class LoginController {
   public async index({ response }: HttpContext) {
@@ -25,15 +23,14 @@ export default class LoginController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { loginId } = params
-    loginId = Number(loginId)
+    const { loginId } = await idParamLoginValidator.validate(params)
     const login = await prisma.login.findUnique({ where: { loginId } })
     const showResponse = new SResponse({ code: 0, message: '', data: login })
     return response.json(showResponse)
   }
 
   public async create({ request, response }: HttpContext) {
-    const { userName, passWord } = request.only(['userName', 'passWord'])
+    const { userName, passWord } = await createLoginValidator.validate(request.all())
     const user = await prisma.user.findUnique({
       where: { userName },
       include: {
@@ -86,18 +83,20 @@ export default class LoginController {
       },
     })
     const saveResponse = new SResponse({
-      code: 0, message: '登录成功', data: {
+      code: 0,
+      message: '登录成功',
+      data: {
         ...login,
         serverKey: get_config()?.serverKey,
-        userRole: user.role
-    } })
+        userRole: user.role,
+      },
+    })
     return response.json(saveResponse)
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { loginId } = params
-    loginId = Number(loginId)
-    const modifyData = request.only(['userName', 'passWord'])
+    const { loginId } = await idParamLoginValidator.validate(params)
+    const modifyData = await updateLoginValidator.validate(request.all())
     const login = await prisma.login.update({
       where: { loginId },
       data: modifyData,
@@ -107,8 +106,7 @@ export default class LoginController {
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { loginId } = params
-    loginId = Number(loginId)
+    const { loginId } = await idParamLoginValidator.validate(params)
     const login = await prisma.login.delete({ where: { loginId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: login })
     return response.json(destroyResponse)

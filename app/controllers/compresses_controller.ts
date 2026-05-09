@@ -3,14 +3,21 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { s_delete } from '#utils/index'
 import { addTask } from '#services/queue_service'
+import {
+  listCompressValidator,
+  idParamCompressValidator,
+  createCompressValidator,
+  updateCompressValidator,
+  batchIdsParamCompressValidator,
+} from '#validators/compress'
 
 export default class CompressesController {
   public async index({ request, response }: HttpContext) {
-    const { page, pageSize } = request.only(['page', 'pageSize'])
+    const { page, pageSize } = await listCompressValidator.validate(request.qs())
     const queryParams = {
       ...(page && {
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip: (page - 1) * (pageSize ?? 10),
+        take: pageSize ?? 10,
       }),
     }
     const [list, count] = await Promise.all([
@@ -28,74 +35,32 @@ export default class CompressesController {
   }
 
   public async create({ request, response }: HttpContext) {
-    const {
-      compressType,
-      compressPath,
-      compressStatus,
-      imageCount,
-      mediaId,
-      mangaId,
-      chapterId,
-      chapterPath,
-    } = request.body()
-
-    const compress = await prisma.compress.create({
-      data: {
-        compressType,
-        compressPath,
-        compressStatus,
-        imageCount,
-        mediaId,
-        mangaId,
-        chapterId,
-        chapterPath,
-      },
-    })
+    const data = await createCompressValidator.validate(request.all())
+    const compress = await prisma.compress.create({ data: data as any })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: compress })
     return response.json(saveResponse)
   }
 
   public async show({ params, response }: HttpContext) {
-    let { compressId } = params
-    compressId = Number(compressId)
+    const { compressId } = await idParamCompressValidator.validate(params)
     const compress = await prisma.compress.findUnique({ where: { compressId } })
     const showResponse = new SResponse({ code: 0, message: '', data: compress })
     return response.json(showResponse)
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { compressId } = params
-    compressId = Number(compressId)
-    const {
-      compressType,
-      compressPath,
-      compressStatus,
-      imageCount,
-      mediaId,
-      mangaId,
-      chapterId,
-      chapterPath,
-    } = request.body()
+    const { compressId } = await idParamCompressValidator.validate(params)
+    const data = await updateCompressValidator.validate(request.all())
     const compress = await prisma.compress.update({
       where: { compressId },
-      data: {
-        compressType,
-        compressPath,
-        compressStatus,
-        imageCount,
-        mediaId,
-        mangaId,
-        chapterId,
-        chapterPath,
-      },
+      data: data as any,
     })
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: compress })
     return response.json(updateResponse)
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { compressId } = params
-    compressId = Number(compressId)
+    const { compressId } = await idParamCompressValidator.validate(params)
     const compress = await prisma.compress.delete({ where: { compressId } })
     const compressPath = compress.compressPath
     // 删除文件
@@ -106,23 +71,14 @@ export default class CompressesController {
 
   // 批量删除
   public async destroy_batch({ params, response }: HttpContext) {
-    let { compressIds } = params
-    compressIds = compressIds.split(',').map((item: string) => Number(item))
+    const { compressIds } = await batchIdsParamCompressValidator.validate(params)
     const compresses = await prisma.compress.findMany({
-      where: {
-        compressId: {
-          in: compressIds,
-        },
-      },
+      where: { compressId: { in: compressIds } },
     })
 
     // 删除数据库记录
     const deleteResponse = await prisma.compress.deleteMany({
-      where: {
-        compressId: {
-          in: compressIds,
-        },
-      },
+      where: { compressId: { in: compressIds } },
     })
 
     // 删除文件

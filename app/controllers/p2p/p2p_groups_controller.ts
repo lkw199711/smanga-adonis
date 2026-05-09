@@ -23,6 +23,15 @@ import {
   reconcileGroupsWithTracker,
   purgeLocalGroupByGroupNo,
 } from '#services/p2p/p2p_group_reconcile_service'
+import {
+  createP2PGroupValidator,
+  joinP2PGroupValidator,
+  leaveP2PGroupValidator,
+  kickP2PGroupValidator,
+  dismissP2PGroupValidator,
+  idParamP2PValidator,
+  groupNoParamValidator,
+} from '#validators/p2p'
 
 function get_client(): TrackerClient | null {
   const cfg = get_config()?.p2p
@@ -106,7 +115,7 @@ export default class P2PGroupsController {
   }
 
   async show({ params, response }: HttpContext) {
-    const id = Number(params.id)
+    const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_group.findUnique({ where: { p2pGroupId: id } })
     if (!item) {
       return response.status(404).json(new SResponse({ code: 1, message: 'not found', status: 'not found' }))
@@ -124,9 +133,9 @@ export default class P2PGroupsController {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
     }
 
-    const { groupName, describe, password, maxMembers } = request.only([
-      'groupName', 'describe', 'password', 'maxMembers',
-    ])
+    const { groupName, describe, password, maxMembers } = await createP2PGroupValidator.validate(
+      request.all()
+    )
 
     try {
       const res = await call_with_reregister(client, (c) =>
@@ -163,7 +172,7 @@ export default class P2PGroupsController {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
     }
 
-    const { groupNo, password, inviteCode } = request.only(['groupNo', 'password', 'inviteCode'])
+    const { groupNo, password, inviteCode } = await joinP2PGroupValidator.validate(request.all())
 
     try {
       const res = await call_with_reregister(client, (c) =>
@@ -206,7 +215,7 @@ export default class P2PGroupsController {
     if (!client) {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
     }
-    const { groupNo } = request.only(['groupNo'])
+    const { groupNo } = await leaveP2PGroupValidator.validate(request.all())
 
     try {
       await call_with_reregister(client, (c) => c.leaveGroup(groupNo))
@@ -292,7 +301,7 @@ export default class P2PGroupsController {
    * 任何登录用户都可调用
    */
   async detail({ params, response }: HttpContext) {
-    const groupNo = String(params.groupNo)
+    const { groupNo } = await groupNoParamValidator.validate(params)
     const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!local) {
       return response.status(404).json(new SResponse({ code: 1, message: '本机未加入该群' }))
@@ -364,10 +373,7 @@ export default class P2PGroupsController {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
     }
 
-    const { groupNo, targetNodeId } = request.only(['groupNo', 'targetNodeId'])
-    if (!groupNo || !targetNodeId) {
-      return response.status(400).json(new SResponse({ code: 1, message: '参数缺失' }))
-    }
+    const { groupNo, targetNodeId } = await kickP2PGroupValidator.validate(request.all())
 
     try {
       await call_with_reregister(client, (c) => c.kickMember(groupNo, targetNodeId))
@@ -409,10 +415,7 @@ export default class P2PGroupsController {
     if (!client) {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
     }
-    const { groupNo } = request.only(['groupNo'])
-    if (!groupNo) {
-      return response.status(400).json(new SResponse({ code: 1, message: '参数缺失' }))
-    }
+    const { groupNo } = await dismissP2PGroupValidator.validate(request.all())
 
     try {
       await call_with_reregister(client, (c) => c.dismissGroup(groupNo))

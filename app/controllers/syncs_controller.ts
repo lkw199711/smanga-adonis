@@ -4,190 +4,185 @@ import prisma from '#start/prisma'
 import { addTask } from '#services/queue_service'
 import { TaskPriority } from '#type/index'
 import * as fs from 'fs'
+import {
+  listSyncValidator,
+  idParamSyncValidator,
+  createSyncValidator,
+  updateSyncValidator,
+  batchIdsParamSyncValidator,
+} from '#validators/sync'
 
 export default class SyncsController {
-    async select({ request, response }: HttpContext) {
-        const { page, pageSize } = request.only(['page', 'pageSize'])
-        const queryParams = {
-            orderBy: { createTime: 'desc' },
-            ...(page && {
-                skip: (page - 1) * pageSize,
-                take: pageSize,
-            }),
-        }
-
-        const [list, count] = await Promise.all([
-            prisma.sync.findMany(queryParams),
-            prisma.sync.count(),
-        ])
-
-        const listResponse = new ListResponse({
-            code: 0,
-            message: '',
-            list,
-            count,
-        })
-
-        return response.json(listResponse)
+  async select({ request, response }: HttpContext) {
+    const { page, pageSize } = await listSyncValidator.validate(request.qs())
+    const queryParams = {
+      orderBy: { createTime: 'desc' as const },
+      ...(page && {
+        skip: (page - 1) * (pageSize ?? 10),
+        take: pageSize ?? 10,
+      }),
     }
 
-    async create({ request, response }: HttpContext) {
-        const { syncType, syncName, origin, receivedPath, shareId, link, secret, auto, token } =
-            request.only(['syncType', 'syncName', 'origin', 'receivedPath', 'shareId', 'link', 'secret', 'auto', 'token', 'auto'])
+    const [list, count] = await Promise.all([
+      prisma.sync.findMany(queryParams),
+      prisma.sync.count(),
+    ])
 
-        // 路径不存在
-        if (!receivedPath || receivedPath.trim() === '') {
-            return response.status(400).json(new SResponse({ code: 1, message: '接收路径不能为空', status: 'bad request' }))
-        }
+    const listResponse = new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count,
+    })
 
-        // 
-        if (fs.existsSync(receivedPath) === false) {
-            return response.status(400).json(new SResponse({ code: 1, message: '接收路径不存在', status: 'bad request' }))
-        }
+    return response.json(listResponse)
+  }
 
-        // 路径无法写入
-        try {
-            fs.accessSync(receivedPath, fs.constants.W_OK)
-        } catch (err) {
-            return response.status(400).json(new SResponse({ code: 1, message: '接收路径无法写入，请检查权限', status: 'bad request' }))
-        }
+  async create({ request, response }: HttpContext) {
+    const payload = await createSyncValidator.validate(request.all())
+    const { syncType, syncName, origin, receivedPath, shareId, link, secret, auto, token } = payload
 
-        let sync = await prisma.sync.findFirst({
-            where: { link }
-        })
-
-        if (sync) {
-            // return response.status(400).json(new SResponse({ code: 1, message: '该同步链接已存在', status: 'bad request' }))
-        }
-
-        let originWithApi = origin
-        if (/\/api/.test(link)) originWithApi = origin + '/api'
-        // const fileResponse = await downloadFile('http://127.0.0.1:9798/file', 'A:\\02manga\\04test\\test-8-29\\优香的大屁股2\\00.jpg', './data/temp/tempfile.jpg')
-        // console.log('fileResponse', fileResponse)
-        // return response.json(new SResponse({ code: 1, message: '下载完成', data: {} }))
-        // 这里可以添加创建同步任务的逻辑
-        // 例如将数据存储到数据库，或者调用外部API等
-        sync = await prisma.sync.create({
-            data: {
-                syncType,
-                syncName,
-                origin: originWithApi,
-                receivedPath,
-                shareId,
-                link,
-                secret,
-                auto: auto ? 1 : 0, // 将布尔值转换为整数
-                token
-            },
-        })
-
-        if (!sync) {
-            return response.status(500).json(new SResponse({ code: 1, message: '同步任务创建失败', status: 'error' }))
-        }
-
-        if (syncType === 'media') {
-            // 创建媒体同步任务
-            addTask({
-                taskName: 'sync_media_' + sync.syncId,
-                command: 'taskSyncMedia',
-                args: { receivedPath, link, origin: originWithApi },
-                priority: TaskPriority.syncMedia
-            })
-        } else {
-            // 创建漫画同步任务
-            addTask({
-                taskName: 'sync_manga_' + sync.syncId,
-                command: 'taskSyncManga',
-                args: { receivedPath, link, origin: originWithApi },
-                priority: TaskPriority.syncManga
-            })
-        }
-
-        // 返回创建成功的响应
-        return response.json(new SResponse({ code: 0, message: '同步任务创建成功', data: sync }))
+    // 接收路径存在性
+    if (fs.existsSync(receivedPath) === false) {
+      return response
+        .status(400)
+        .json(new SResponse({ code: 1, message: '接收路径不存在', status: 'bad request' }))
     }
 
-    async update({ params, request, response }: HttpContext) {
-        const { syncId } = params
-        const { syncType, origin, shareId, link, secret, auto, token } = request.only(['syncType', 'origin', 'mediaId', 'shareId', 'link', 'secret', 'auto', 'token'])
-
-        // 更新同步任务的逻辑
-        const sync = await prisma.sync.update({
-            where: { syncId },
-            data: {
-                syncType,
-                origin,
-                shareId,
-                link,
-                secret,
-                auto: auto ? 1 : 0, // 将布尔值转换为整数
-                token
-            },
+    // 路径无法写入
+    try {
+      fs.accessSync(receivedPath, fs.constants.W_OK)
+    } catch (err) {
+      return response.status(400).json(
+        new SResponse({
+          code: 1,
+          message: '接收路径无法写入，请检查权限',
+          status: 'bad request',
         })
-
-        if (!sync) {
-            return response.status(404).json(new SResponse({ code: 1, message: '同步任务未找到', status: 'not found' }))
-        }
-
-        return response.json(new SResponse({ code: 0, message: '同步任务更新成功', data: sync }))
+      )
     }
 
-    async execute({ params, response }: HttpContext) {
-        const { syncId } = params
-        const sync = await prisma.sync.findUnique({
-            where: { syncId },
-        })
-
-        if (!sync) {
-            return response.status(404).json(new SResponse({ code: 1, message: '同步记录未找到', status: 'not found' }))
-        }
-
-        if (sync.syncType === 'media') {
-            // 创建媒体同步任务
-            addTask({
-                taskName: 'sync_media_' + sync.syncId,
-                command: 'taskSyncMedia',
-                args: { receivedPath: sync.receivedPath, link: sync.link, origin: sync.origin },
-                priority: TaskPriority.syncMedia
-            })
-        } else {
-            // 创建漫画同步任务
-            addTask({
-                taskName: 'sync_manga_' + sync.syncId,
-                command: 'taskSyncManga',
-                args: { receivedPath: sync.receivedPath, link: sync.link, origin: sync.origin },
-                priority: TaskPriority.syncManga
-            })
-        }
-
-        return response.json(new SResponse({ code: 0, message: '同步任务已加入队列', data: sync }))
+    let sync = await prisma.sync.findFirst({ where: { link } })
+    if (sync) {
+      // 保留原注释,此处不作阻断
     }
 
-    async destroy({ params, response }: HttpContext) {
-        const { syncId } = params
+    let originWithApi = origin
+    if (link && /\/api/.test(link)) originWithApi = (origin ?? '') + '/api'
 
-        // 删除同步任务的逻辑
-        const sync = await prisma.sync.delete({
-            where: { syncId },
-        })
+    sync = await prisma.sync.create({
+      data: {
+        syncType,
+        syncName,
+        origin: originWithApi,
+        receivedPath,
+        shareId,
+        link,
+        secret,
+        auto: auto ? 1 : 0, // 将布尔值转换为整数
+        token,
+      } as any,
+    })
 
-        if (!sync) {
-            return response.status(404).json(new SResponse({ code: 1, message: '同步记录未找到', status: 'not found' }))
-        }
-
-        return response.json(new SResponse({ code: 0, message: '同步记录删除成功', data: sync }))
+    if (!sync) {
+      return response
+        .status(500)
+        .json(new SResponse({ code: 1, message: '同步任务创建失败', status: 'error' }))
     }
 
-    async destroy_batch({ params, response }: HttpContext) {
-        const { syncIds } = params
-        const syncIdsArray = syncIds.split(',')
-        await prisma.sync.deleteMany({
-            where: {
-                syncId: {
-                    in: syncIdsArray
-                }
-            }
-        })
-        return response.json(new SResponse({ code: 0, message: '同步记录删除成功', status: 'success' }))
+    if (syncType === 'media') {
+      addTask({
+        taskName: 'sync_media_' + sync.syncId,
+        command: 'taskSyncMedia',
+        args: { receivedPath, link, origin: originWithApi },
+        priority: TaskPriority.syncMedia,
+      })
+    } else {
+      addTask({
+        taskName: 'sync_manga_' + sync.syncId,
+        command: 'taskSyncManga',
+        args: { receivedPath, link, origin: originWithApi },
+        priority: TaskPriority.syncManga,
+      })
     }
+
+    return response.json(new SResponse({ code: 0, message: '同步任务创建成功', data: sync }))
+  }
+
+  async update({ params, request, response }: HttpContext) {
+    const { syncId } = await idParamSyncValidator.validate(params)
+    const { syncType, origin, shareId, link, secret, auto, token } =
+      await updateSyncValidator.validate(request.all())
+
+    const sync = await prisma.sync.update({
+      where: { syncId },
+      data: {
+        syncType,
+        origin,
+        shareId,
+        link,
+        secret,
+        auto: auto ? 1 : 0,
+        token,
+      },
+    })
+
+    if (!sync) {
+      return response
+        .status(404)
+        .json(new SResponse({ code: 1, message: '同步任务未找到', status: 'not found' }))
+    }
+
+    return response.json(new SResponse({ code: 0, message: '同步任务更新成功', data: sync }))
+  }
+
+  async execute({ params, response }: HttpContext) {
+    const { syncId } = await idParamSyncValidator.validate(params)
+    const sync = await prisma.sync.findUnique({ where: { syncId } })
+
+    if (!sync) {
+      return response
+        .status(404)
+        .json(new SResponse({ code: 1, message: '同步记录未找到', status: 'not found' }))
+    }
+
+    if (sync.syncType === 'media') {
+      addTask({
+        taskName: 'sync_media_' + sync.syncId,
+        command: 'taskSyncMedia',
+        args: { receivedPath: sync.receivedPath, link: sync.link, origin: sync.origin },
+        priority: TaskPriority.syncMedia,
+      })
+    } else {
+      addTask({
+        taskName: 'sync_manga_' + sync.syncId,
+        command: 'taskSyncManga',
+        args: { receivedPath: sync.receivedPath, link: sync.link, origin: sync.origin },
+        priority: TaskPriority.syncManga,
+      })
+    }
+
+    return response.json(new SResponse({ code: 0, message: '同步任务已加入队列', data: sync }))
+  }
+
+  async destroy({ params, response }: HttpContext) {
+    const { syncId } = await idParamSyncValidator.validate(params)
+    const sync = await prisma.sync.delete({ where: { syncId } })
+
+    if (!sync) {
+      return response
+        .status(404)
+        .json(new SResponse({ code: 1, message: '同步记录未找到', status: 'not found' }))
+    }
+
+    return response.json(new SResponse({ code: 0, message: '同步记录删除成功', data: sync }))
+  }
+
+  async destroy_batch({ params, response }: HttpContext) {
+    const { syncIds } = await batchIdsParamSyncValidator.validate(params)
+    await prisma.sync.deleteMany({
+      where: { syncId: { in: syncIds } },
+    })
+    return response.json(new SResponse({ code: 0, message: '同步记录删除成功', status: 'success' }))
+  }
 }

@@ -13,6 +13,13 @@ import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import { log_p2p_error } from '#utils/p2p_log'
 import { buildHeaders, discoverSeeds } from '#services/p2p/pull/pull_shared'
 import { fetchMangaTree, fetchChapterTree } from '#services/p2p/pull/pull_tree_fetcher'
+import {
+  groupNoParamValidator,
+  peerManifestsQueryValidator,
+  peerManifestQueryValidator,
+  peerMangaTreeQueryValidator,
+  peerChapterTreeQueryValidator,
+} from '#validators/p2p'
 
 function get_client(): TrackerClient | null {
   const cfg = get_config()?.p2p
@@ -38,7 +45,7 @@ export default class P2PPeersController {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未启用' }))
     }
 
-    const groupNo = params.groupNo
+    const { groupNo } = await groupNoParamValidator.validate(params)
     try {
       const members: any[] = await client.groupMembers(groupNo)
       const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
@@ -86,7 +93,7 @@ export default class P2PPeersController {
     if (!client) {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未启用' }))
     }
-    const groupNo = params.groupNo
+    const { groupNo } = await groupNoParamValidator.validate(params)
     try {
       const list: any[] = await client.listShares(groupNo)
       return response.json(new ListResponse({ code: 0, message: '', list, count: list.length }))
@@ -101,7 +108,7 @@ export default class P2PPeersController {
    * 仅从本地缓存读取
    */
   async cache({ params, response }: HttpContext) {
-    const groupNo = params.groupNo
+    const { groupNo } = await groupNoParamValidator.validate(params)
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) {
       return response.json(new ListResponse({ code: 0, message: '', list: [], count: 0 }))
@@ -121,10 +128,10 @@ export default class P2PPeersController {
    */
   async manifests({ params, request, response }: HttpContext) {
     const client = get_client()
-    const groupNo = params.groupNo
-    const { since, nodeId, sync, fallback } = request.only([
-      'since', 'nodeId', 'sync', 'fallback',
-    ])
+    const { groupNo } = await groupNoParamValidator.validate(params)
+    const { since, nodeId, sync, fallback } = await peerManifestsQueryValidator.validate(
+      request.qs()
+    )
 
     if (!client) {
       // P2P 未启用 → 直接走本地缓存
@@ -267,13 +274,9 @@ export default class P2PPeersController {
     if (!client) {
       return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未启用' }))
     }
-    const groupNo = params.groupNo
-    const { nodeId, shareType, remoteMediaId, remoteMangaId } = request.only([
-      'nodeId', 'shareType', 'remoteMediaId', 'remoteMangaId',
-    ])
-    if (!nodeId || !shareType) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'nodeId 和 shareType 必填' }))
-    }
+    const { groupNo } = await groupNoParamValidator.validate(params)
+    const { nodeId, shareType, remoteMediaId, remoteMangaId } =
+      await peerManifestQueryValidator.validate(request.qs())
 
     try {
       const data = await client.getManifest(groupNo, {
@@ -298,11 +301,8 @@ export default class P2PPeersController {
    */
   async mangaTree({ params, request, response }: HttpContext) {
     try {
-      const groupNo = params.groupNo
-      const remoteMangaId = Number(request.input('remoteMangaId'))
-      if (!remoteMangaId) {
-        return response.status(400).json(new SResponse({ code: 1, message: 'remoteMangaId 必填' }))
-      }
+      const { groupNo } = await groupNoParamValidator.validate(params)
+      const { remoteMangaId } = await peerMangaTreeQueryValidator.validate(request.qs())
 
       const seeds = await discoverSeeds({
         groupNo,
@@ -333,14 +333,10 @@ export default class P2PPeersController {
    */
   async chapterTree({ params, request, response }: HttpContext) {
     try {
-      const groupNo = params.groupNo
-      const remoteMangaId = Number(request.input('remoteMangaId'))
-      const remoteChapterId = Number(request.input('remoteChapterId'))
-      if (!remoteMangaId || !remoteChapterId) {
-        return response.status(400).json(
-          new SResponse({ code: 1, message: 'remoteMangaId 和 remoteChapterId 必填' })
-        )
-      }
+      const { groupNo } = await groupNoParamValidator.validate(params)
+      const { remoteMangaId, remoteChapterId } = await peerChapterTreeQueryValidator.validate(
+        request.qs()
+      )
 
       const seeds = await discoverSeeds({
         groupNo,

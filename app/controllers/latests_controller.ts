@@ -2,15 +2,24 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { get_config } from '#utils/index'
+import {
+  listLatestValidator,
+  mangaIdParamValidator,
+  chapterIdParamValidator,
+  createLatestValidator,
+  updateLatestValidator,
+} from '#validators/latest'
 const isPgsql = ['pgsql', 'postgresql'].includes(get_config().sql.client)
 
 export default class LatestsController {
   public async index({ request, response }: HttpContext) {
     const { userId } = request as any
-    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
+    const { page, pageSize } = await listLatestValidator.validate(request.qs())
+    const effectivePage = page ?? 1
+    const effectivePageSize = pageSize ?? 10
     const list: any = isPgsql
-      ? await this.raw_sql_select_postgres({ userId, page, pageSize })
-      : await this.raw_sql_select_mysql({ userId, page, pageSize })
+      ? await this.raw_sql_select_postgres({ userId, page: effectivePage, pageSize: effectivePageSize })
+      : await this.raw_sql_select_mysql({ userId, page: effectivePage, pageSize: effectivePageSize })
 
     // 统计未观看章节数
     for (let i = 0; i < list.length; i++) {
@@ -40,13 +49,13 @@ export default class LatestsController {
   private async raw_sql_select_postgres({ userId, page, pageSize }: any) {
     return await prisma.$queryRaw`SELECT 
           "latest"."mangaId",
-          MAX("latest"."chapterId") AS "chapterId",  -- 使用聚合函数选择 chapterId
-          MAX("latest"."mangaId") AS "mangaId",  -- 使用聚合函数选择 mangaId
-          MAX("latest"."userId") AS "userId",          -- 使用聚合函数选择 userId
-          MAX("manga"."mediaId") AS "mediaId", -- 使用聚合函数选择 mediaId
-          MAX("manga"."mangaName") AS "mangaName", -- 使用聚合函数选择 mangaName
-          MAX("manga"."mangaCover") AS "mangaCover",   -- 使用聚合函数选择 mangaCover
-          MAX("manga"."browseType") AS "browseType"      -- 使用聚合函数选择 browseType
+          MAX("latest"."chapterId") AS "chapterId",
+          MAX("latest"."mangaId") AS "mangaId",
+          MAX("latest"."userId") AS "userId",
+          MAX("manga"."mediaId") AS "mediaId",
+          MAX("manga"."mangaName") AS "mangaName",
+          MAX("manga"."mangaCover") AS "mangaCover",
+          MAX("manga"."browseType") AS "browseType"
       FROM 
           "latest"
       JOIN 
@@ -56,7 +65,7 @@ export default class LatestsController {
       GROUP BY 
           "latest"."mangaId"
       ORDER BY 
-          MAX("latest"."updateTime") DESC  -- 根据 updateTime 排序
+          MAX("latest"."updateTime") DESC
       LIMIT 
           ${pageSize ? pageSize : 10}
       OFFSET
@@ -67,13 +76,13 @@ export default class LatestsController {
   private async raw_sql_select_mysql({ userId, page, pageSize }: any) {
     return await prisma.$queryRaw`SELECT 
           latest.mangaId,
-          MAX(latest.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
-          MAX(latest.mangaId) AS mangaId,  -- 使用聚合函数选择 mangaId
-          MAX(latest.userId) AS userId,          -- 使用聚合函数选择 userId
-          MAX(manga.mediaId) AS mediaId, -- 使用聚合函数选择 mediaId
-          MAX(manga.mangaName) AS mangaName, -- 使用聚合函数选择 mangaName
-          MAX(manga.mangaCover) AS mangaCover,   -- 使用聚合函数选择 mangaCover
-          MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType
+          MAX(latest.chapterId) AS chapterId,
+          MAX(latest.mangaId) AS mangaId,
+          MAX(latest.userId) AS userId,
+          MAX(manga.mediaId) AS mediaId,
+          MAX(manga.mangaName) AS mangaName,
+          MAX(manga.mangaCover) AS mangaCover,
+          MAX(manga.browseType) AS browseType
       FROM 
           latest
       JOIN 
@@ -83,7 +92,7 @@ export default class LatestsController {
       GROUP BY 
           latest.mangaId
       ORDER BY 
-          MAX(latest.updateTime) DESC  -- 根据 updateTime 排序
+          MAX(latest.updateTime) DESC
       LIMIT 
           ${pageSize ? pageSize : 10}
       OFFSET    
@@ -93,7 +102,7 @@ export default class LatestsController {
 
   public async show({ request, params, response }: HttpContext) {
     const { userId } = request as any
-    let { mangaId } = params
+    const { mangaId } = await mangaIdParamValidator.validate(params)
     const latest: any = await prisma.latest.findFirst({
       where: {
         userId,
@@ -135,13 +144,9 @@ export default class LatestsController {
 
   public async create({ request, response }: HttpContext) {
     const { userId } = request as any
-    const { page, count, chapterId, mangaId, finish } = request.only([
-      'page',
-      'count',
-      'chapterId',
-      'mangaId',
-      'finish',
-    ])
+    const { page, count, chapterId, mangaId, finish } = await createLatestValidator.validate(
+      request.all()
+    )
     const latest = await prisma.latest.upsert({
       where: {
         chapterId_userId: {
@@ -158,8 +163,8 @@ export default class LatestsController {
 
   public async update({ params, request, response }: HttpContext) {
     const { userId } = request as any
-    const { chapterId } = params
-    const modifyData = request.only(['page', 'chapterId', 'finish'])
+    const { chapterId } = await chapterIdParamValidator.validate(params)
+    const modifyData = await updateLatestValidator.validate(request.all())
     const latest = await prisma.latest.updateMany({
       where: { chapterId, userId },
       data: modifyData,
@@ -170,7 +175,7 @@ export default class LatestsController {
 
   public async destroy({ request, params, response }: HttpContext) {
     const { userId } = request as any
-    const { chapterId } = params
+    const { chapterId } = await chapterIdParamValidator.validate(params)
     const latest = await prisma.latest.deleteMany({ where: { chapterId, userId } })
     const destroyResponse = new SResponse({ code: 0, message: '', data: latest })
     return response.json(destroyResponse)

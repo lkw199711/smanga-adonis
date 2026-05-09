@@ -1,13 +1,11 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-03 05:28:15
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-03-13 22:40:36
- * @FilePath: \smanga-adonis\app\controllers\manga_tags_controller.ts
- */
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
+import {
+  idParamMangaTagValidator,
+  createMangaTagValidator,
+  updateMangaTagValidator,
+} from '#validators/manga_tag'
 
 export default class MangaTagsController {
   public async index({ response }: HttpContext) {
@@ -22,15 +20,14 @@ export default class MangaTagsController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { mangaTagId } = params
-    mangaTagId = Number(mangaTagId)
+    const { mangaTagId } = await idParamMangaTagValidator.validate(params)
     const mangaTag = await prisma.mangaTag.findUnique({ where: { mangaTagId } })
     const showResponse = new SResponse({ code: 0, message: '', data: mangaTag })
     return response.json(showResponse)
   }
 
   public async create({ request, response }: HttpContext) {
-    const insertData = request.only(['mangaId', 'tagId'])
+    const insertData = await createMangaTagValidator.validate(request.all())
     const mangaTag = await prisma.mangaTag.create({
       data: insertData,
     })
@@ -39,9 +36,8 @@ export default class MangaTagsController {
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { mangaTagId } = params
-    mangaTagId = Number(mangaTagId)
-    const modifyData = request.only(['mangaId', 'tagId'])
+    const { mangaTagId } = await idParamMangaTagValidator.validate(params)
+    const modifyData = await updateMangaTagValidator.validate(request.all())
     const mangaTag = await prisma.mangaTag.update({
       where: { mangaTagId },
       data: modifyData,
@@ -51,7 +47,7 @@ export default class MangaTagsController {
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { mangaTagId } = params
+    const { mangaTagId } = await idParamMangaTagValidator.validate(params)
     const mangaTag = await prisma.mangaTag.delete({ where: { mangaTagId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: mangaTag })
     return response.json(destroyResponse)

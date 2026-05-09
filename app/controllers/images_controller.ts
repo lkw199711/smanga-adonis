@@ -3,10 +3,11 @@ import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 import path from 'path'
 import { SResponse } from '#interfaces/response'
+import { imageFileBodyValidator, uploadImageBodyValidator } from '#validators/image'
 
 export default class ImagesController {
   public async index({ request, response }: HttpContext) {
-    const { file } = request.body()
+    const { file } = await imageFileBodyValidator.validate(request.all())
     // 检查文件是否存在
     if (!fs.existsSync(file)) {
       return response.status(400).json({
@@ -33,9 +34,7 @@ export default class ImagesController {
    */
   public async upload({ request, response }: HttpContext) {
     // 获取请求参数
-    const mangaId = request.input('mangaId')
-    const chapterId = request.input('chapterId')
-    const mediaId = request.input('mediaId')
+    const { mangaId, chapterId, mediaId } = await uploadImageBodyValidator.validate(request.all())
 
     // 获取上传的文件
     const imageFile = request.file('image')

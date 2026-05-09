@@ -14,6 +14,11 @@ import { ListResponse, SResponse } from '#interfaces/response'
 import trackerGroupService from '#services/tracker/tracker_group_service'
 import { log_tracker_error } from '#utils/p2p_log'
 import { get_config } from '#utils/index'
+import {
+  listTrackerAdminGroupValidator,
+  trackerGroupNoParamValidator,
+  trackerGroupKickParamValidator,
+} from '#validators/tracker'
 
 /**
  * 总开关 + 角色校验
@@ -42,17 +47,16 @@ export default class TrackerAdminGroupsController {
     if (!ensureTrackerEnabled(ctx)) return
     const { request, response } = ctx
     try {
-      const page = Number(request.input('page', 1))
-      const pageSize = Number(request.input('pageSize', 20))
-      const keyword = request.input('keyword') as string | undefined
-      const enableRaw = request.input('enable')
-      const enable = enableRaw === undefined || enableRaw === '' ? undefined : Number(enableRaw)
+      const { page, pageSize, keyword, enable } =
+        await listTrackerAdminGroupValidator.validate(request.qs())
+      const enableNum =
+        enable === undefined || enable === '' ? undefined : Number(enable)
 
       const { list, count } = await trackerGroupService.adminListAll({
-        page,
-        pageSize,
+        page: page ? Number(page) : 1,
+        pageSize: pageSize ? Number(pageSize) : 20,
         keyword,
-        enable,
+        enable: enableNum,
       })
       return response.json(new ListResponse({ code: 0, message: '', list: list as any, count }))
     } catch (err: any) {
@@ -68,7 +72,8 @@ export default class TrackerAdminGroupsController {
     if (!ensureTrackerEnabled(ctx)) return
     const { params, response } = ctx
     try {
-      const data = await trackerGroupService.adminDetail(params.groupNo)
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const data = await trackerGroupService.adminDetail(groupNo)
       return response.json(new SResponse({ code: 0, message: '', data }))
     } catch (err: any) {
       log_tracker_error('admin.group.show', err)
@@ -83,7 +88,8 @@ export default class TrackerAdminGroupsController {
     if (!ensureTrackerEnabled(ctx)) return
     const { params, response } = ctx
     try {
-      const list = await trackerGroupService.listMembers(params.groupNo)
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const list = await trackerGroupService.listMembers(groupNo)
       return response.json(
         new ListResponse({ code: 0, message: '', list: list as any, count: list.length })
       )
@@ -100,7 +106,8 @@ export default class TrackerAdminGroupsController {
     if (!ensureTrackerEnabled(ctx)) return
     const { params, response } = ctx
     try {
-      await trackerGroupService.adminKick(params.groupNo, params.nodeId)
+      const { groupNo, nodeId } = await trackerGroupKickParamValidator.validate(params)
+      await trackerGroupService.adminKick(groupNo, nodeId)
       return response.json(new SResponse({ code: 0, message: '已移出群组' }))
     } catch (err: any) {
       log_tracker_error('admin.group.kick', err)
@@ -116,7 +123,8 @@ export default class TrackerAdminGroupsController {
     if (!ensureTrackerEnabled(ctx)) return
     const { params, response } = ctx
     try {
-      const data = await trackerGroupService.adminDismiss(params.groupNo)
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const data = await trackerGroupService.adminDismiss(groupNo)
       return response.json(new SResponse({ code: 0, message: '已解散群组', data }))
     } catch (err: any) {
       log_tracker_error('admin.group.dismiss', err)

@@ -4,6 +4,13 @@ import { ListResponse, SResponse, SResponseCode } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import CreateMediaPosterJob from '#services/create_media_poster_job'
+import {
+  listMediaValidator,
+  idParamMediaValidator,
+  createMediaValidator,
+  updateMediaValidator,
+  batchIdsMediaValidator,
+} from '#validators/media'
 
 export default class MediaController {
   public async index({ request, response }: HttpContext) {
@@ -21,21 +28,19 @@ export default class MediaController {
         select: { mediaId: true },
       })) || []
 
-    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
+    const { page, pageSize } = await listMediaValidator.validate(request.qs())
+    const where = {
+      deleteFlag: 0,
+      ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item) => item.mediaId) } }),
+    }
     const queryParams = {
-      ...(page && {
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      where: {
-        deleteFlag: 0,
-        ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item) => item.mediaId) } }),
-      },
+      ...(page && pageSize && { skip: (page - 1) * pageSize, take: pageSize }),
+      where,
     }
 
     const [list, count] = await Promise.all([
       prisma.media.findMany(queryParams),
-      prisma.media.count({ where: queryParams.where }),
+      prisma.media.count({ where }),
     ])
 
     const listResponse = new ListResponse({
@@ -62,7 +67,7 @@ export default class MediaController {
         select: { mediaId: true },
       })) || []
 
-    let { mediaId } = params
+    const { mediaId } = await idParamMediaValidator.validate(params)
 
     // 判断是否有权限查看该媒体库
     if (!isAdmin && !mediaPermissons.some((item) => item.mediaId === mediaId)) {
@@ -76,22 +81,11 @@ export default class MediaController {
   }
 
   public async create({ request, response }: HttpContext) {
-    const insertData = request.only([
-      'browseType',
-      'direction',
-      'directoryFormat',
-      'mediaName',
-      'mediaType',
-      'removeFirst',
-      'sourceWebsite',
-      'isCloudMedia',
-    ])
+    const insertData = await createMediaValidator.validate(request.all())
 
     let media = null
     media = await prisma.media.findFirst({
-      where: {
-        mediaName: insertData.mediaName,
-      },
+      where: { mediaName: insertData.mediaName },
     })
 
     // 如果存在媒体库则取消删除标识
@@ -102,7 +96,7 @@ export default class MediaController {
       })
     } else {
       media = await prisma.media.create({
-        data: insertData,
+        data: insertData as any,
       })
     }
 
@@ -111,28 +105,18 @@ export default class MediaController {
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { mediaId } = params
-    const modifyData = request.only([
-      'browseType',
-      'direction',
-      'directoryFormat',
-      'mediaName',
-      'mediaType',
-      'mediaCover',
-      'removeFirst',
-      'sourceWebsite',
-      'isCloudMedia',
-    ])
+    const { mediaId } = await idParamMediaValidator.validate(params)
+    const modifyData = await updateMediaValidator.validate(request.all())
     const media = await prisma.media.update({
       where: { mediaId },
-      data: modifyData,
+      data: modifyData as any,
     })
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: media })
     return response.json(updateResponse)
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { mediaId } = params
+    const { mediaId } = await idParamMediaValidator.validate(params)
     const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
 
     addTask({
@@ -147,10 +131,7 @@ export default class MediaController {
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
-    const { mediaIds } = request.only(['mediaIds'])
-    if (!mediaIds || !mediaIds.length) {
-      return response.status(400).json(new SResponse({ code: SResponseCode.Failed, message: '请选择要删除的媒体库' }))
-    }
+    const { mediaIds } = await batchIdsMediaValidator.validate(request.all())
 
     for (const mediaId of mediaIds) {
       const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
@@ -168,8 +149,8 @@ export default class MediaController {
   }
 
   public async poster({ params, response }: HttpContext) {
-    const { mediaId } = params
-    const posterFile = await new CreateMediaPosterJob({ mediaId: Number(mediaId) }).run()
+    const { mediaId } = await idParamMediaValidator.validate(params)
+    const posterFile = await new CreateMediaPosterJob({ mediaId }).run()
     const posterResponse = new SResponse({
       code: SResponseCode.Success,
       message: '生成成功',
@@ -185,9 +166,9 @@ export default class MediaController {
   }
 
   public async scan({ params, response }: HttpContext) {
-    const { mediaId } = params
+    const { mediaId } = await idParamMediaValidator.validate(params)
     const paths = await prisma.path.findMany({
-      where: { mediaId: Number(mediaId), deleteFlag: 0 },
+      where: { mediaId, deleteFlag: 0 },
     })
 
     paths.forEach((path) => {

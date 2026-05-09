@@ -5,14 +5,21 @@ import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { create_scan_cron } from '#services/cron_service'
 import fs from 'fs'
+import {
+  listPathValidator,
+  idParamPathValidator,
+  createPathValidator,
+  updatePathValidator,
+  batchIdsParamPathValidator,
+} from '#validators/path'
 
 export default class PathsController {
   public async index({ request, response }: HttpContext) {
-    const { mediaId, page, pageSize } = request.only(['mediaId', 'page', 'pageSize'])
+    const { mediaId, page, pageSize } = await listPathValidator.validate(request.qs())
     const queryParams = {
       ...(page && {
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip: (page - 1) * (pageSize ?? 10),
+        take: pageSize ?? 10,
       }),
       where: {
         ...(mediaId && { mediaId }),
@@ -35,8 +42,7 @@ export default class PathsController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { pathId } = params
-    pathId = Number(pathId)
+    const { pathId } = await idParamPathValidator.validate(params)
     const path = await prisma.path.findUnique({ where: { pathId } })
     const showResponse = new SResponse({ code: 0, message: '', data: path })
     return response.json(showResponse)
@@ -44,7 +50,7 @@ export default class PathsController {
 
   public async create({ request, response }: HttpContext) {
     let path = null
-    const insertData = request.only(['pathContent', 'mediaId', 'autoScan', 'include', 'exclude'])
+    const insertData = await createPathValidator.validate(request.all())
 
     // 检查路径是否存在
     if (!fs.existsSync(insertData.pathContent)) {
@@ -61,7 +67,7 @@ export default class PathsController {
 
     if (!path) {
       path = await prisma.path.create({
-        data: insertData,
+        data: insertData as any,
       })
     } else if (path?.deleteFlag === 1) {
       await prisma.path.update({
@@ -92,9 +98,8 @@ export default class PathsController {
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { pathId } = params
-    pathId = Number(pathId)
-    const modifyData = request.only(['autoScan', 'include', 'exclude'])
+    const { pathId } = await idParamPathValidator.validate(params)
+    const modifyData = await updatePathValidator.validate(request.all())
     const path = await prisma.path.update({
       where: { pathId },
       data: modifyData,
@@ -110,7 +115,7 @@ export default class PathsController {
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { pathId } = params
+    const { pathId } = await idParamPathValidator.validate(params)
     const path = await prisma.path.update({ where: { pathId }, data: { deleteFlag: 1 } })
 
     addTask({
@@ -125,14 +130,9 @@ export default class PathsController {
   }
 
   public async destroy_batch({ params, response }: HttpContext) {
-    let { pathIds } = params
-    pathIds = pathIds.split(',')
+    const { pathIds } = await batchIdsParamPathValidator.validate(params)
     const paths = await prisma.path.updateMany({
-      where: {
-        pathId: {
-          in: pathIds.map((id: number) => Number(id)),
-        },
-      },
+      where: { pathId: { in: pathIds } },
       data: { deleteFlag: 1 },
     })
 
@@ -140,7 +140,7 @@ export default class PathsController {
       addTask({
         taskName: `delete_path_${id}`,
         command: 'deletePath',
-        args: { pathId: Number(id) },
+        args: { pathId: id },
         priority: TaskPriority.delete,
       })
     })
@@ -150,7 +150,7 @@ export default class PathsController {
   }
 
   public async scan({ params, response }: HttpContext) {
-    let { pathId } = params
+    const { pathId } = await idParamPathValidator.validate(params)
 
     addTask({
       taskName: `scan_path_${pathId}`,
@@ -164,7 +164,7 @@ export default class PathsController {
   }
 
   public async re_scan({ params, response }: HttpContext) {
-    let { pathId } = params
+    const { pathId } = await idParamPathValidator.validate(params)
     const mangas = await prisma.manga.findMany({ where: { pathId } })
     // 删除此路径现有漫画
     for (let index = 0; index < mangas.length; index++) {

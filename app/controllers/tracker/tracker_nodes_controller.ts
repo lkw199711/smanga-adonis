@@ -3,6 +3,11 @@ import { SResponse } from '#interfaces/response'
 import trackerNodeService from '#services/tracker/tracker_node_service'
 import { log_tracker_error } from '#utils/p2p_log'
 import { resolve_client_ip } from '#utils/ip_resolver'
+import {
+  registerTrackerNodeValidator,
+  heartbeatTrackerNodeValidator,
+  updateTrackerNodeValidator,
+} from '#validators/tracker'
 
 /**
  * Tracker 节点生命周期接口
@@ -20,12 +25,7 @@ export default class TrackerNodesController {
   async register(ctx: HttpContext) {
     const { request, response } = ctx
     try {
-      const payload = request.only([
-        'nodeName',
-        'version',
-        'publicUrl',
-        'inviteCode',
-      ])
+      const payload = await registerTrackerNodeValidator.validate(request.all())
       const clientIp = resolve_client_ip(ctx)
       const userAgent = request.header('user-agent')
 
@@ -47,7 +47,7 @@ export default class TrackerNodesController {
     const { request, response } = ctx
     try {
       const nodeId = (request as any).trackerNodeId as string
-      const payload = request.only(['publicUrl'])
+      const payload = await heartbeatTrackerNodeValidator.validate(request.all())
       const clientIp = resolve_client_ip(ctx)
 
       const result = await trackerNodeService.heartbeat(nodeId, payload, clientIp)
@@ -67,7 +67,7 @@ export default class TrackerNodesController {
   async update({ request, response }: HttpContext) {
     try {
       const nodeId = (request as any).trackerNodeId as string
-      const data = request.only(['nodeName'])
+      const data = await updateTrackerNodeValidator.validate(request.all())
       const node = await trackerNodeService.update(nodeId, data)
       return response.json(new SResponse({ code: 0, message: '更新成功', data: node }))
     } catch (err: any) {

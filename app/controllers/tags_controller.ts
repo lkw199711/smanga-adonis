@@ -3,14 +3,24 @@ import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import _ from 'lodash'
+import {
+  listTagValidator,
+  idParamTagValidator,
+  createTagValidator,
+  updateTagValidator,
+  batchIdsParamTagValidator,
+  mangaIdParamValidator,
+  tagsMangaQueryValidator,
+} from '#validators/tag'
+import { csvToPositiveIds } from '#validators/shared'
 
 export default class TagsController {
   public async index({ request, response }: HttpContext) {
-    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
+    const { page, pageSize } = await listTagValidator.validate(request.qs())
 
     let listResponse = null
     if (page) {
-      listResponse = await this.paginate(page, pageSize)
+      listResponse = await this.paginate(page, pageSize ?? 10)
     } else {
       listResponse = await this.no_paginate({ request, response })
     }
@@ -44,7 +54,7 @@ export default class TagsController {
           MAX(tag.createTime) AS createTime,
           MAX(manga.mangaId) AS mangaId,
           MAX(manga.mediaId) AS mediaId,
-          COUNT(history.historyId) AS "readCount"      -- 使用聚合函数选readCount
+          COUNT(history.historyId) AS "readCount"
       FROM 
           tag
       JOIN 
@@ -72,10 +82,8 @@ export default class TagsController {
   // 分页
   private async paginate(page: number, pageSize: number) {
     const queryParams = {
-      ...(page && {
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       where: {},
     }
 
@@ -93,8 +101,7 @@ export default class TagsController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { tagId } = params
-    tagId = Number(tagId)
+    const { tagId } = await idParamTagValidator.validate(params)
     const tag = await prisma.tag.findUnique({ where: { tagId } })
     const showResponse = new SResponse({ code: 0, message: '', data: tag })
     return response.json(showResponse)
@@ -102,7 +109,7 @@ export default class TagsController {
 
   public async create({ request, response }: HttpContext) {
     const { userId } = request as any
-    const insertData = request.only(['tagName', 'description', 'tagColor'])
+    const insertData = await createTagValidator.validate(request.all())
     const tag = await prisma.tag.create({
       data: { ...insertData, userId },
     })
@@ -111,8 +118,8 @@ export default class TagsController {
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { tagId } = params
-    const modifyData = request.only(['tagName', 'description', 'tagColor'])
+    const { tagId } = await idParamTagValidator.validate(params)
+    const modifyData = await updateTagValidator.validate(request.all())
     const tag = await prisma.tag.update({
       where: { tagId },
       data: modifyData,
@@ -122,8 +129,7 @@ export default class TagsController {
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { tagId } = params
-    tagId = Number(tagId)
+    const { tagId } = await idParamTagValidator.validate(params)
     // 删除关联数据
     await prisma.mangaTag.deleteMany({ where: { tagId } })
     const tag = await prisma.tag.delete({ where: { tagId } })
@@ -133,29 +139,20 @@ export default class TagsController {
 
   // 批量删除
   public async destroy_batch({ params, response }: HttpContext) {
-    let { tagIds } = params
-    tagIds = tagIds.split(',').map((item: string) => Number(item))
+    const { tagIds } = await batchIdsParamTagValidator.validate(params)
     // 删除关联数据
     await prisma.mangaTag.deleteMany({
-      where: {
-        tagId: {
-          in: tagIds,
-        },
-      },
+      where: { tagId: { in: tagIds } },
     })
     const deleteResponse = await prisma.tag.deleteMany({
-      where: {
-        tagId: {
-          in: tagIds,
-        },
-      },
+      where: { tagId: { in: tagIds } },
     })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: deleteResponse })
     return response.json(destroyResponse)
   }
 
   public async manga_tags({ params, response }: HttpContext) {
-    const { mangaId } = params
+    const { mangaId } = await mangaIdParamValidator.validate(params)
     const mangaTags = await prisma.mangaTag.findMany({
       where: { mangaId },
       include: {
@@ -176,14 +173,14 @@ export default class TagsController {
   }
 
   public async tags_manga({ request, response }: HttpContext) {
-    let { tagIds, page, pageSize } = request.only(['tagIds', 'page', 'pageSize', 'order'])
-    // 处理 tagIds 的类型
-    if (!tagIds) {
+    const query = await tagsMangaQueryValidator.validate(request.qs())
+    const page = query.page ?? 1
+    const pageSize = query.pageSize ?? 10
+
+    // tagIds 支持 CSV 字符串或数组,统一走 shared 工具转正整数数组
+    const tagIds = csvToPositiveIds(query.tagIds)
+    if (!tagIds.length) {
       return response.status(400).json(new SResponse({ code: 400, message: 'tagIds不能为空' }))
-    } else if (typeof tagIds === 'string') {
-      tagIds = tagIds.split(',').map((item: string) => Number(item))
-    } else {
-      tagIds = tagIds.map((item: string) => Number(item))
     }
 
     const userId = (request as any).userId
@@ -200,14 +197,11 @@ export default class TagsController {
         select: { mediaId: true },
       })) || []
 
-
     const mangaTags = await prisma.mangaTag.findMany({
       skip: (page - 1) * pageSize,
       take: pageSize,
       where: {
-        tagId: {
-          in: tagIds,
-        },
+        tagId: { in: tagIds },
         manga: {
           deleteFlag: 0,
           ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),

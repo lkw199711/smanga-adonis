@@ -1,12 +1,11 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import { scanQueue } from '#services/queue_service'
+import { idParamTaskValidator, batchIdsParamTaskValidator } from '#validators/task'
 
 export default class TasksController {
   async select({ response }: HttpContext) {
-    // const list = await scanQueue.getJobs(['active', 'waiting', 'completed', 'failed', 'delayed'])
     const list = await scanQueue.getJobs(['active', 'waiting'])
-    // const count = await scanQueue.getJobCountByTypes(['active', 'waiting'])
     const listResponse = new ListResponse({
       code: 0,
       message: '',
@@ -17,7 +16,7 @@ export default class TasksController {
   }
 
   async show({ params, response }: HttpContext) {
-    const { taskId } = params
+    const { taskId } = await idParamTaskValidator.validate(params)
     const job = await scanQueue.getJob(taskId)
 
     if (!job) {
@@ -28,7 +27,7 @@ export default class TasksController {
   }
 
   async destroy({ params, response }: HttpContext) {
-    const { taskId } = params
+    const { taskId } = await idParamTaskValidator.validate(params)
     const job = await scanQueue.getJob(taskId)
 
     if (!job) {
@@ -40,9 +39,11 @@ export default class TasksController {
   }
 
   async destroy_batch({ params, response }: HttpContext) {
-    const { taskIds } = params
-    const taskIdsArray = taskIds.split(',')
-    scanQueue.removeJobs(taskIdsArray)
+    const { taskIds } = await batchIdsParamTaskValidator.validate(params)
+    for (const taskId of taskIds) {
+      const job = await scanQueue.getJob(taskId)
+      if (job) await job.remove()
+    }
     return response.json(new SResponse({ code: 0, message: '任务已删除', status: 'success' }))
   }
 

@@ -2,16 +2,11 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 import { get_os, is_img } from '#utils/index'
+import { fileQueryValidator } from '#validators/file'
 
 export default class FilesController {
     public async index({ request, response }: HttpContext) {
-        const { file } = request.only(['file'])
-
-        if (!file) {
-            return response.status(400).json({
-                message: '图片路径不能为空',
-            })
-        }
+        const { file } = await fileQueryValidator.validate(request.qs())
 
         // 检查文件是否存在
         if (!fs.existsSync(file)) {

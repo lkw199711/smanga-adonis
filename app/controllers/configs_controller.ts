@@ -7,6 +7,7 @@ import { create_scan_cron } from '#services/cron_service'
 import prisma from '#start/prisma'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import p2pHeartbeatService from '#services/p2p/p2p_heartbeat_service'
+import { setConfigValidator, userConfigValidator } from '#validators/config'
 
 /**
  * 将各种语义的真假值统一为 0/1 数字(与现有 opds 字段保持一致风格)
@@ -34,7 +35,7 @@ export default class ConfigsController {
     if (user.role !== 'admin') {
       return new SResponse({ code: 1, message: '无权限', status: 'error' })
     }
-    const { key, value } = request.only(['key', 'value'])
+    const { key, value } = await setConfigValidator.validate(request.all())
     let config = get_config()
 
     if (key === 'scan.interval') {
@@ -335,9 +336,7 @@ export default class ConfigsController {
 
   public async user_config({ request, response }: HttpContext) {
     const userId = (request as any).userId
-    const { userConfig } = request.only([
-      'userConfig',
-    ])
+    const { userConfig } = await userConfigValidator.validate(request.all())
     const user = await prisma.user.update({
       where: { userId },
       data: {

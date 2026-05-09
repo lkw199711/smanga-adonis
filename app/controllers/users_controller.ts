@@ -3,16 +3,19 @@ import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
 import { sql_parse_json } from '#utils/index'
+import {
+  listUserValidator,
+  idParamUserValidator,
+  createUserValidator,
+  updateUserValidator,
+} from '#validators/user'
 
 export default class UsersController {
   public async index({ request, response }: HttpContext) {
-    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
+    const { page, pageSize } = await listUserValidator.validate(request.qs())
 
     const queryParams = {
-      ...(page && {
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
+      ...(page && pageSize && { skip: (page - 1) * pageSize, take: pageSize }),
       where: {},
       include: {
         mediaPermissons: {
@@ -42,25 +45,16 @@ export default class UsersController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { userId } = params
-    userId = Number(userId)
+    const { userId } = await idParamUserValidator.validate(params)
     const user = await prisma.user.findUnique({ where: { userId } })
     const showResponse = new SResponse({ code: 0, message: '', data: user })
     return response.json(showResponse)
   }
 
   public async create({ request, response }: HttpContext) {
-    const { userName, passWord, mediaLimit, role, mediaPermit } = request.only([
-      'userName',
-      'passWord',
-      'role',
-      'mediaPermit',
-      'mediaLimit',
-    ])
-
-    if (!userName) {
-      return response.json(new SResponse({ code: 1, message: '用户名不能为空' }))
-    }
+    const { userName, passWord, mediaLimit, role, mediaPermit } = await createUserValidator.validate(
+      request.all()
+    )
 
     const user = await prisma.user.create({
       data: { userName, passWord: md5(passWord), role, mediaPermit },
@@ -85,21 +79,15 @@ export default class UsersController {
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { userId } = params
-    const { userName, passWord, userConfig, mediaLimit, role, mediaPermit } = request.only([
-      'userName',
-      'passWord',
-      'userConfig',
-      'mediaLimit',
-      'role',
-      'mediaPermit',
-    ])
+    const { userId } = await idParamUserValidator.validate(params)
+    const { userName, passWord, userConfig, mediaLimit, role, mediaPermit } =
+      await updateUserValidator.validate(request.all())
     const user = await prisma.user.update({
       where: { userId },
       data: {
         userName,
         ...(passWord && { passWord: md5(passWord) }),
-        userConfig: sql_parse_json(userConfig),
+        userConfig: sql_parse_json(userConfig) as any,
         role,
         mediaPermit,
       },
@@ -132,14 +120,13 @@ export default class UsersController {
       })
     }
 
-
     const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
     return response.json(updateResponse)
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { userId } = params
-    
+    const { userId } = await idParamUserValidator.validate(params)
+
     try {
       // 使用事务确保所有删除操作要么全部成功，要么全部失败
       const user = await prisma.$transaction(async (prisma) => {
@@ -151,22 +138,24 @@ export default class UsersController {
         await prisma.history.deleteMany({ where: { userId } })
         await prisma.collect.deleteMany({ where: { userId } })
         await prisma.share.deleteMany({ where: { userId } })
-        
+
         // 最后删除用户本身
         return await prisma.user.delete({ where: { userId } })
       })
-      
+
       const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: user })
       return response.json(destroyResponse)
     } catch (error) {
       console.error('删除用户失败:', error)
-      const errorResponse = new SResponse({ code: 1, message: '删除用户失败，请检查用户是否存在或有其他关联记录' })
+      const errorResponse = new SResponse({
+        code: 1,
+        message: '删除用户失败，请检查用户是否存在或有其他关联记录',
+      })
       return response.json(errorResponse)
     }
   }
 
   public async config({ request, response }: HttpContext) {
-    // const { userConfig } = request.only(['userId', 'userConfig'])
     const { userId } = request as any
     const user = await prisma.user.findFirst({ where: { userId } })
 

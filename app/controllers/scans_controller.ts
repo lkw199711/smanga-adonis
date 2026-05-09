@@ -1,58 +1,57 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
-import { Prisma } from '@prisma/client'
+import {
+  idParamScanValidator,
+  createScanValidator,
+  updateScanValidator,
+} from '#validators/scan'
 
 export default class ScansController {
-    public async index({ response }: HttpContext) {
-        const list = await prisma.scan.findMany()
-        const listResponse = new ListResponse({
-            code: 0,
-            message: '',
-            list,
-            count: list.length,
-        })
-        return response.json(listResponse)
-    }
+  public async index({ response }: HttpContext) {
+    const list = await prisma.scan.findMany()
+    const listResponse = new ListResponse({
+      code: 0,
+      message: '',
+      list,
+      count: list.length,
+    })
+    return response.json(listResponse)
+  }
 
-    public async show({ params, response }: HttpContext) {
-        let { scanId } = params
-        scanId = Number(scanId)
-        const scan = await prisma.scan.findFirst({
-            where: {
-                scanId
-            }
-        })
-        const showResponse = new SResponse({ code: 0, message: '', data: scan })
-        return response.json(showResponse)
-    }
+  public async show({ params, response }: HttpContext) {
+    const { scanId } = await idParamScanValidator.validate(params)
+    const scan = await prisma.scan.findFirst({
+      where: { scanId },
+    })
+    const showResponse = new SResponse({ code: 0, message: '', data: scan })
+    return response.json(showResponse)
+  }
 
-    public async create({ request, response }: HttpContext) {
-        const insertData = request.body() as Prisma.scanCreateInput;
-        const scan = await prisma.scan.create({
-            data: insertData,
-        })
-        const saveResponse = new SResponse({ code: 0, message: '新增成功', data: scan })
-        return response.json(saveResponse)
-    }
+  public async create({ request, response }: HttpContext) {
+    const insertData = await createScanValidator.validate(request.all())
+    const scan = await prisma.scan.create({
+      data: insertData as any,
+    })
+    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: scan })
+    return response.json(saveResponse)
+  }
 
-    public async update({ params, request, response }: HttpContext) {
-        let { scanId } = params
-        scanId = Number(scanId)
-        const modifyData = request.only(['scanName', 'scanStatus', 'scanType']) as Prisma.scanUpdateInput
-        const scan = await prisma.scan.updateMany({
-            where: { scanId },
-            data: modifyData,
-        })
-        const updateResponse = new SResponse({ code: 0, message: '更新成功', data: scan })
-        return response.json(updateResponse)
-    }
+  public async update({ params, request, response }: HttpContext) {
+    const { scanId } = await idParamScanValidator.validate(params)
+    const modifyData = await updateScanValidator.validate(request.all())
+    const scan = await prisma.scan.updateMany({
+      where: { scanId },
+      data: modifyData as any,
+    })
+    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: scan })
+    return response.json(updateResponse)
+  }
 
-    public async destroy({ params, response }: HttpContext) {
-        let { scanId } = params
-        scanId = Number(scanId)
-        const scan = await prisma.scan.deleteMany({ where: { scanId } })
-        const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: scan })
-        return response.json(destroyResponse)
-    }
+  public async destroy({ params, response }: HttpContext) {
+    const { scanId } = await idParamScanValidator.validate(params)
+    const scan = await prisma.scan.deleteMany({ where: { scanId } })
+    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: scan })
+    return response.json(destroyResponse)
+  }
 }

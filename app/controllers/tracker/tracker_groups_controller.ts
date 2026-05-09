@@ -2,6 +2,13 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { ListResponse, SResponse } from '#interfaces/response'
 import trackerGroupService from '#services/tracker/tracker_group_service'
 import { log_tracker_error } from '#utils/p2p_log'
+import {
+  createTrackerGroupValidator,
+  joinTrackerGroupValidator,
+  inviteTrackerGroupValidator,
+  trackerGroupNoParamValidator,
+  trackerGroupKickParamValidator,
+} from '#validators/tracker'
 
 /**
  * Tracker 群组管理接口
@@ -14,7 +21,7 @@ export default class TrackerGroupsController {
   async create({ request, response }: HttpContext) {
     try {
       const nodeId = (request as any).trackerNodeId as string
-      const payload = request.only(['groupName', 'describe', 'password', 'maxMembers'])
+      const payload = await createTrackerGroupValidator.validate(request.all())
       const group = await trackerGroupService.create(nodeId, payload)
       return response.json(
         new SResponse({
@@ -44,7 +51,7 @@ export default class TrackerGroupsController {
   async join({ request, response }: HttpContext) {
     try {
       const nodeId = (request as any).trackerNodeId as string
-      const payload = request.only(['groupNo', 'password', 'inviteCode'])
+      const payload = await joinTrackerGroupValidator.validate(request.all())
       const group = await trackerGroupService.join(nodeId, payload)
       return response.json(
         new SResponse({
@@ -73,7 +80,8 @@ export default class TrackerGroupsController {
   async leave({ params, request, response }: HttpContext) {
     try {
       const nodeId = (request as any).trackerNodeId as string
-      await trackerGroupService.leave(nodeId, params.groupNo)
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      await trackerGroupService.leave(nodeId, groupNo)
       return response.json(new SResponse({ code: 0, message: '已退出群组' }))
     } catch (err: any) {
       log_tracker_error('group.leave', err)
@@ -102,7 +110,8 @@ export default class TrackerGroupsController {
    */
   async members({ params, response }: HttpContext) {
     try {
-      const list = await trackerGroupService.listMembers(params.groupNo)
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const list = await trackerGroupService.listMembers(groupNo)
       return response.json(
         new ListResponse({ code: 0, message: '', list: list as any, count: list.length })
       )
@@ -118,7 +127,8 @@ export default class TrackerGroupsController {
   async kick({ params, request, response }: HttpContext) {
     try {
       const operator = (request as any).trackerNodeId as string
-      await trackerGroupService.kick(operator, params.groupNo, params.nodeId)
+      const { groupNo, nodeId } = await trackerGroupKickParamValidator.validate(params)
+      await trackerGroupService.kick(operator, groupNo, nodeId)
       return response.json(new SResponse({ code: 0, message: '已移出群组' }))
     } catch (err: any) {
       log_tracker_error('group.kick', err)
@@ -132,7 +142,8 @@ export default class TrackerGroupsController {
   async dismiss({ params, request, response }: HttpContext) {
     try {
       const operator = (request as any).trackerNodeId as string
-      const data = await trackerGroupService.dismiss(operator, params.groupNo)
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const data = await trackerGroupService.dismiss(operator, groupNo)
       return response.json(new SResponse({ code: 0, message: '群组已解散', data }))
     } catch (err: any) {
       log_tracker_error('group.dismiss', err)
@@ -146,10 +157,11 @@ export default class TrackerGroupsController {
   async invite({ params, request, response }: HttpContext) {
     try {
       const operator = (request as any).trackerNodeId as string
-      const { expiresHours } = request.only(['expiresHours'])
+      const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+      const { expiresHours } = await inviteTrackerGroupValidator.validate(request.all())
       const data = await trackerGroupService.createInvite(
         operator,
-        params.groupNo,
+        groupNo,
         expiresHours
       )
       return response.json(new SResponse({ code: 0, message: '邀请码生成成功', data }))

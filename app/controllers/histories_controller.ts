@@ -2,12 +2,21 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
 import { get_config } from '#utils/index'
+import {
+  listHistoryValidator,
+  idParamHistoryValidator,
+  chapterParamHistoryValidator,
+  mangaParamHistoryValidator,
+  createHistoryValidator,
+  updateHistoryValidator,
+} from '#validators/history'
+
 const isPgsql = ['pgsql', 'postgresql'].includes(get_config().sql.client)
 
 export default class HistoriesController {
   public async index({ request, response }: HttpContext) {
     const { userId } = request as any
-    const { page, pageSize } = request.only(['page', 'pageSize', 'order'])
+    const { page, pageSize } = await listHistoryValidator.validate(request.qs())
     const [list, distinct]: any = isPgsql
       ? await this.raw_sql_select_postgres({ userId, page, pageSize })
       : await this.raw_sql_select_mysql({ userId, page, pageSize })
@@ -32,17 +41,6 @@ export default class HistoriesController {
     })
 
     return response.json(listResponse)
-
-    /** 之前的查询语句
-     * // groupBy模式
-    await prisma.$queryRaw`SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));`
-     * prisma.history.groupBy(queryParams),
-      prisma.$queryRaw`SELECT history.mangaId,history.chapterId,history.userId,chapter.chapterName,manga.mangaCover AS chapterCover,manga.browseType FROM history,manga,chapter
-        WHERE history.mangaId = manga.mangaId AND history.chapterId = chapter.chapterId AND history.userId = ${userId}  
-        GROUP BY history.mangaId
-        ORDER BY history.createTime DESC
-        LIMIT ${page ? pageSize : 100}`,
-     */
   }
 
   private async raw_sql_select_postgres({
@@ -58,11 +56,11 @@ export default class HistoriesController {
       // 使用MAX函数是为了在GROUP BY时选择非聚合列
       prisma.$queryRaw`SELECT 
           "history"."mangaId",
-          MAX("history"."chapterId") AS "chapterId",  -- 使用聚合函数选择 chapterId
-          MAX("history"."userId") AS "userId",          -- 使用聚合函数选择 userId
-          MAX("chapter"."chapterName") AS "chapterName", -- 使用聚合函数选择 chapterName
-          MAX("manga"."mangaCover") AS "chapterCover",   -- 使用聚合函数选择 mangaCover
-          MAX("manga"."browseType") AS "browseType"      -- 使用聚合函数选择 browseType
+          MAX("history"."chapterId") AS "chapterId",
+          MAX("history"."userId") AS "userId",
+          MAX("chapter"."chapterName") AS "chapterName",
+          MAX("manga"."mangaCover") AS "chapterCover",
+          MAX("manga"."browseType") AS "browseType"
       FROM 
           "history"
       JOIN 
@@ -74,7 +72,7 @@ export default class HistoriesController {
       GROUP BY 
           "history"."mangaId"
       ORDER BY 
-          MAX("history"."createTime") DESC  -- 根据 createTime 排序
+          MAX("history"."createTime") DESC
       LIMIT
         ${pageSize} 
       OFFSET
@@ -94,14 +92,13 @@ export default class HistoriesController {
     pageSize: number
   }) {
     return await Promise.all([
-      // 使用MAX函数是为了在GROUP BY时选择非聚合列
       prisma.$queryRaw`SELECT 
           history.mangaId,
-          MAX(history.chapterId) AS chapterId,  -- 使用聚合函数选择 chapterId
-          MAX(history.userId) AS userId,          -- 使用聚合函数选择 userId
-          MAX(chapter.chapterName) AS chapterName, -- 使用聚合函数选择 chapterName
-          MAX(manga.mangaCover) AS chapterCover,   -- 使用聚合函数选择 mangaCover
-          MAX(manga.browseType) AS browseType      -- 使用聚合函数选择 browseType
+          MAX(history.chapterId) AS chapterId,
+          MAX(history.userId) AS userId,
+          MAX(chapter.chapterName) AS chapterName,
+          MAX(manga.mangaCover) AS chapterCover,
+          MAX(manga.browseType) AS browseType
       FROM 
           history
       JOIN 
@@ -113,7 +110,7 @@ export default class HistoriesController {
       GROUP BY 
           history.mangaId
       ORDER BY 
-          MAX(history.createTime) DESC  -- 根据 createTime 排序
+          MAX(history.createTime) DESC
       LIMIT
         ${pageSize} 
       OFFSET
@@ -125,34 +122,17 @@ export default class HistoriesController {
 
   public async create({ request, response }: HttpContext) {
     const { userId } = request as any
-    const { mediaId, mangaId, chapterId, chapterName, mangaName } = request.only([
-      'mediaId',
-      'mangaId',
-      'chapterId',
-      'chapterName',
-      'mangaName',
-    ])
+    const payload = await createHistoryValidator.validate(request.all())
+    const { mediaId, mangaId, chapterId, chapterName, mangaName } = payload
 
     const history = await prisma.history.create({
       data: {
-        manga: {
-          connect: {
-            mangaId: Number(mangaId),
-          },
-        },
-        chapter: {
-          connect: {
-            chapterId: Number(chapterId),
-          },
-        },
-        user: {
-          connect: {
-            userId: Number(userId),
-          },
-        },
-        mediaId: Number(mediaId),
-        chapterName,
-        mangaName,
+        manga: { connect: { mangaId } },
+        chapter: { connect: { chapterId } },
+        user: { connect: { userId } },
+        mediaId,
+        chapterName: chapterName as any,
+        mangaName: mangaName as any,
       },
     })
     const saveResponse = new SResponse({ code: 0, message: '', data: history })
@@ -160,8 +140,7 @@ export default class HistoriesController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { historyId } = params
-    historyId = Number(historyId)
+    const { historyId } = await idParamHistoryValidator.validate(params)
     const history = await prisma.history.findUnique({ where: { historyId } })
     const showResponse = new SResponse({ code: 0, message: '', data: history })
     return response.json(showResponse)
@@ -169,8 +148,8 @@ export default class HistoriesController {
 
   public async update({ params, request, response }: HttpContext) {
     const { userId } = request as any
-    const { chapterId } = params
-    const modifyData = request.only(['mediaId', 'mangaId', 'chapterId', 'chapterName', 'mangaName'])
+    const { chapterId } = await chapterParamHistoryValidator.validate(params)
+    const modifyData = await updateHistoryValidator.validate(request.all())
     const history = await prisma.history.updateMany({
       where: { chapterId, userId },
       data: modifyData,
@@ -181,7 +160,7 @@ export default class HistoriesController {
 
   public async destroy({ request, params, response }: HttpContext) {
     const { userId } = request as any
-    const { chapterId } = params
+    const { chapterId } = await chapterParamHistoryValidator.validate(params)
     const data = await prisma.history.deleteMany({ where: { chapterId, userId } })
     const destroyResponse = new SResponse({ code: 0, message: '', data })
     return response.json(destroyResponse)
@@ -189,26 +168,14 @@ export default class HistoriesController {
 
   public async read_all_chapters({ request, params, response }: HttpContext) {
     const { userId } = request as any
-    const { mangaId } = params
+    const { mangaId } = await mangaParamHistoryValidator.validate(params)
     const chapters = await prisma.chapter.findMany({ where: { mangaId } })
     chapters.forEach(async (chapter) => {
       await prisma.history.create({
         data: {
-          manga: {
-            connect: {
-              mangaId: chapter.mangaId,
-            },
-          },
-          chapter: {
-            connect: {
-              chapterId: chapter.chapterId,
-            },
-          },
-          user: {
-            connect: {
-              userId: userId,
-            },
-          },
+          manga: { connect: { mangaId: chapter.mangaId } },
+          chapter: { connect: { chapterId: chapter.chapterId } },
+          user: { connect: { userId } },
           mediaId: chapter.mediaId,
           chapterName: chapter.chapterName,
         },
@@ -218,7 +185,7 @@ export default class HistoriesController {
         where: {
           chapterId_userId: {
             chapterId: chapter.chapterId,
-            userId: userId,
+            userId,
           },
         },
         update: {
@@ -230,7 +197,7 @@ export default class HistoriesController {
           finish: 1,
           mangaId: chapter.mangaId,
           chapterId: chapter.chapterId,
-          userId: userId,
+          userId,
         },
       })
     })
@@ -241,7 +208,7 @@ export default class HistoriesController {
 
   public async unread_all_chapters({ request, params, response }: HttpContext) {
     const { userId } = request as any
-    const { mangaId } = params
+    const { mangaId } = await mangaParamHistoryValidator.validate(params)
     await prisma.history.deleteMany({ where: { mangaId, userId } })
     await prisma.latest.deleteMany({ where: { mangaId, userId } })
 
@@ -251,17 +218,12 @@ export default class HistoriesController {
 
   /**
    * 判断章节是否已阅读
-   * @param param0
-   * @returns
    */
   public async chapter_is_read({ request, params, response }: HttpContext) {
     const { userId } = request as any
-    const { chapterId } = params
+    const { chapterId } = await chapterParamHistoryValidator.validate(params)
     const history = await prisma.history.findFirst({
-      where: {
-        userId,
-        chapterId: chapterId,
-      },
+      where: { userId, chapterId },
     })
     const showResponse = new SResponse({ code: 0, message: '', data: !!history })
     return response.json(showResponse)

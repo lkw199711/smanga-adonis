@@ -17,6 +17,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
+import { p2pVerifyEchoValidator } from '#validators/p2p'
 
 export default class P2PVerifyController {
   /**
@@ -41,12 +42,7 @@ export default class P2PVerifyController {
           .json(new SResponse({ code: 1, message: 'P2P 未启用', status: 'p2p disabled' }))
       }
 
-      const challenge = String(request.input('challenge', '')).trim()
-      if (!challenge) {
-        return response
-          .status(400)
-          .json(new SResponse({ code: 1, message: '缺少 challenge 参数' }))
-      }
+      const { challenge } = await p2pVerifyEchoValidator.validate(request.qs())
 
       const localNodeId: string = p2p?.node?.nodeId || ''
 

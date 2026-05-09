@@ -1,24 +1,27 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse, SResponseCode } from '#interfaces/response'
-import { Prisma } from '@prisma/client'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 import fs from 'fs'
 import { order_params, path_compress, read_json, s_delete } from '#utils/index'
 import path from 'path'
+import {
+  listMangaValidator,
+  idParamMangaValidator,
+  createMangaValidator,
+  updateMangaValidator,
+  batchIdsMangaValidator,
+  editMetaMangaValidator,
+  addTagsMangaValidator,
+} from '#validators/manga'
 
 export default class MangaController {
   public async index({ request, response }: HttpContext) {
-    const { mediaId, page, pageSize, keyWord, order } = request.only([
-      'mediaId',
-      'page',
-      'pageSize',
-      'chapterId',
-      'order',
-      'keyWord',
-    ])
+    const { mediaId, page, pageSize, keyWord, order } = await listMangaValidator.validate(
+      request.qs()
+    )
 
     const userId = (request as any).userId
     const user = await prisma.user.findUnique({ where: { userId } })
@@ -37,7 +40,7 @@ export default class MangaController {
     if (!isAdmin) {
       // 非管理员权限
       const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
-      if (!mediaIds.includes(Number(mediaId))) {
+      if (mediaId !== undefined && !mediaIds.includes(mediaId)) {
         return response
           .status(401)
           .json(new SResponse({ code: 401, message: '无权限操作', status: 'permisson error' }))
@@ -115,8 +118,7 @@ export default class MangaController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { mangaId } = params
-    mangaId = Number(mangaId)
+    const { mangaId } = await idParamMangaValidator.validate(params)
     const manga = await prisma.manga.findUnique({
       where: { mangaId },
       include: {
@@ -145,24 +147,17 @@ export default class MangaController {
   }
 
   public async create({ request, response }: HttpContext) {
-    const insertData = request.body() as Prisma.mangaCreateInput
+    const insertData = await createMangaValidator.validate(request.all())
     const manga = await prisma.manga.create({
-      data: insertData,
+      data: insertData as any,
     })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: manga })
     return response.json(saveResponse)
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { mangaId } = params
-    const modifyData = request.only([
-      'mangaName',
-      'mangaNumber',
-      'mangaPath',
-      'mangaCover',
-      'removeFirst',
-      'browseType',
-    ])
+    const { mangaId } = await idParamMangaValidator.validate(params)
+    const modifyData = await updateMangaValidator.validate(request.all())
     const manga = await prisma.manga.update({
       where: { mangaId },
       data: modifyData,
@@ -172,7 +167,7 @@ export default class MangaController {
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { mangaId } = params
+    const { mangaId } = await idParamMangaValidator.validate(params)
     const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
 
     addTask({
@@ -188,12 +183,7 @@ export default class MangaController {
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
-    const { mangaIds } = request.only(['mangaIds'])
-    if (!mangaIds || !mangaIds.length) {
-      return response
-        .status(400)
-        .json(new SResponse({ code: SResponseCode.Failed, message: '请选择要删除的漫画' }))
-    }
+    const { mangaIds } = await batchIdsMangaValidator.validate(request.all())
 
     for (const mangaId of mangaIds) {
       const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
@@ -215,7 +205,7 @@ export default class MangaController {
   }
 
   public async scan({ params, response }: HttpContext) {
-    let { mangaId } = params
+    const { mangaId } = await idParamMangaValidator.validate(params)
     const manga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!manga) {
       return response
@@ -223,7 +213,7 @@ export default class MangaController {
         .json(new SResponse({ code: 404, message: '漫画不存在', status: 'not found' }))
     }
 
-    const path = await prisma.path.findUnique({
+    const pathInfo = await prisma.path.findUnique({
       where: { pathId: manga.pathId },
       include: {
         media: {
@@ -234,7 +224,7 @@ export default class MangaController {
       },
     })
 
-    if (!path) {
+    if (!pathInfo) {
       return response
         .status(404)
         .json(new SResponse({ code: 404, message: '路径不存在', status: 'not found' }))
@@ -244,11 +234,11 @@ export default class MangaController {
       taskName: `scan_manga_${manga.mangaId}`,
       command: 'taskScanManga',
       args: {
-        pathId: path.pathId,
+        pathId: pathInfo.pathId,
         mangaPath: manga.mangaPath,
         mangaName: manga.mangaName,
         mangaId: manga.mangaId,
-        isCloudMedia: path.media?.isCloudMedia,
+        isCloudMedia: pathInfo.media?.isCloudMedia,
       },
       priority: TaskPriority.scanManga,
       timeout: 1000 * 60 * 60 * 2,
@@ -259,19 +249,9 @@ export default class MangaController {
   }
 
   public async edit_meta({ params, request, response }: HttpContext) {
-    let { mangaId } = params
-    let { title, author, publishDate, mangaCover, star, describe, tags, wirteMetaJson } =
-      request.only([
-        'title',
-        'author',
-        'publishDate',
-        'mangaCover',
-        'star',
-        'describe',
-        'tags',
-        'wirteMetaJson',
-      ])
-    mangaId = Number(mangaId)
+    const { mangaId } = await idParamMangaValidator.validate(params)
+    const { title, author, publishDate, mangaCover, star, describe, tags, wirteMetaJson } =
+      await editMetaMangaValidator.validate(request.all())
 
     // 修改或新增元数据
     const res = await Promise.all([
@@ -307,8 +287,9 @@ export default class MangaController {
     return response.json(updateResponse)
   }
 
-  async meta_update(mangaId: number, metaName: string, metaContent: string) {
+  async meta_update(mangaId: number, metaName: string, metaContent: any) {
     if (!metaContent) return
+    const content = String(metaContent)
     const meta = await prisma.meta.findFirst({
       where: { mangaId, metaName },
     })
@@ -316,25 +297,24 @@ export default class MangaController {
     if (meta) {
       await prisma.meta.update({
         where: { metaId: meta.metaId },
-        data: { metaContent },
+        data: { metaContent: content },
       })
     } else {
       await prisma.meta.create({
         data: {
           mangaId,
           metaName,
-          metaContent,
+          metaContent: content,
         },
       })
     }
   }
+
   /**
    * 重新扫描漫画元数据
-   * @param param0
-   * @returns
    */
   public async reload_meta({ params, response }: HttpContext) {
-    let { mangaId } = params
+    const { mangaId } = await idParamMangaValidator.validate(params)
 
     const res = await new ReloadMangaMetaJob({ mangaId }).run()
 
@@ -348,19 +328,14 @@ export default class MangaController {
   }
 
   public async add_tags({ params, request, response }: HttpContext) {
-    let { mangaId } = params
-    mangaId = Number(mangaId)
-    const { tags, metaWriteJson } = request.only(['tags', 'metaWriteJson'])
-
-    if (!Array.isArray(tags)) {
-      return response.status(400).json(new SResponse({ code: 400, message: '标签必须是数组' }))
-    }
+    const { mangaId } = await idParamMangaValidator.validate(params)
+    const { tags, metaWriteJson } = await addTagsMangaValidator.validate(request.all())
 
     // 删除旧的标签
     await prisma.mangaTag.deleteMany({ where: { mangaId } })
 
     // 添加新的标签
-    const mangaTags = tags.map((tag: any) => ({
+    const mangaTags = (tags as any[]).map((tag: any) => ({
       mangaId,
       tagId: tag.tagId,
     }))
@@ -384,7 +359,7 @@ export default class MangaController {
         if (!fs.existsSync(metaPath)) fs.mkdirSync(metaPath, { recursive: true })
         if (fs.existsSync(metaFile)) metaData = read_json(metaFile)
 
-        metaData['tags'] = tags.map((tag: any) => tag.tagName)
+        metaData['tags'] = (tags as any[]).map((tag: any) => tag.tagName)
 
         fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2), 'utf-8')
       }
@@ -394,8 +369,7 @@ export default class MangaController {
   }
 
   public async compress_all({ params, response }: HttpContext) {
-    let { mangaId } = params
-    mangaId = Number(mangaId)
+    const { mangaId } = await idParamMangaValidator.validate(params)
 
     // 获取漫画所有章节
     const chapters = await prisma.chapter.findMany({
@@ -404,11 +378,13 @@ export default class MangaController {
 
     // 获取所有章节的压缩记录
     const compresses = await prisma.compress.findMany({
-      where: { mangaId},
+      where: { mangaId },
     })
 
     // 过滤出未压缩的章节
-    const haveNotCompressChapters = chapters.filter((chapter) => !compresses.find((compress) => compress.chapterId === chapter.chapterId))
+    const haveNotCompressChapters = chapters.filter(
+      (chapter) => !compresses.find((compress) => compress.chapterId === chapter.chapterId)
+    )
 
     if (!haveNotCompressChapters.length) {
       const compressResponse = new SResponse({ code: 1, message: '此漫画章节已全部压缩' })
@@ -437,8 +413,7 @@ export default class MangaController {
   }
 
   public async compress_delete({ params, response }: HttpContext) {
-    let { mangaId } = params
-    mangaId = Number(mangaId)
+    const { mangaId } = await idParamMangaValidator.validate(params)
 
     // 获取漫画所有章节的压缩记录
     const compresses = await prisma.compress.findMany({

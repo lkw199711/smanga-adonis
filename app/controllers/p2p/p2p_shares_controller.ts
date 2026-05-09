@@ -16,6 +16,13 @@ import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import { log_p2p_error } from '#utils/p2p_log'
 import type { AnnouncePayload, AnnounceResult } from '#type/p2p'
 import { buildShareManifest } from '#services/p2p/manifest/manifest_builder'
+import {
+  listP2PShareQueryValidator,
+  createP2PShareValidator,
+  updateP2PShareValidator,
+  announceP2PShareValidator,
+  idParamP2PValidator,
+} from '#validators/p2p'
 
 function get_client(): TrackerClient | null {
   const cfg = get_config()?.p2p
@@ -169,7 +176,7 @@ export default class P2PSharesController {
    *   - mediaName / mangaName (从本地 media / manga 查询)
    */
   async index({ request, response }: HttpContext) {
-    const { groupNo, page, pageSize } = request.only(['groupNo', 'page', 'pageSize'])
+    const { groupNo, page, pageSize } = await listP2PShareQueryValidator.validate(request.qs())
     let where: any = {}
     if (groupNo) {
       const g = await prisma.p2p_group.findUnique({ where: { groupNo } })
@@ -257,13 +264,9 @@ export default class P2PSharesController {
    * shareName 缺省时自动用对应 media / manga 的名字。
    */
   async create({ request, response }: HttpContext) {
-    const { groupNo, shareType, mediaId, mangaId, shareName } = request.only([
-      'groupNo', 'shareType', 'mediaId', 'mangaId', 'shareName',
-    ])
+    const { groupNo, shareType, mediaId, mangaId, shareName } =
+      await createP2PShareValidator.validate(request.all())
 
-    if (!groupNo) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'groupNo required' }))
-    }
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) {
       return response.status(400).json(new SResponse({ code: 1, message: '群组不存在' }))
@@ -323,8 +326,8 @@ export default class P2PSharesController {
    * body: { enable?, shareName? }
    */
   async update({ params, request, response }: HttpContext) {
-    const id = Number(params.id)
-    const { enable, shareName } = request.only(['enable', 'shareName'])
+    const { id } = await idParamP2PValidator.validate(params)
+    const { enable, shareName } = await updateP2PShareValidator.validate(request.all())
     const existed = await prisma.p2p_local_share.findUnique({ where: { p2pLocalShareId: id } })
     if (!existed) {
       return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
@@ -352,7 +355,7 @@ export default class P2PSharesController {
    * DELETE /api/p2p/share/:id
    */
   async destroy({ params, response }: HttpContext) {
-    const id = Number(params.id)
+    const { id } = await idParamP2PValidator.validate(params)
     const existed = await prisma.p2p_local_share.findUnique({ where: { p2pLocalShareId: id } })
     if (!existed) {
       return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
@@ -380,10 +383,7 @@ export default class P2PSharesController {
    * 手动触发一次索引上报
    */
   async announce({ request, response }: HttpContext) {
-    const { groupNo } = request.only(['groupNo'])
-    if (!groupNo) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'groupNo required' }))
-    }
+    const { groupNo } = await announceP2PShareValidator.validate(request.all())
     await announce_group(groupNo)
     return response.json(new SResponse({ code: 0, message: '已触发上报' }))
   }

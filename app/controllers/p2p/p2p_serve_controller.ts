@@ -16,6 +16,12 @@ import path from 'path'
 import { ListResponse, SResponse } from '#interfaces/response'
 import { image_files, is_img } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
+import {
+  mediaIdParamValidator,
+  mangaIdParamValidator,
+  chapterIdParamValidator,
+  fileBodyValidator,
+} from '#validators/p2p'
 
 /** 图片扩展名(与 scan_manga_job 的外置封面检索保持一致) */
 const SIDE_COVER_EXTS = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP', '.gif', '.bmp']
@@ -140,7 +146,7 @@ export default class P2PServeController {
   async mangas({ request, params, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      const mediaId = Number(params.mediaId)
+      const { mediaId } = await mediaIdParamValidator.validate(params)
 
       const mangas = await prisma.manga.findMany({
         where: { mediaId },
@@ -164,7 +170,7 @@ export default class P2PServeController {
   async chapters({ request, params, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      const mangaId = Number(params.mangaId)
+      const { mangaId } = await mangaIdParamValidator.validate(params)
 
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
       if (!manga) {
@@ -196,7 +202,7 @@ export default class P2PServeController {
   async images({ request, params, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      const chapterId = Number(params.chapterId)
+      const { chapterId } = await chapterIdParamValidator.validate(params)
 
       const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
       if (!chapter) {
@@ -233,7 +239,7 @@ export default class P2PServeController {
   async tree({ request, params, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      const mangaId = Number(params.mangaId)
+      const { mangaId } = await mangaIdParamValidator.validate(params)
 
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
       if (!manga) {
@@ -348,7 +354,7 @@ export default class P2PServeController {
   async chapter_tree({ request, params, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      const chapterId = Number(params.chapterId)
+      const { chapterId } = await chapterIdParamValidator.validate(params)
 
       const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
       if (!chapter) {
@@ -441,11 +447,8 @@ export default class P2PServeController {
   async file_stat({ request, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      const { file } = request.only(['file'])
+      const { file } = await fileBodyValidator.validate(request.all())
 
-      if (!file || typeof file !== 'string') {
-        return response.status(400).json(new SResponse({ code: 1, message: 'file param required' }))
-      }
       if (!fs.existsSync(file)) {
         console.warn(`[p2p-serve] file_stat 404 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
         return response.status(404).json(new SResponse({ code: 1, message: `file not found: ${file}` }))
@@ -475,15 +478,10 @@ export default class P2PServeController {
   async file({ request, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      // 兼容 POST body / GET query 两种传参
-      const fileFromBody = (request as any).only?.(['file'])?.file
-      const fileFromQuery = request.qs?.()?.file
-      const file: any = fileFromBody || fileFromQuery
+      // 兼容 POST body / GET query 两种传参，统一合并后走 validator
+      const merged: any = { ...(request.qs?.() || {}), ...(request.all?.() || {}) }
+      const { file } = await fileBodyValidator.validate(merged)
 
-      if (!file || typeof file !== 'string') {
-        console.warn(`[p2p-serve] file 400 file参数缺失 | caller=${callerNodeId} groupNo=${groupNo}`)
-        return response.status(400).json({ code: 1, message: 'file param required' })
-      }
       if (!fs.existsSync(file)) {
         console.warn(`[p2p-serve] file 404 文件不存在 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
         return response.status(404).json({ code: 1, message: `file not found: ${file}` })

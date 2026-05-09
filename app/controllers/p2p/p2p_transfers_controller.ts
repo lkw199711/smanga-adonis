@@ -18,6 +18,12 @@ import { get_config } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import TrackerClient from '#services/p2p/tracker_client'
+import {
+  listP2PTransferQueryValidator,
+  pullP2PTransferValidator,
+  clearP2PTransferValidator,
+  idParamP2PValidator,
+} from '#validators/p2p'
 
 export default class P2PTransfersController {
   /**
@@ -68,9 +74,9 @@ export default class P2PTransfersController {
    * GET /api/p2p/transfer?status=xxx&groupNo=xxx
    */
   async index({ request, response }: HttpContext) {
-    const { status, groupNo, page, pageSize } = request.only([
-      'status', 'groupNo', 'page', 'pageSize',
-    ])
+    const { status, groupNo, page, pageSize } = await listP2PTransferQueryValidator.validate(
+      request.qs()
+    )
     let where: any = {}
     if (status) where.status = status
     if (groupNo) where.groupNo = groupNo
@@ -92,7 +98,7 @@ export default class P2PTransfersController {
   }
 
   async show({ params, response }: HttpContext) {
-    const id = Number(params.id)
+    const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
       return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
@@ -121,11 +127,7 @@ export default class P2PTransfersController {
       return response.status(403).json(new SResponse({ code: 1, message: onlineError, status: 'offline' }))
     }
 
-    const body = request.only([
-      'groupNo', 'transferType',
-      'remoteMediaId', 'remoteMangaId', 'remoteChapterId',
-      'remoteName', 'receivedPath',
-    ])
+    const body = await pullP2PTransferValidator.validate(request.all())
 
     if (!body.groupNo) {
       return response.status(400).json(new SResponse({ code: 1, message: 'groupNo required' }))
@@ -207,7 +209,7 @@ export default class P2PTransfersController {
    * POST /api/p2p/transfer/:id/cancel
    */
   async cancel({ params, response }: HttpContext) {
-    const id = Number(params.id)
+    const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
       return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
@@ -232,7 +234,7 @@ export default class P2PTransfersController {
    * - 不会删除已落盘的文件(receivedPath 下的内容由用户自行清理)
    */
   async destroy({ params, response }: HttpContext) {
-    const id = Number(params.id)
+    const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
       return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
@@ -261,7 +263,7 @@ export default class P2PTransfersController {
    * 永远不会删除 pending / running 状态的任务,避免影响进行中的下载。
    */
   async clear({ request, response }: HttpContext) {
-    const { status } = request.only(['status'])
+    const { status } = await clearP2PTransferValidator.validate(request.all())
     const allowed = ['success', 'failed', 'canceled']
     const targetStatus = status && allowed.includes(status) ? [status] : allowed
 
@@ -288,7 +290,7 @@ export default class P2PTransfersController {
       return response.status(403).json(new SResponse({ code: 1, message: onlineError, status: 'offline' }))
     }
 
-    const id = Number(params.id)
+    const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
       return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))

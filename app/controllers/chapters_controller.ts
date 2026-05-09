@@ -1,24 +1,28 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { ListResponse, SResponse } from '../interfaces/response.js'
-import { Prisma } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
 import { path_compress, order_params, extract_numbers, get_config, s_delete } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { unzipFile } from '#utils/unzip'
+import {
+  listChapterValidator,
+  idParamChapterValidator,
+  firstChapterValidator,
+  imagesChapterValidator,
+  createChapterValidator,
+  updateChapterValidator,
+  batchIdsParamChapterValidator,
+  downloadChapterValidator,
+} from '#validators/chapter'
 
 export default class ChaptersController {
   public async index({ request, response }: HttpContext) {
-    let { mangaId, mediaId, page, pageSize, order, keyWord } = request.only([
-      'page',
-      'pageSize',
-      'mangaId',
-      'mediaId',
-      'order',
-      'keyWord',
-    ])
+    let { mangaId, mediaId, page, pageSize, order, keyWord } = await listChapterValidator.validate(
+      request.qs()
+    )
 
     const userId = (request as any).userId
     if (mangaId) {
@@ -46,7 +50,7 @@ export default class ChaptersController {
 
     if (!isAdmin) {
       const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
-      if (!mediaIds.includes(mediaId)) {
+      if (mediaId !== undefined && !mediaIds.includes(mediaId)) {
         return response
           .status(403)
           .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
@@ -75,12 +79,8 @@ export default class ChaptersController {
   private async no_paginate({ mangaId, mediaId, order, userId }: any) {
     const queryParams = {
       where: {
-        ...(mangaId && {
-          mangaId: mangaId,
-        }),
-        ...(mediaId && {
-          mediaId: mediaId,
-        }),
+        ...(mangaId && { mangaId }),
+        ...(mediaId && { mediaId }),
         deleteFlag: 0,
       },
       include: {
@@ -115,12 +115,8 @@ export default class ChaptersController {
         take: pageSize,
       }),
       where: {
-        ...(mangaId && {
-          mangaId: mangaId,
-        }),
-        ...(mediaId && {
-          mediaId: mediaId,
-        }),
+        ...(mangaId && { mangaId }),
+        ...(mediaId && { mediaId }),
         ...(keyWord && { subTitle: { contains: keyWord } }),
         deleteFlag: 0,
       },
@@ -161,14 +157,14 @@ export default class ChaptersController {
   }
 
   public async show({ params, response }: HttpContext) {
-    let { chapterId } = params
+    const { chapterId } = await idParamChapterValidator.validate(params)
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     const showResponse = new SResponse({ code: 0, message: '', data: chapter })
     return response.json(showResponse)
   }
 
   public async first({ request, response }: HttpContext) {
-    let { mangaId, order } = request.only(['mangaId', 'order'])
+    const { mangaId, order } = await firstChapterValidator.validate(request.qs())
     const chapter = await prisma.chapter.findFirst({
       where: { mangaId },
       orderBy: order_params(order),
@@ -179,8 +175,8 @@ export default class ChaptersController {
   }
 
   public async images({ params, request, response }: HttpContext) {
-    let { chapterId } = params
-    const { orderChapterByNumber, reTry } = request.only(['orderChapterByNumber', 'reTry'])
+    const { chapterId } = await idParamChapterValidator.validate(params)
+    const { orderChapterByNumber, reTry } = await imagesChapterValidator.validate(request.all())
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
       return response.json(
@@ -197,7 +193,7 @@ export default class ChaptersController {
     let images: string[] = []
     let imagesResponse: SResponse
     // 查询解压记录
-    let compress: any = await prisma.compress.findUnique({ where: { chapterId: chapterId } })
+    let compress: any = await prisma.compress.findUnique({ where: { chapterId } })
     const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
     const exclude = pathInfo?.exclude
 
@@ -326,7 +322,7 @@ export default class ChaptersController {
         data: images,
         status: 'compressing',
       })
-    } else if (!compressPathExists && reTry < 10) {
+    } else if (!compressPathExists && reTry !== undefined && reTry < 10) {
       // 等待解压任务
       imagesResponse = new SResponse({ code: 1, message: '', data: [], status: 'compressing' })
     } else if (compressPathExists) {
@@ -350,7 +346,7 @@ export default class ChaptersController {
       }
     } else {
       // 解压任务超时，删除任务记录
-      await prisma.compress.delete({ where: { chapterId: chapterId } })
+      await prisma.compress.delete({ where: { chapterId } })
       imagesResponse = new SResponse({
         code: 1,
         message: '章节解压超时',
@@ -370,17 +366,17 @@ export default class ChaptersController {
   }
 
   public async create({ request, response }: HttpContext) {
-    const insertData = request.body() as Prisma.chapterCreateInput
+    const insertData = await createChapterValidator.validate(request.all())
     const chapter = await prisma.chapter.create({
-      data: insertData,
+      data: insertData as any,
     })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: chapter })
     return response.json(saveResponse)
   }
 
   public async update({ params, request, response }: HttpContext) {
-    let { chapterId } = params
-    const modifyData = request.only(['chapterName', 'chapterPath', 'chapterCover', 'chapterNumber'])
+    const { chapterId } = await idParamChapterValidator.validate(params)
+    const modifyData = await updateChapterValidator.validate(request.all())
     const chapter = await prisma.chapter.update({
       where: { chapterId },
       data: modifyData,
@@ -390,7 +386,7 @@ export default class ChaptersController {
   }
 
   public async destroy({ params, response }: HttpContext) {
-    let { chapterId } = params
+    const { chapterId } = await idParamChapterValidator.validate(params)
     const chapter = await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 1 } })
 
     addTask({
@@ -405,22 +401,19 @@ export default class ChaptersController {
   }
 
   public async destroy_batch({ params, response }: HttpContext) {
-    let { chapterIds } = params
-    chapterIds = chapterIds.split(',')
+    const { chapterIds } = await batchIdsParamChapterValidator.validate(params)
     const chapters = await prisma.chapter.updateMany({
       where: {
-        chapterId: {
-          in: chapterIds.map((id: any) => Number(id)),
-        },
+        chapterId: { in: chapterIds },
       },
       data: { deleteFlag: 1 },
     })
 
-    chapterIds.forEach((id: any) => {
+    chapterIds.forEach((id: number) => {
       addTask({
         taskName: `delete_chapter_${id}`,
         command: 'deleteChapter',
-        args: { chapterId: Number(id) },
+        args: { chapterId: id },
         priority: TaskPriority.deleteManga,
       })
     })
@@ -430,7 +423,7 @@ export default class ChaptersController {
   }
 
   public async download({ request, response }: HttpContext) {
-    const { chapterId } = request.only(['chapterId'])
+    const { chapterId } = await downloadChapterValidator.validate(request.all())
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
       return response.json(new SResponse({ code: 1, message: '章节不存在' }))
@@ -460,20 +453,10 @@ export default class ChaptersController {
 
       return response
     }
-    /*
-        if (!fs.existsSync(filePath)) {
-          const compress = await prisma.compress.findUnique({ where: { chapterId } })
-          if (compress && fs.existsSync(compress.chapterPath)) {
-            filePath = compress.chapterPath
-          } else {
-            return response.json(new SResponse({ code: 1, message: '文件不存在' }))
-          }
-        }
-    */
   }
 
   public async compress_delete({ params, response }: HttpContext) {
-    let { chapterId } = params
+    const { chapterId } = await idParamChapterValidator.validate(params)
     const compress = await prisma.compress.findUnique({ where: { chapterId } })
     if (!compress) {
       return response.json(new SResponse({ code: 1, message: '章节解压记录不存在' }))
