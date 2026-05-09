@@ -8,6 +8,17 @@ import {
 } from '#validators/manga_tag'
 
 export default class MangaTagsController {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || user.role !== 'admin') {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
   public async index({ response }: HttpContext) {
     const list = await prisma.mangaTag.findMany()
     const listResponse = new ListResponse({
@@ -27,6 +38,8 @@ export default class MangaTagsController {
   }
 
   public async create({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const insertData = await createMangaTagValidator.validate(request.all())
     const mangaTag = await prisma.mangaTag.create({
       data: insertData,
@@ -36,6 +49,8 @@ export default class MangaTagsController {
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { mangaTagId } = await idParamMangaTagValidator.validate(params)
     const modifyData = await updateMangaTagValidator.validate(request.all())
     const mangaTag = await prisma.mangaTag.update({
@@ -46,7 +61,9 @@ export default class MangaTagsController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { mangaTagId } = await idParamMangaTagValidator.validate(params)
     const mangaTag = await prisma.mangaTag.delete({ where: { mangaTagId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: mangaTag })

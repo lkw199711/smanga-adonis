@@ -1,13 +1,38 @@
-import { is_img, path_poster } from '#utils/index'
+import { is_img, path_poster, path_compress } from '#utils/index'
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 import path from 'path'
 import { SResponse } from '#interfaces/response'
 import { imageFileBodyValidator, uploadImageBodyValidator } from '#validators/image'
+import prisma from '#start/prisma'
+
+// 获取所有媒体库允许的路径前缀
+async function getAllowedPaths(): Promise<string[]> {
+  const paths = await prisma.path.findMany({ select: { pathContent: true } })
+  const allowedPaths = paths.map((p) => p.pathContent)
+  allowedPaths.push(path_compress())
+  allowedPaths.push(path_poster())
+  return allowedPaths
+}
+
+function isPathAllowed(filePath: string, allowedPaths: string[]): boolean {
+  const normalizedFile = path.resolve(filePath)
+  return allowedPaths.some((allowed) => normalizedFile.startsWith(path.resolve(allowed)))
+}
 
 export default class ImagesController {
   public async index({ request, response }: HttpContext) {
     const { file } = await imageFileBodyValidator.validate(request.all())
+
+    // 路径安全校验
+    const allowedPaths = await getAllowedPaths()
+    if (!isPathAllowed(file, allowedPaths)) {
+      return response.status(403).json({
+        message: '无权访问该路径',
+        error: 'path not allowed.',
+      })
+    }
+
     // 检查文件是否存在
     if (!fs.existsSync(file)) {
       return response.status(400).json({
@@ -21,10 +46,7 @@ export default class ImagesController {
       fileType = 'application/octet-stream'
     }
 
-    // 设置文件的MIME类型，这里假设你要返回JPEG图片
     response.header('Content-Type', fileType)
-
-    // 使用StreamedResponse返回图片文件流
     response.stream(fs.createReadStream(file))
   }
 
@@ -33,6 +55,14 @@ export default class ImagesController {
    * 根据mangaId或chapterId将图片保存在poster目录中
    */
   public async upload({ request, response }: HttpContext) {
+    // 权限校验：仅管理员可上传海报
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      return response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '没有权限操作', status: 'no permission' }))
+    }
+
     // 获取请求参数
     const { mangaId, chapterId, mediaId } = await uploadImageBodyValidator.validate(request.all())
 

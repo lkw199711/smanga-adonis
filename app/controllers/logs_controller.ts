@@ -10,7 +10,20 @@ import {
 } from '#validators/log'
 
 export default class LogsController {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || user.role !== 'admin') {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
   public async index({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { page, pageSize } = await listLogValidator.validate(request.qs())
     const queryParams = {
       ...(page && {
@@ -26,7 +39,9 @@ export default class LogsController {
     return response.json(listResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ request, params, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { logId } = await idParamLogValidator.validate(params)
     const log = await prisma.log.findUnique({ where: { logId } })
     const showResponse = new SResponse({ code: 0, message: '', data: log })
@@ -34,6 +49,8 @@ export default class LogsController {
   }
 
   public async create({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const insertData = await createLogValidator.validate(request.all())
     const log = await prisma.log.create({
       data: insertData as any,
@@ -43,6 +60,8 @@ export default class LogsController {
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { logId } = await idParamLogValidator.validate(params)
     const modifyData = await updateLogValidator.validate(request.all())
     const log = await prisma.log.update({
@@ -53,7 +72,9 @@ export default class LogsController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { logId } = await idParamLogValidator.validate(params)
     const log = await prisma.log.delete({ where: { logId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: log })

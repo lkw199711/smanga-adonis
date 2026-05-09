@@ -19,7 +19,20 @@ import {
 } from '#validators/share'
 
 export default class SharesController {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
   async index({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { page, pageSize } = await listShareValidator.validate(request.qs())
     const queryParams = {
       orderBy: { createTime: 'desc' as const },
@@ -89,6 +102,8 @@ export default class SharesController {
   }
 
   async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { shareId } = await idParamShareValidator.validate(params)
     const { mediaId, mangaId } = await updateShareValidator.validate(request.all())
     const share = await prisma.share.update({
@@ -101,7 +116,9 @@ export default class SharesController {
     return response.json(new SResponse({ code: 0, message: '分享更新成功', data: share }))
   }
 
-  async destroy({ params, response }: HttpContext) {
+  async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { shareId } = await idParamShareValidator.validate(params)
     const share = await prisma.share.findUnique({ where: { shareId } })
 
@@ -115,7 +132,9 @@ export default class SharesController {
     return response.json(new SResponse({ code: 0, message: '分享已删除', status: 'success' }))
   }
 
-  async destroy_batch({ params, response }: HttpContext) {
+  async destroy_batch({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { shareIds } = await batchIdsParamShareValidator.validate(params)
     await prisma.share.deleteMany({
       where: {
@@ -218,7 +237,13 @@ export default class SharesController {
           .status(404)
           .json(new SResponse({ code: 1, message: '章节未找到', status: 'chapter not found' }))
       }
-      const images = image_files(chapter.chapterPath)
+      const images = (() => {
+        try {
+          return image_files(chapter.chapterPath)
+        } catch {
+          return []
+        }
+      })()
       const listResponse = new ListResponse({
         code: 0,
         message: '章节信息获取成功',
@@ -355,7 +380,12 @@ export default class SharesController {
         .status(404)
         .json(new SResponse({ code: 1, message: '章节未找到', status: 'chapter not found' }))
     }
-    const images = image_files(chapter.chapterPath)
+    let images: string[] = []
+    try {
+      images = image_files(chapter.chapterPath)
+    } catch {
+      images = []
+    }
     const listResponse = new ListResponse({
       code: 0,
       message: '章节信息获取成功',

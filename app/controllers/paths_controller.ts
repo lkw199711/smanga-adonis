@@ -14,7 +14,20 @@ import {
 } from '#validators/path'
 
 export default class PathsController {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
   public async index({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { mediaId, page, pageSize } = await listPathValidator.validate(request.qs())
     const queryParams = {
       ...(page && {
@@ -41,7 +54,9 @@ export default class PathsController {
     return response.json(listResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { pathId } = await idParamPathValidator.validate(params)
     const path = await prisma.path.findUnique({ where: { pathId } })
     const showResponse = new SResponse({ code: 0, message: '', data: path })
@@ -49,6 +64,8 @@ export default class PathsController {
   }
 
   public async create({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     let path = null
     const insertData = await createPathValidator.validate(request.all())
 
@@ -85,7 +102,7 @@ export default class PathsController {
     }
 
     // 扫描路径
-    addTask({
+    await addTask({
       taskName: `scan_path_${path.pathId}`,
       command: 'taskScanPath',
       args: { pathId: path.pathId },
@@ -98,6 +115,8 @@ export default class PathsController {
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { pathId } = await idParamPathValidator.validate(params)
     const modifyData = await updatePathValidator.validate(request.all())
     const path = await prisma.path.update({
@@ -114,11 +133,13 @@ export default class PathsController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { pathId } = await idParamPathValidator.validate(params)
     const path = await prisma.path.update({ where: { pathId }, data: { deleteFlag: 1 } })
 
-    addTask({
+    await addTask({
       taskName: `delete_path_${path.pathId}`,
       command: 'deletePath',
       args: { pathId: path.pathId },
@@ -129,30 +150,34 @@ export default class PathsController {
     return response.json(destroyResponse)
   }
 
-  public async destroy_batch({ params, response }: HttpContext) {
+  public async destroy_batch({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { pathIds } = await batchIdsParamPathValidator.validate(params)
     const paths = await prisma.path.updateMany({
       where: { pathId: { in: pathIds } },
       data: { deleteFlag: 1 },
     })
 
-    pathIds.forEach((id: number) => {
-      addTask({
+    for (const id of pathIds) {
+      await addTask({
         taskName: `delete_path_${id}`,
         command: 'deletePath',
         args: { pathId: id },
         priority: TaskPriority.delete,
       })
-    })
+    }
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: paths })
     return response.json(destroyResponse)
   }
 
-  public async scan({ params, response }: HttpContext) {
+  public async scan({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { pathId } = await idParamPathValidator.validate(params)
 
-    addTask({
+    await addTask({
       taskName: `scan_path_${pathId}`,
       command: 'taskScanPath',
       args: { pathId },
@@ -163,14 +188,14 @@ export default class PathsController {
     return response.json(scanResponse)
   }
 
-  public async re_scan({ params, response }: HttpContext) {
+  public async re_scan({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { pathId } = await idParamPathValidator.validate(params)
     const mangas = await prisma.manga.findMany({ where: { pathId } })
     // 删除此路径现有漫画
-    for (let index = 0; index < mangas.length; index++) {
-      const manga = mangas[index]
-
-      addTask({
+    for (const manga of mangas) {
+      await addTask({
         taskName: `delete_manga_${manga.mangaId}`,
         command: 'deleteManga',
         args: { mangaId: manga.mangaId },
@@ -179,7 +204,7 @@ export default class PathsController {
     }
 
     // 再次扫描路径
-    addTask({
+    await addTask({
       taskName: `scan_path_${pathId}`,
       command: 'taskScanPath',
       args: { pathId },

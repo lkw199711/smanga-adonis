@@ -15,7 +15,20 @@ import sharp from 'sharp';
 import { parseStringPromise } from 'xml2js'
 
 export default class TestsController {
-  public async index({ response }: HttpContext) {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
+  public async index({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const str = 'A:\\06download\\02韩漫'
     const fsStat = fs.statSync(str)
     const mtimeMs = fsStat.mtime
@@ -23,7 +36,9 @@ export default class TestsController {
     return response.status(200).send(res)
   }
 
-  public async unrar({ response }: HttpContext) {
+  public async unrar({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.rar'
     //const outputDir = 'C:\\program-user\\10temp\\04mangas\\rar-test'
     const buf = Uint8Array.from(fs.readFileSync(rarFilePath)).buffer
@@ -72,7 +87,9 @@ export default class TestsController {
    * rar解压有内存与文件两个模式, 内存模式会将所有文件读取到内存中, 文件模式则会将文件写入到磁盘
    * 返回的files是一个迭代器, 可以使用`[...extractor.extract().files]`将其转换为数组 转化的同时会将所有文件解压到目标目录
    */
-  public async unrar2({ response }: HttpContext) {
+  public async unrar2({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.rar'
     const outputDir = 'C:\\program-user\\10temp\\04mangas\\rar-test'
     // const outputFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.jpg'
@@ -134,7 +151,9 @@ export default class TestsController {
     // [...extractor.extract().files];
   }
 
-  public async un7z({ response }: HttpContext) {
+  public async un7z({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\rar-test\\112.7z'
     // const outputDir = 'C:\\program-user\\10temp\\04mangas\\rar-test'
     const outputDir = 'C:\\program-user\\10temp\\04mangas\\這是一段繁體字'
@@ -145,7 +164,9 @@ export default class TestsController {
     response.status(200).send({ abc })
   }
 
-  public async zzz({ response }: HttpContext) {
+  public async zzz({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const rarFilePath = 'C:\\program-user\\10temp\\04mangas\\7z-test\\112.7z'
     const outputDir = 'C:\\program-user\\10temp\\04mangas\\這是一段繁體字'
     const un7z = new Un7z(rarFilePath, outputDir)
@@ -155,7 +176,9 @@ export default class TestsController {
     response.status(200).send(res)
   }
 
-  public async zip({ response }: HttpContext) {
+  public async zip({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const rarFilePath = 'A:\\05temp\\09test\\压缩包\\001 梦想.zip'
     // const outputDir = 'A:\\05temp\\09test\\解压后\\111.jpg'
     const outputDir = 'A:\\05temp\\09test\\解压后'
@@ -175,13 +198,17 @@ export default class TestsController {
     */
   }
 
-  public async log({ response }: HttpContext) {
+  public async log({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     write_log('test log')
     unzipFile
     response.status(200).send({ a: '111' })
   }
 
-  public async test({ response }: HttpContext) {
+  public async test({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     response
     // 使用示例
     const imagesToMerge = [
@@ -200,7 +227,9 @@ export default class TestsController {
     return '123124'
   }
 
-  public async zip2({ response }: HttpContext) {
+  public async zip2({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const rarFilePath1 = 'A:\\06download\\00漫画\\黄金拼图\\乌菈菈迷路帖\\第1话 第一话.cbz'
 
     const zip = new AdmZip(rarFilePath1)

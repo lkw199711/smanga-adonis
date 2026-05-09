@@ -13,7 +13,20 @@ import {
 } from '#validators/sync'
 
 export default class SyncsController {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
   async select({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { page, pageSize } = await listSyncValidator.validate(request.qs())
     const queryParams = {
       orderBy: { createTime: 'desc' as const },
@@ -39,6 +52,8 @@ export default class SyncsController {
   }
 
   async create({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const payload = await createSyncValidator.validate(request.all())
     const { syncType, syncName, origin, receivedPath, shareId, link, secret, auto, token } = payload
 
@@ -91,14 +106,14 @@ export default class SyncsController {
     }
 
     if (syncType === 'media') {
-      addTask({
+      await addTask({
         taskName: 'sync_media_' + sync.syncId,
         command: 'taskSyncMedia',
         args: { receivedPath, link, origin: originWithApi },
         priority: TaskPriority.syncMedia,
       })
     } else {
-      addTask({
+      await addTask({
         taskName: 'sync_manga_' + sync.syncId,
         command: 'taskSyncManga',
         args: { receivedPath, link, origin: originWithApi },
@@ -110,6 +125,8 @@ export default class SyncsController {
   }
 
   async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { syncId } = await idParamSyncValidator.validate(params)
     const { syncType, origin, shareId, link, secret, auto, token } =
       await updateSyncValidator.validate(request.all())
@@ -136,7 +153,9 @@ export default class SyncsController {
     return response.json(new SResponse({ code: 0, message: '同步任务更新成功', data: sync }))
   }
 
-  async execute({ params, response }: HttpContext) {
+  async execute({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { syncId } = await idParamSyncValidator.validate(params)
     const sync = await prisma.sync.findUnique({ where: { syncId } })
 
@@ -147,14 +166,14 @@ export default class SyncsController {
     }
 
     if (sync.syncType === 'media') {
-      addTask({
+      await addTask({
         taskName: 'sync_media_' + sync.syncId,
         command: 'taskSyncMedia',
         args: { receivedPath: sync.receivedPath, link: sync.link, origin: sync.origin },
         priority: TaskPriority.syncMedia,
       })
     } else {
-      addTask({
+      await addTask({
         taskName: 'sync_manga_' + sync.syncId,
         command: 'taskSyncManga',
         args: { receivedPath: sync.receivedPath, link: sync.link, origin: sync.origin },
@@ -165,7 +184,9 @@ export default class SyncsController {
     return response.json(new SResponse({ code: 0, message: '同步任务已加入队列', data: sync }))
   }
 
-  async destroy({ params, response }: HttpContext) {
+  async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { syncId } = await idParamSyncValidator.validate(params)
     const sync = await prisma.sync.delete({ where: { syncId } })
 
@@ -178,7 +199,9 @@ export default class SyncsController {
     return response.json(new SResponse({ code: 0, message: '同步记录删除成功', data: sync }))
   }
 
-  async destroy_batch({ params, response }: HttpContext) {
+  async destroy_batch({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { syncIds } = await batchIdsParamSyncValidator.validate(params)
     await prisma.sync.deleteMany({
       where: { syncId: { in: syncIds } },

@@ -11,7 +11,20 @@ import {
 } from '#validators/login'
 
 export default class LoginController {
-  public async index({ response }: HttpContext) {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || user.role !== 'admin') {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
+  public async index({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const list = await prisma.login.findMany()
     const listResponse = new ListResponse({
       code: 0,
@@ -22,7 +35,9 @@ export default class LoginController {
     return response.json(listResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ request, params, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { loginId } = await idParamLoginValidator.validate(params)
     const login = await prisma.login.findUnique({ where: { loginId } })
     const showResponse = new SResponse({ code: 0, message: '', data: login })
@@ -48,7 +63,7 @@ export default class LoginController {
           userAgent: request.header('user-agent'),
         },
       })
-      return response.json(new SResponse({ code: 1, message: '用户不存在', data: login }))
+      return response.status(401).json(new SResponse({ code: 1, message: '用户不存在', data: login }))
     }
     if (user.passWord !== md5(passWord)) {
       login = await prisma.login.create({
@@ -60,7 +75,7 @@ export default class LoginController {
           userAgent: request.header('user-agent'),
         },
       })
-      return response.json(new SResponse({ code: 1, message: '密码错误', data: login }))
+      return response.status(401).json(new SResponse({ code: 1, message: '密码错误', data: login }))
     }
 
     // 生成token
@@ -95,6 +110,8 @@ export default class LoginController {
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { loginId } = await idParamLoginValidator.validate(params)
     const modifyData = await updateLoginValidator.validate(request.all())
     const login = await prisma.login.update({
@@ -105,7 +122,9 @@ export default class LoginController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { loginId } = await idParamLoginValidator.validate(params)
     const login = await prisma.login.delete({ where: { loginId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: login })

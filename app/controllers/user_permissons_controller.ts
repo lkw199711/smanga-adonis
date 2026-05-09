@@ -8,7 +8,20 @@ import {
 } from '#validators/user_permisson'
 
 export default class UserPermissonsController {
-  public async index({ response }: HttpContext) {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
+  public async index({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const list = await prisma.userPermisson.findMany()
     const listResponse = new ListResponse({
       code: 0,
@@ -19,7 +32,9 @@ export default class UserPermissonsController {
     return response.json(listResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { userPermissonId } = await idParamUserPermissonValidator.validate(params)
     const userPermisson = await prisma.userPermisson.findUnique({
       where: { userPermissonId },
@@ -29,6 +44,8 @@ export default class UserPermissonsController {
   }
 
   public async create({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const insertData = await createUserPermissonValidator.validate(request.all())
     const userPermisson = await prisma.userPermisson.create({
       data: insertData as any,
@@ -38,6 +55,8 @@ export default class UserPermissonsController {
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { userPermissonId } = await idParamUserPermissonValidator.validate(params)
     const modifyData = await updateUserPermissonValidator.validate(request.all())
     const userPermisson = await prisma.userPermisson.update({
@@ -48,7 +67,9 @@ export default class UserPermissonsController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { userPermissonId } = await idParamUserPermissonValidator.validate(params)
     const userPermisson = await prisma.userPermisson.delete({
       where: { userPermissonId },

@@ -41,18 +41,33 @@ export default class SearchesController {
       prisma.manga.count({ where: quertParams.where }),
     ])
 
-    // 统计未观看章节数
-    for (let i = 0; i < list.length; i++) {
-      const manga: any = list[i]
-      const mangaId = Number(manga.mangaId)
-      const chapterCount = await prisma.chapter.count({ where: { mangaId } })
-      const historys = await prisma.history.groupBy({
-        by: ['chapterId'],
-        where: { mangaId, userId },
-      })
+    // 批量统计未观看章节数
+    const mangaIds = list.map((m: any) => m.mangaId)
+    const [chapterCounts, historyCounts] = await Promise.all([
+      prisma.chapter.groupBy({
+        by: ['mangaId'],
+        where: { mangaId: { in: mangaIds } },
+        _count: { chapterId: true },
+      }),
+      prisma.history.groupBy({
+        by: ['mangaId', 'chapterId'],
+        where: { mangaId: { in: mangaIds }, userId },
+      }),
+    ])
 
-      manga.unWatched = chapterCount - historys.length
+    const chapterCountMap = new Map(
+      chapterCounts.map((item: any) => [item.mangaId, item._count.chapterId])
+    )
+    const historyCountMap = new Map<number, number>()
+    for (const item of historyCounts) {
+      historyCountMap.set(item.mangaId, (historyCountMap.get(item.mangaId) || 0) + 1)
     }
+
+    list.forEach((manga: any) => {
+      const total = chapterCountMap.get(manga.mangaId) || 0
+      const watched = historyCountMap.get(manga.mangaId) || 0
+      manga.unWatched = Math.max(total - watched, 0)
+    })
 
     const listResponse = new ListResponse({
       code: 0,
@@ -99,17 +114,18 @@ export default class SearchesController {
       prisma.chapter.count({ where: quertParams.where }),
     ])
 
-    for (let i = 0; i < list.length; i++) {
-      const chapter: any = list[i]
-      const chapterId = Number(chapter.chapterId)
-      if (chapterId) {
-        chapter.latest = await prisma.latest.findFirst({
-          where: { userId, chapterId },
+    // 批量查询 latest
+    const chapterIds = list.map((c: any) => c.chapterId).filter(Boolean)
+    const latests = chapterIds.length
+      ? await prisma.latest.findMany({
+          where: { userId, chapterId: { in: chapterIds } },
         })
-      } else {
-        chapter.latest = null
-      }
-    }
+      : []
+    const latestMap = new Map(latests.map((l: any) => [l.chapterId, l]))
+
+    list.forEach((chapter: any) => {
+      chapter.latest = latestMap.get(chapter.chapterId) || null
+    })
 
     const listResponse = new ListResponse({
       code: 0,

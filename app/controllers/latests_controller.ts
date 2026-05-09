@@ -17,31 +17,49 @@ export default class LatestsController {
     const { page, pageSize } = await listLatestValidator.validate(request.qs())
     const effectivePage = page ?? 1
     const effectivePageSize = pageSize ?? 10
-    const list: any = isPgsql
-      ? await this.raw_sql_select_postgres({ userId, page: effectivePage, pageSize: effectivePageSize })
-      : await this.raw_sql_select_mysql({ userId, page: effectivePage, pageSize: effectivePageSize })
 
-    // 统计未观看章节数
-    for (let i = 0; i < list.length; i++) {
-      const manga: any = list[i]
-      const mangaId = Number(manga.mangaId)
-      const chapterCount = await prisma.chapter.count({ where: { mangaId } })
-      const historys = await prisma.history.groupBy({
-        by: ['chapterId'],
-        where: { mangaId, userId },
-      })
+    const [list, countResult]: any = await Promise.all([
+      isPgsql
+        ? this.raw_sql_select_postgres({ userId, page: effectivePage, pageSize: effectivePageSize })
+        : this.raw_sql_select_mysql({ userId, page: effectivePage, pageSize: effectivePageSize }),
+      isPgsql
+        ? prisma.$queryRaw`SELECT COUNT(DISTINCT "mangaId") AS "count" FROM "latest" WHERE "userId" = ${userId}`
+        : prisma.$queryRaw`SELECT COUNT(DISTINCT mangaId) AS count FROM latest WHERE userId = ${userId}`,
+    ])
 
-      manga.unWatched = chapterCount - historys.length
-      if (manga.unWatched < 0) {
-        manga.unWatched = 0
-      }
+    // 批量统计未观看章节数
+    const mangaIds = list.map((m: any) => Number(m.mangaId)).filter(Boolean)
+    const [chapterCounts, historyCounts] = await Promise.all([
+      prisma.chapter.groupBy({
+        by: ['mangaId'],
+        where: { mangaId: { in: mangaIds } },
+        _count: { chapterId: true },
+      }),
+      prisma.history.groupBy({
+        by: ['mangaId', 'chapterId'],
+        where: { mangaId: { in: mangaIds }, userId },
+      }),
+    ])
+
+    const chapterCountMap = new Map(
+      chapterCounts.map((item: any) => [item.mangaId, item._count.chapterId])
+    )
+    const historyCountMap = new Map<number, number>()
+    for (const item of historyCounts) {
+      historyCountMap.set(item.mangaId, (historyCountMap.get(item.mangaId) || 0) + 1)
     }
+
+    list.forEach((manga: any) => {
+      const total = chapterCountMap.get(Number(manga.mangaId)) || 0
+      const watched = historyCountMap.get(Number(manga.mangaId)) || 0
+      manga.unWatched = Math.max(total - watched, 0)
+    })
 
     const listResponse = new ListResponse({
       code: 0,
       message: '',
       list,
-      count: list?.length,
+      count: Number(countResult[0]?.count || 0),
     })
     return response.json(listResponse)
   }

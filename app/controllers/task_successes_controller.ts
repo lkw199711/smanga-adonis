@@ -8,7 +8,20 @@ import {
 } from '#validators/task_success'
 
 export default class TaskSuccessesController {
-  public async index({ response }: HttpContext) {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
+  public async index({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const list = await prisma.taskSuccess.findMany()
     const listResponse = new ListResponse({
       code: 0,
@@ -19,7 +32,9 @@ export default class TaskSuccessesController {
     return response.json(listResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { taskSuccessId } = await idParamTaskSuccessValidator.validate(params)
     const taskSuccess = await prisma.taskSuccess.findUnique({ where: { taskId: taskSuccessId } })
     const showResponse = new SResponse({ code: 0, message: '', data: taskSuccess })
@@ -27,6 +42,8 @@ export default class TaskSuccessesController {
   }
 
   public async create({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const insertData = await createTaskSuccessValidator.validate(request.all())
     const taskSuccess = await prisma.taskSuccess.create({
       data: insertData as any,
@@ -36,6 +53,8 @@ export default class TaskSuccessesController {
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { taskSuccessId } = await idParamTaskSuccessValidator.validate(params)
     const modifyData = await updateTaskSuccessValidator.validate(request.all())
     const taskSuccess = await prisma.taskSuccess.update({
@@ -46,7 +65,9 @@ export default class TaskSuccessesController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { taskSuccessId } = await idParamTaskSuccessValidator.validate(params)
     const taskSuccess = await prisma.taskSuccess.delete({ where: { taskId: taskSuccessId } })
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: taskSuccess })

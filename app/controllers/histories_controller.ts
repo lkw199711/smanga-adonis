@@ -21,17 +21,19 @@ export default class HistoriesController {
       ? await this.raw_sql_select_postgres({ userId, page, pageSize })
       : await this.raw_sql_select_mysql({ userId, page, pageSize })
 
-    for (let i = 0; i < list.length; i++) {
-      const chapter: any = list[i]
-      const chapterId = Number(chapter.chapterId)
-      if (chapterId) {
-        chapter.latest = await prisma.latest.findFirst({
-          where: { userId, chapterId },
+    // 批量查询 latest 记录
+    const chapterIds = list.map((item: any) => Number(item.chapterId)).filter(Boolean)
+    const latests = chapterIds.length
+      ? await prisma.latest.findMany({
+          where: { userId, chapterId: { in: chapterIds } },
         })
-      } else {
-        chapter.latest = null
-      }
-    }
+      : []
+    const latestMap = new Map(latests.map((l: any) => [l.chapterId, l]))
+
+    list.forEach((chapter: any) => {
+      const chapterId = Number(chapter.chapterId)
+      chapter.latest = chapterId ? latestMap.get(chapterId) || null : null
+    })
 
     const listResponse = new ListResponse({
       code: 0,
@@ -139,9 +141,13 @@ export default class HistoriesController {
     return response.json(saveResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ params, request, response }: HttpContext) {
+    const { userId } = request as any
     const { historyId } = await idParamHistoryValidator.validate(params)
-    const history = await prisma.history.findUnique({ where: { historyId } })
+    const history = await prisma.history.findFirst({ where: { historyId, userId } })
+    if (!history) {
+      return response.status(404).json(new SResponse({ code: 404, message: '记录不存在' }))
+    }
     const showResponse = new SResponse({ code: 0, message: '', data: history })
     return response.json(showResponse)
   }
@@ -170,7 +176,8 @@ export default class HistoriesController {
     const { userId } = request as any
     const { mangaId } = await mangaParamHistoryValidator.validate(params)
     const chapters = await prisma.chapter.findMany({ where: { mangaId } })
-    chapters.forEach(async (chapter) => {
+
+    for (const chapter of chapters) {
       await prisma.history.create({
         data: {
           manga: { connect: { mangaId: chapter.mangaId } },
@@ -200,7 +207,7 @@ export default class HistoriesController {
           userId,
         },
       })
-    })
+    }
 
     const saveResponse = new SResponse({ code: 0, message: '操作成功', data: null })
     return response.json(saveResponse)

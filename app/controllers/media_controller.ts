@@ -13,6 +13,17 @@ import {
 } from '#validators/media'
 
 export default class MediaController {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
   public async index({ request, response }: HttpContext) {
     const userId = (request as any).userId
     const user = await prisma.user.findUnique({ where: { userId } })
@@ -72,8 +83,8 @@ export default class MediaController {
     // 判断是否有权限查看该媒体库
     if (!isAdmin && !mediaPermissons.some((item) => item.mediaId === mediaId)) {
       return response
-        .status(401)
-        .json(new SResponse({ code: 401, message: '无权限查看', status: 'token error' }))
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限查看', status: 'no permission' }))
     }
     const media = await prisma.media.findUnique({ where: { mediaId } })
     const showResponse = new SResponse({ code: 0, message: '', data: media })
@@ -81,6 +92,8 @@ export default class MediaController {
   }
 
   public async create({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const insertData = await createMediaValidator.validate(request.all())
 
     let media = null
@@ -105,6 +118,8 @@ export default class MediaController {
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { mediaId } = await idParamMediaValidator.validate(params)
     const modifyData = await updateMediaValidator.validate(request.all())
     const media = await prisma.media.update({
@@ -115,11 +130,13 @@ export default class MediaController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { mediaId } = await idParamMediaValidator.validate(params)
     const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
 
-    addTask({
+    await addTask({
       taskName: `delete_media_${media.mediaId}`,
       command: 'deleteMedia',
       args: { mediaId: media.mediaId },
@@ -131,12 +148,14 @@ export default class MediaController {
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { mediaIds } = await batchIdsMediaValidator.validate(request.all())
 
     for (const mediaId of mediaIds) {
       const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
 
-      addTask({
+      await addTask({
         taskName: `delete_media_${media.mediaId}`,
         command: 'deleteMedia',
         args: { mediaId: media.mediaId },
@@ -148,7 +167,9 @@ export default class MediaController {
     return response.json(destroyResponse)
   }
 
-  public async poster({ params, response }: HttpContext) {
+  public async poster({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { mediaId } = await idParamMediaValidator.validate(params)
     const posterFile = await new CreateMediaPosterJob({ mediaId }).run()
     const posterResponse = new SResponse({
@@ -165,20 +186,22 @@ export default class MediaController {
     }
   }
 
-  public async scan({ params, response }: HttpContext) {
+  public async scan({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { mediaId } = await idParamMediaValidator.validate(params)
     const paths = await prisma.path.findMany({
       where: { mediaId, deleteFlag: 0 },
     })
 
-    paths.forEach((path) => {
-      addTask({
-        taskName: `scan_path_${path.pathId}`,
+    for (const p of paths) {
+      await addTask({
+        taskName: `scan_path_${p.pathId}`,
         command: 'taskScanPath',
-        args: { pathId: path.pathId },
+        args: { pathId: p.pathId },
         priority: TaskPriority.scan,
       })
-    })
+    }
 
     const scanResponse = new SResponse({ code: 0, message: '已加入扫描队列' })
     return response.json(scanResponse)

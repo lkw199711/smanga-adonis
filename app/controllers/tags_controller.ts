@@ -15,6 +15,17 @@ import {
 import { csvToPositiveIds } from '#validators/shared'
 
 export default class TagsController {
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const user = (request as any).user
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
   public async index({ request, response }: HttpContext) {
     const { page, pageSize } = await listTagValidator.validate(request.qs())
 
@@ -44,6 +55,11 @@ export default class TagsController {
         select: { mediaId: true },
       })) || []
     const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
+
+    // 非管理员且无媒体库权限时返回空列表
+    if (!isAdmin && mediaIds.length === 0) {
+      return new ListResponse({ code: 0, message: '', list: [], count: 0 })
+    }
 
     const tagList: any[] = await prisma.$queryRaw`SELECT 
           tag.tagId,
@@ -118,6 +134,8 @@ export default class TagsController {
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { tagId } = await idParamTagValidator.validate(params)
     const modifyData = await updateTagValidator.validate(request.all())
     const tag = await prisma.tag.update({
@@ -128,7 +146,9 @@ export default class TagsController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { tagId } = await idParamTagValidator.validate(params)
     // 删除关联数据
     await prisma.mangaTag.deleteMany({ where: { tagId } })
@@ -138,7 +158,9 @@ export default class TagsController {
   }
 
   // 批量删除
-  public async destroy_batch({ params, response }: HttpContext) {
+  public async destroy_batch({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { tagIds } = await batchIdsParamTagValidator.validate(params)
     // 删除关联数据
     await prisma.mangaTag.deleteMany({
