@@ -10,13 +10,6 @@ import p2pHeartbeatService from '#services/p2p/p2p_heartbeat_service'
 import { setConfigValidator, userConfigValidator } from '#validators/config'
 
 /**
- * 将各种语义的真假值统一为 0/1 数字(与现有 opds 字段保持一致风格)
- */
-function to_bool_number(value: any): number {
-  return value === true || value === 1 || value === '1' || value === 'true' ? 1 : 0
-}
-
-/**
  * 将各种语义的真假值统一为布尔型(P2P 配置字段更习惯 true/false)
  */
 function to_bool(value: any): boolean {
@@ -24,16 +17,29 @@ function to_bool(value: any): boolean {
 }
 
 export default class ConfigsController {
-  public async get({ response }: HttpContext) {
+  public async get({ request, response }: HttpContext) {
+    const user = (request as any).user
     const config = get_config()
+
+    // 非管理员只返回基础配置，隐藏敏感信息
+    if (user?.role !== 'admin') {
+      const safeConfig = {
+        compress: config.compress,
+        scan: { auto: config.scan?.auto, interval: config.scan?.interval },
+      }
+      return response.json(new SResponse({ code: 0, message: '', data: safeConfig }))
+    }
+
     const configResponse = new SResponse({ code: 0, message: '', data: config })
     return response.json(configResponse)
   }
 
-  public async set({ request }: HttpContext) {
+  public async set({ request, response }: HttpContext) {
     const user = (request as any).user
-    if (user.role !== 'admin') {
-      return new SResponse({ code: 1, message: '无权限', status: 'error' })
+    if (user?.role !== 'admin') {
+      return response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
     }
     const { key, value } = await setConfigValidator.validate(request.all())
     let config = get_config()
@@ -231,12 +237,16 @@ export default class ConfigsController {
     if (key === 'p2p.tracker.requireInviteToRegister') {
       config.p2p.tracker.requireInviteToRegister = to_bool(value)
     }
-    // 兼容上面 to_bool_number 工具(当前未直接使用,保留以避免 lint 未使用警告)
-    void to_bool_number
 
     // 检查并创建配置文件
     const configFile = join(path_config(), 'smanga.json')
-    await fs.writeFile(configFile, JSON.stringify(config, null, 2))
+    try {
+      await fs.writeFile(configFile, JSON.stringify(config, null, 2))
+    } catch (err: any) {
+      return response.json(
+        new SResponse({ code: 1, message: `配置写入失败: ${err?.message || err}`, status: 'error' })
+      )
+    }
 
     // 更改扫描相关设置后 重新创建扫描任务
     if (/scan/.test(key)) {
@@ -271,7 +281,7 @@ export default class ConfigsController {
     }
 
     const configResponse = new SResponse({ code: 0, message: '设置成功', data: config })
-    return configResponse
+    return response.json(configResponse)
   }
 
   /**
@@ -337,20 +347,19 @@ export default class ConfigsController {
   public async user_config({ request, response }: HttpContext) {
     const userId = (request as any).userId
     const { userConfig } = await userConfigValidator.validate(request.all())
-    const user = await prisma.user.update({
-      where: { userId },
-      data: {
-        // @ts-ignore
-        userConfig: sql_parse_json(userConfig),
-      },
-    })
 
-    // 更新失败报错
-    if (!user) {
-      return response.json(new SResponse({ code: 1, message: '更新失败' }))
+    try {
+      const user = await prisma.user.update({
+        where: { userId },
+        data: {
+          // @ts-ignore
+          userConfig: sql_parse_json(userConfig),
+        },
+      })
+      const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
+      return response.json(updateResponse)
+    } catch (_error) {
+      return response.json(new SResponse({ code: 1, message: '更新失败，用户不存在' }))
     }
-
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
-    return response.json(updateResponse)
   }
 }

@@ -21,18 +21,16 @@ export default class ChartsController {
       },
     })
 
-    if (browseTypeCounts) {
-      browseTypeCounts.forEach((item) => {
-        typeObj[item.browseType] = item._count.browseType
-      })
-    }
+    browseTypeCounts.forEach((item) => {
+      typeObj[item.browseType] = item._count.browseType
+    })
 
     return response.json(new SResponse({ code: 0, data: typeObj, message: '' }))
   }
 
   public async tag({ request, response }: HttpContext) {
     const { slice } = await sliceChartValidator.validate(request.qs())
-    const sliceNum = Number(slice ?? 5)
+    const sliceNum = slice ?? 5
     const tagCounts = await prisma.mangaTag.groupBy({
       by: ['tagId'],
       _count: {
@@ -46,29 +44,22 @@ export default class ChartsController {
       take: sliceNum,
     })
 
-    const enrichedTagCounts = await Promise.all(
-      tagCounts.map(async (tagCount) => {
-        const tag = await prisma.tag.findUnique({
-          where: { tagId: tagCount.tagId },
-          select: { tagName: true },
-        })
-        return {
-          ...tagCount,
-          tagName: tag?.tagName,
-        }
-      })
-    )
+    // 批量查询 tag 名称
+    const tagIds = tagCounts.map((t) => t.tagId)
+    const tags = await prisma.tag.findMany({
+      where: { tagId: { in: tagIds } },
+      select: { tagId: true, tagName: true },
+    })
+    const tagMap = new Map(tags.map((t) => [t.tagId, t.tagName]))
 
     return response.json(
       new SResponse({
         code: 0,
-        data: enrichedTagCounts.map((item) => {
-          return {
-            tagId: item.tagId,
-            tagName: item.tagName,
-            count: item._count.tagId,
-          }
-        }),
+        data: tagCounts.map((item) => ({
+          tagId: item.tagId,
+          tagName: tagMap.get(item.tagId) || '',
+          count: item._count.tagId,
+        })),
         message: '',
       })
     )
@@ -76,7 +67,7 @@ export default class ChartsController {
 
   public async ranking({ request, response }: HttpContext) {
     const { slice } = await sliceChartValidator.validate(request.qs())
-    const sliceNum = Number(slice ?? 5)
+    const sliceNum = slice ?? 5
 
     const mangaRanking = await prisma.history.groupBy({
       by: ['mangaId'],
@@ -91,24 +82,22 @@ export default class ChartsController {
       take: sliceNum,
     })
 
-    const enrichedMangaRanking = await Promise.all(
-      mangaRanking.map(async (manga) => {
-        const mangaInfo = await prisma.manga.findUnique({
-          where: { mangaId: manga.mangaId },
-          select: { mangaId: true, mangaName: true },
-        })
-        return {
-          ...manga,
-          mangaName: mangaInfo?.mangaName,
-          count: manga._count.mangaId,
-        }
-      })
-    )
+    // 批量查询 manga 名称
+    const mangaIds = mangaRanking.map((m) => m.mangaId)
+    const mangas = await prisma.manga.findMany({
+      where: { mangaId: { in: mangaIds } },
+      select: { mangaId: true, mangaName: true },
+    })
+    const mangaMap = new Map(mangas.map((m) => [m.mangaId, m.mangaName]))
 
     return response.json(
       new SResponse({
         code: 0,
-        data: enrichedMangaRanking,
+        data: mangaRanking.map((item) => ({
+          mangaId: item.mangaId,
+          mangaName: mangaMap.get(item.mangaId) || '',
+          count: item._count.mangaId,
+        })),
         message: '',
       })
     )

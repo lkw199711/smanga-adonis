@@ -42,11 +42,10 @@ export default class ChaptersController {
         .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
-    const mediaPermissons =
-      (await prisma.mediaPermisson.findMany({
-        where: { userId },
-        select: { mediaId: true },
-      })) || []
+    const mediaPermissons = await prisma.mediaPermisson.findMany({
+      where: { userId },
+      select: { mediaId: true },
+    })
 
     if (!isAdmin) {
       const mediaIds = mediaPermissons.map((item: any) => item.mediaId)
@@ -73,6 +72,15 @@ export default class ChaptersController {
     }
 
     return response.json(listResponse)
+  }
+
+  // 校验用户是否有权访问指定 mediaId 的媒体库
+  private async checkMediaPermission(userId: number, mediaId: number): Promise<boolean> {
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) return false
+    if (user.role === 'admin' || user.mediaPermit === 'all') return true
+    const perm = await prisma.mediaPermisson.findFirst({ where: { userId, mediaId } })
+    return !!perm
   }
 
   // 不分页
@@ -135,14 +143,14 @@ export default class ChaptersController {
       orderBy: { ...(order && order_params(order)) },
     }
 
-    const [list, count] = await Promise.all([
+    const [rawList, count] = await Promise.all([
       prisma.chapter.findMany(queryParams),
       prisma.chapter.count({ where: queryParams.where }),
     ])
 
-    list.forEach((chapter: any) => {
+    const list = rawList.map((chapter: any) => {
       chapter.latest = chapter.latests?.length ? chapter.latests[0] : null
-      chapter = {
+      return {
         ...chapter,
         ...chapter.manga,
       }
@@ -156,15 +164,38 @@ export default class ChaptersController {
     })
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    if (!chapter) {
+      return response.status(404).json(new SResponse({ code: 404, message: '章节不存在' }))
+    }
+
+    const userId = (request as any).userId
+    if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {
+      return response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+    }
+
     const showResponse = new SResponse({ code: 0, message: '', data: chapter })
     return response.json(showResponse)
   }
 
   public async first({ request, response }: HttpContext) {
     const { mangaId, order } = await firstChapterValidator.validate(request.qs())
+
+    const userId = (request as any).userId
+    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    if (!manga) {
+      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+    }
+    if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
+      return response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+    }
+
     const chapter = await prisma.chapter.findFirst({
       where: { mangaId },
       orderBy: order_params(order),
@@ -182,6 +213,13 @@ export default class ChaptersController {
       return response.json(
         new SResponse({ code: 1, message: '章节不存在', data: [], status: 'compressed' })
       )
+    }
+
+    const userId = (request as any).userId
+    if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {
+      return response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
     }
 
     if (!fs.existsSync(chapter.chapterPath)) {
@@ -217,7 +255,7 @@ export default class ChaptersController {
         status: 'compressed',
       })
     } else if (!compress && get_config().compress.sync) {
-      // 创建解压缩任务
+      // 同步解压缩
       const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
       compress = await prisma.compress
         .create({
@@ -236,7 +274,7 @@ export default class ChaptersController {
             mediaId: chapter.mediaId,
             compressType: chapter.chapterType,
             compressPath,
-            compressStatus: 'compressed',
+            compressStatus: 'compressing',
           },
         })
         .catch((_error: any) => {
@@ -244,12 +282,17 @@ export default class ChaptersController {
             code: 0,
             message: '',
             data: images,
-            status: 'compressed',
+            status: 'compressing',
           })
 
           return response.json(imagesResponse)
         })
       await unzipFile(chapter.chapterPath, compressPath)
+      // 解压完成后更新状态
+      await prisma.compress.update({
+        where: { chapterId: chapter.chapterId },
+        data: { compressStatus: 'compressed' },
+      })
       images = image_files(compressPath, exclude)
       imagesResponse = new SResponse({
         code: 0,
@@ -356,10 +399,13 @@ export default class ChaptersController {
     }
 
     // 将返回的图片按数字排序
-    if (orderChapterByNumber) {
-      images.sort((a, b) => extract_numbers(a) - extract_numbers(b))
-    } else {
-      images.sort()
+    if (images.length > 0) {
+      if (orderChapterByNumber) {
+        images.sort((a, b) => extract_numbers(a) - extract_numbers(b))
+      } else {
+        images.sort()
+      }
+      imagesResponse!.data = images
     }
 
     return response.json(imagesResponse)
@@ -389,7 +435,7 @@ export default class ChaptersController {
     const { chapterId } = await idParamChapterValidator.validate(params)
     const chapter = await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 1 } })
 
-    addTask({
+    await addTask({
       taskName: `delete_chapter_${chapter.chapterId}`,
       command: 'deleteChapter',
       args: { chapterId: chapter.chapterId },
@@ -409,14 +455,15 @@ export default class ChaptersController {
       data: { deleteFlag: 1 },
     })
 
-    chapterIds.forEach((id: number) => {
-      addTask({
+    const chapterIdList = chapterIds as number[]
+    for (const id of chapterIdList) {
+      await addTask({
         taskName: `delete_chapter_${id}`,
         command: 'deleteChapter',
         args: { chapterId: id },
         priority: TaskPriority.deleteManga,
       })
-    })
+    }
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapters })
     return response.json(destroyResponse)
@@ -427,6 +474,17 @@ export default class ChaptersController {
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
       return response.json(new SResponse({ code: 1, message: '章节不存在' }))
+    }
+
+    const userId = (request as any).userId
+    if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {
+      return response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+    }
+
+    if (!fs.existsSync(chapter.chapterPath)) {
+      return response.json(new SResponse({ code: 1, message: '章节文件不存在' }))
     }
 
     if (chapter.chapterType === 'img') {
@@ -445,23 +503,36 @@ export default class ChaptersController {
         `attachment; filename="${encodeURIComponent(fileName)}"`
       )
 
-      // 设置文件的MIME类型，这里假设你要返回ZIP文件
       response.header('Content-Type', 'application/octet-stream')
 
-      // 使用StreamedResponse返回文件流
       response.stream(fs.createReadStream(chapter.chapterPath))
 
       return response
     }
   }
 
-  public async compress_delete({ params, response }: HttpContext) {
+  public async compress_delete({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
+
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    if (chapter) {
+      const userId = (request as any).userId
+      if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {
+        return response
+          .status(403)
+          .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+      }
+    }
+
     const compress = await prisma.compress.findUnique({ where: { chapterId } })
     if (!compress) {
       return response.json(new SResponse({ code: 1, message: '章节解压记录不存在' }))
     }
-    s_delete(compress.compressPath)
+    try {
+      s_delete(compress.compressPath)
+    } catch (_error) {
+      // 目录可能已不存在，忽略删除错误
+    }
     await prisma.compress.delete({ where: { compressId: compress.compressId } })
     return response.json(new SResponse({ code: 0, message: '删除成功' }))
   }
@@ -474,24 +545,37 @@ function image_files(dirPath: string, exclude: string | null | undefined = ''): 
   let imagePaths: string[] = []
 
   // 读取目录下的所有文件和子目录
-  const files: string[] = fs.readdirSync(dirPath)
+  let files: string[]
+  try {
+    files = fs.readdirSync(dirPath)
+  } catch (_error) {
+    return imagePaths
+  }
 
   files.forEach((file: string) => {
     const filePath: string = path.join(dirPath, file)
-    const stat: fs.Stats = fs.statSync(filePath)
-
-    if (stat.isDirectory()) {
-      // 如果是目录, 递归处理
-      imagePaths = imagePaths.concat(image_files(filePath, exclude))
-    } else if (imageExtensions.includes(path.extname(file).toLowerCase())) {
-      // 如果是图片文件, 添加绝对路径到数组
-      imagePaths.push(filePath)
+    try {
+      const stat: fs.Stats = fs.statSync(filePath)
+      if (stat.isDirectory()) {
+        // 如果是目录, 递归处理
+        imagePaths = imagePaths.concat(image_files(filePath, exclude))
+      } else if (imageExtensions.includes(path.extname(file).toLowerCase())) {
+        // 如果是图片文件, 添加绝对路径到数组
+        imagePaths.push(filePath)
+      }
+    } catch (_error) {
+      // 跳过无法访问的文件
     }
   })
 
   // 如果有排除规则，则过滤掉不符合规则的图片
   if (exclude) {
-    imagePaths = imagePaths.filter((image: string) => !new RegExp(exclude).test(image))
+    try {
+      const excludeRegex = new RegExp(exclude)
+      imagePaths = imagePaths.filter((image: string) => !excludeRegex.test(image))
+    } catch (_error) {
+      // 正则表达式无效，跳过过滤
+    }
   }
 
   return imagePaths

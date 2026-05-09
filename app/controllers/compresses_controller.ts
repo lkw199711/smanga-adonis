@@ -12,7 +12,22 @@ import {
 } from '#validators/compress'
 
 export default class CompressesController {
+  // 校验是否为管理员
+  private async checkAdmin(request: any, response: any): Promise<boolean> {
+    const userId = request.userId
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+      response
+        .status(403)
+        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+      return false
+    }
+    return true
+  }
+
   public async index({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { page, pageSize } = await listCompressValidator.validate(request.qs())
     const queryParams = {
       ...(page && {
@@ -35,20 +50,29 @@ export default class CompressesController {
   }
 
   public async create({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const data = await createCompressValidator.validate(request.all())
     const compress = await prisma.compress.create({ data: data as any })
     const saveResponse = new SResponse({ code: 0, message: '新增成功', data: compress })
     return response.json(saveResponse)
   }
 
-  public async show({ params, response }: HttpContext) {
+  public async show({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { compressId } = await idParamCompressValidator.validate(params)
     const compress = await prisma.compress.findUnique({ where: { compressId } })
+    if (!compress) {
+      return response.status(404).json(new SResponse({ code: 404, message: '记录不存在' }))
+    }
     const showResponse = new SResponse({ code: 0, message: '', data: compress })
     return response.json(showResponse)
   }
 
   public async update({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { compressId } = await idParamCompressValidator.validate(params)
     const data = await updateCompressValidator.validate(request.all())
     const compress = await prisma.compress.update({
@@ -59,38 +83,57 @@ export default class CompressesController {
     return response.json(updateResponse)
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { compressId } = await idParamCompressValidator.validate(params)
-    const compress = await prisma.compress.delete({ where: { compressId } })
-    const compressPath = compress.compressPath
-    // 删除文件
-    await s_delete(compressPath)
+    const compress = await prisma.compress.findUnique({ where: { compressId } })
+    if (!compress) {
+      return response.status(404).json(new SResponse({ code: 404, message: '记录不存在' }))
+    }
+
+    // 先删文件再删记录
+    try {
+      await s_delete(compress.compressPath)
+    } catch (_error) {
+      // 文件可能已不存在，忽略
+    }
+    await prisma.compress.delete({ where: { compressId } })
+
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: compress })
     return response.json(destroyResponse)
   }
 
   // 批量删除
-  public async destroy_batch({ params, response }: HttpContext) {
+  public async destroy_batch({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     const { compressIds } = await batchIdsParamCompressValidator.validate(params)
     const compresses = await prisma.compress.findMany({
       where: { compressId: { in: compressIds } },
     })
 
-    // 删除数据库记录
+    // 先删文件
+    for (const compress of compresses) {
+      try {
+        await s_delete(compress.compressPath)
+      } catch (_error) {
+        // 文件可能已不存在，忽略
+      }
+    }
+
+    // 再删数据库记录
     const deleteResponse = await prisma.compress.deleteMany({
       where: { compressId: { in: compressIds } },
     })
-
-    // 删除文件
-    for (const compress of compresses) {
-      await s_delete(compress.compressPath)
-    }
 
     const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: deleteResponse })
     return response.json(destroyResponse)
   }
 
-  public async clear({ response }: HttpContext) {
+  public async clear({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
     await addTask({
       taskName: 'clear_compress_cache',
       command: 'clearCompressCache',
