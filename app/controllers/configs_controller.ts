@@ -245,13 +245,17 @@ export default class ConfigsController {
     // P2P 配置变更后的副作用处理(写文件成功后再触发,避免脏状态)
     if (needIdentityRefresh && config.p2p?.enable && config.p2p?.role?.node) {
       // 异步执行,不阻塞接口返回;失败不影响配置写入
+      // 使用 manualRegister: 若本地身份在 tracker 端仍有效,仅推送新配置(publicUrl/端口/nodeName)
+      // 而不会生成新 nodeId,避免每次改配置都污染 tracker 节点表
       p2pIdentityService
-        .invalidateAndReregister()
-        .then((id) => {
-          console.log(`[p2p] 配置变更,节点已重新注册 nodeId=${id?.nodeId}`)
+        .manualRegister()
+        .then(({ identity, reused }) => {
+          console.log(
+            `[p2p] 配置变更,${reused ? '已更新' : '已重新注册'}节点 nodeId=${identity?.nodeId}`
+          )
         })
         .catch((err: any) => {
-          console.warn(`[p2p] 配置变更后重新注册失败: ${err?.message || err}`)
+          console.warn(`[p2p] 配置变更后同步到 tracker 失败: ${err?.message || err}`)
         })
     }
     if (needHeartbeatRestart) {
@@ -273,8 +277,11 @@ export default class ConfigsController {
    * 手动触发节点注册
    * - 校验 admin 权限
    * - 校验 p2p.enable 且 p2p.role.node 为 true
-   * - 调用 p2pIdentityService.invalidateAndReregister() 重新注册
-   * - 成功返回新的 nodeId; 失败返回 tracker 端给出的具体原因
+   * - 调用 p2pIdentityService.manualRegister():
+   *     若本地身份在 tracker 端仍有效 → 仅推送最新信息(publicUrl/端口/nodeName)到 tracker,不换 nodeId
+   *     若身份失效或本地无身份 → 走完整重注册流程
+   * - 成功返回 nodeId 和 reused 标志(true=复用旧 id,false=新注册)
+   * - 失败返回 tracker 端给出的具体原因
    */
   public async register_node_now({ request, response }: HttpContext) {
     const user = (request as any).user
@@ -301,14 +308,16 @@ export default class ConfigsController {
     }
 
     try {
-      const identity = await p2pIdentityService.invalidateAndReregister()
+      // 手动注册:若 tracker 已存在该节点则复用并更新信息,否则才生成新 nodeId
+      const { identity, reused } = await p2pIdentityService.manualRegister()
       return response.json(
         new SResponse({
           code: 0,
-          message: '节点注册成功',
+          message: reused ? '节点信息已更新到 tracker' : '节点注册成功',
           data: {
             nodeId: identity?.nodeId,
             nodeName: identity?.nodeName,
+            reused,
           },
         })
       )

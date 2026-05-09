@@ -236,8 +236,6 @@ class TrackerGroupService {
       role: m.role,
       online: m.node.online,
       publicUrl: m.node.publicUrl,
-      localHost: m.node.localHost,
-      localPort: m.node.localPort,
       version: m.node.version,
       lastHeartbeat: m.node.lastHeartbeat,
       joinTime: m.joinTime,

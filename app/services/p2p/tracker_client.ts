@@ -255,8 +255,6 @@ export class TrackerClient {
       nodeName: string | null
       online: number
       publicUrl: string | null
-      localHost: string | null
-      localPort: number | null
       lastHeartbeat: string | null
       shareName: string
     }>

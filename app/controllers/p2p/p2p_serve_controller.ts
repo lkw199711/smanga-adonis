@@ -17,6 +17,51 @@ import { ListResponse, SResponse } from '#interfaces/response'
 import { image_files, is_img } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
 
+/** 图片扩展名(与 scan_manga_job 的外置封面检索保持一致) */
+const SIDE_COVER_EXTS = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP', '.gif', '.bmp']
+
+/**
+ * 列出\"与基名相关的外置文件\":
+ *  - <baseName>.<ext>
+ *  - <baseName>-<任意>.<ext>   (典型: cover-1.jpg、mangaName-fanart.jpg 等同名递增)
+ * 匹配范围只在给定目录下的直接子项(不递归),用于 mangaPath/chapterPath 的 *同级目录*
+ * 仅匹配文件(目录不计入,目录级别的 smanga-info 由上层单独处理)
+ */
+function list_side_cover_files(
+  siblingDir: string,
+  baseName: string,
+  collector: Array<{ absPath: string; relPath: string; size: number; mtime: number }>,
+  relDirPrefix: string = ''
+) {
+  if (!siblingDir || !baseName) return
+  if (!fs.existsSync(siblingDir)) return
+  let entries: fs.Dirent[] = []
+  try {
+    entries = fs.readdirSync(siblingDir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const ent of entries) {
+    if (!ent.isFile()) continue
+    const name = ent.name
+    const ext = path.extname(name)
+    if (!SIDE_COVER_EXTS.includes(ext)) continue
+    const stem = name.slice(0, name.length - ext.length)
+    // 精确同名 或 同名-xxx 前缀(-后允许任意内容,覆盖 -1/-01/-fanart 等)
+    const matched = stem === baseName || stem.startsWith(`${baseName}-`)
+    if (!matched) continue
+    const abs = path.join(siblingDir, name)
+    let st: fs.Stats
+    try {
+      st = fs.statSync(abs)
+    } catch {
+      continue
+    }
+    const rel = relDirPrefix ? `${relDirPrefix}/${name}` : name
+    collector.push({ absPath: abs, relPath: rel, size: st.size, mtime: st.mtimeMs })
+  }
+}
+
 /**
  * 递归扫描一个目录下的所有文件(含子目录),返回相对路径清单
  * 注意:会跟随符号链接以外的普通文件/目录;跳过常见的系统隐藏项(Thumbs.db 等)
@@ -211,11 +256,20 @@ export default class P2PServeController {
       let rootDir: string
       let isSingleFile: boolean
       let files: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
+      // sideFiles: 漫画同级目录下、与本漫画相关的外置文件(外置封面、smanga-info 目录等)
+      //   relPath 以 \"漫画父目录\" 为根,客户端按 path.join(parentDir, relPath) 落盘
+      const sideFiles: Array<{ absPath: string; relPath: string; size: number; mtime: number }> = []
+
+      // 漫画名(不含扩展名),供外置封面匹配与章节外置封面聚合使用
+      const mangaBaseName = stat.isFile()
+        ? path.basename(mangaPath).replace(/\.(cbr|cbz|zip|7z|epub|rar|pdf)$/i, '')
+        : path.basename(mangaPath)
+      const mangaParentDir = path.dirname(mangaPath)
 
       if (stat.isFile()) {
         // 单本漫画:mangaPath 是一个文件(zip/pdf/...)
         isSingleFile = true
-        rootDir = path.dirname(mangaPath)
+        rootDir = mangaParentDir
         files = [
           {
             absPath: mangaPath,
@@ -231,11 +285,35 @@ export default class P2PServeController {
         files = walk_dir_files(mangaPath)
       }
 
-      const totalBytes = files.reduce((acc, f) => acc + (f.size || 0), 0)
+      // 1) 漫画同级外置封面: <mangaBaseName>.ext / <mangaBaseName>-*.ext
+      list_side_cover_files(mangaParentDir, mangaBaseName, sideFiles)
+
+      // 2) 漫画同级 smanga-info 目录(<mangaBaseName>-smanga-info)
+      const smangaInfoDir = path.join(mangaParentDir, `${mangaBaseName}-smanga-info`)
+      if (fs.existsSync(smangaInfoDir) && fs.statSync(smangaInfoDir).isDirectory()) {
+        const infoFiles = walk_dir_files(smangaInfoDir)
+        for (const f of infoFiles) {
+          sideFiles.push({
+            absPath: f.absPath,
+            relPath: `${mangaBaseName}-smanga-info/${f.relPath}`,
+            size: f.size,
+            mtime: f.mtime,
+          })
+        }
+      }
+
+      // 3) 章节同级外置封面(位于 mangaPath 内部)已由 walk_dir_files 收录到 files 中,
+      //    客户端 MangaJob 会从 tree.files 里筛"非章节内部文件"统一下载,
+      //    sideFiles 仅承载 mangaPath *外部* 的文件(漫画同级外置封面 / smanga-info 目录)
+
+      const totalBytes =
+        files.reduce((acc, f) => acc + (f.size || 0), 0) +
+        sideFiles.reduce((acc, f) => acc + (f.size || 0), 0)
 
       console.log(
         `[p2p-serve] tree 200 | caller=${callerNodeId} groupNo=${groupNo} ` +
-        `mangaId=${mangaId} isSingleFile=${isSingleFile} fileCount=${files.length} totalBytes=${totalBytes}`
+        `mangaId=${mangaId} isSingleFile=${isSingleFile} fileCount=${files.length} ` +
+        `sideFileCount=${sideFiles.length} totalBytes=${totalBytes}`
       )
 
       return response.json(
@@ -248,9 +326,12 @@ export default class P2PServeController {
             mangaPath: manga.mangaPath,
             isSingleFile,
             rootDir,
+            // parentDir: sideFiles 的根目录,客户端按此拼接 relPath
+            parentDir: mangaParentDir,
             fileCount: files.length,
             totalBytes,
             files,
+            sideFiles,
           },
         })
       )
@@ -287,10 +368,19 @@ export default class P2PServeController {
       let rootDir: string
       let isSingleFile: boolean
       let files: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
+      // sideFiles: 章节同级目录下、与本章节相关的外置封面
+      //   relPath = basename(同级文件),客户端按 path.join(parentDir, relPath) 落盘
+      const sideFiles: Array<{ absPath: string; relPath: string; size: number; mtime: number }> = []
+
+      const chParentDir = path.dirname(chapterPath)
+      // 章节基名(目录保留全名,文件去扩展名)
+      let chBaseName = path.basename(chapterPath)
+      const extMatch = /\.(cbr|cbz|zip|7z|epub|rar|pdf)$/i.exec(chBaseName)
+      if (extMatch) chBaseName = chBaseName.slice(0, chBaseName.length - extMatch[0].length)
 
       if (stat.isFile()) {
         isSingleFile = true
-        rootDir = path.dirname(chapterPath)
+        rootDir = chParentDir
         files = [
           {
             absPath: chapterPath,
@@ -305,11 +395,19 @@ export default class P2PServeController {
         files = walk_dir_files(chapterPath)
       }
 
-      const totalBytes = files.reduce((acc, f) => acc + (f.size || 0), 0)
+      // 章节同级外置封面: <chBaseName>.ext / <chBaseName>-*.ext
+      list_side_cover_files(chParentDir, chBaseName, sideFiles)
+      // 目录型章节:外置封面如已位于 chapterPath 内部,会出现在 files 中,这里 chParentDir
+      // 是 chapterPath 的父目录,不会重叠,无需去重
+
+      const totalBytes =
+        files.reduce((acc, f) => acc + (f.size || 0), 0) +
+        sideFiles.reduce((acc, f) => acc + (f.size || 0), 0)
 
       console.log(
         `[p2p-serve] chapter_tree 200 | caller=${callerNodeId} groupNo=${groupNo} ` +
-        `chapterId=${chapterId} isSingleFile=${isSingleFile} fileCount=${files.length} totalBytes=${totalBytes}`
+        `chapterId=${chapterId} isSingleFile=${isSingleFile} fileCount=${files.length} ` +
+        `sideFileCount=${sideFiles.length} totalBytes=${totalBytes}`
       )
 
       return response.json(
@@ -322,9 +420,11 @@ export default class P2PServeController {
             chapterPath: chapter.chapterPath,
             isSingleFile,
             rootDir,
+            parentDir: chParentDir,
             fileCount: files.length,
             totalBytes,
             files,
+            sideFiles,
           },
         })
       )

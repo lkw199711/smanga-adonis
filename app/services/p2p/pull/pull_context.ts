@@ -20,9 +20,17 @@ export type PullHeaders = Record<string, string>
 export type TreeResponseData = {
   isSingleFile: boolean
   rootDir: string
+  /** sideFiles 的根目录(漫画/章节父目录),客户端按 path.join(parentDir, relPath) 落盘 */
+  parentDir?: string
   fileCount: number
   totalBytes: number
   files: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
+  /**
+   * 同级外置文件清单(manga 维度:漫画同级外置封面 + smanga-info 目录 + 章节同级外置封面;
+   * chapter 维度:章节同级外置封面)
+   * relPath 以 parentDir 为根
+   */
+  sideFiles?: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
   // 漫画级独有
   mangaId?: number
   mangaName?: string
