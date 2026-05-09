@@ -22,7 +22,7 @@ model bookmark {
   updateTime DateTime @default(now()) @updatedAt
   pageImage  String?
 
-  @@unique([chapterId, page], map: "opage")
+  @@unique([userId, chapterId, page], map: "opage")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

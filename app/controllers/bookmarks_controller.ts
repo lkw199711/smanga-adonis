@@ -151,9 +151,10 @@ export default class BookmarksController {
       return response.json(new SResponse({ code: 1, message: '参数缺失或非法' }))
     }
 
-    // 唯一键冲突前置校验: schema 定义 @@unique([chapterId, page])
+    // 唯一键冲突前置校验: schema 定义 @@unique([userId, chapterId, page])
+    // 仅限当前用户自己的书签,不跨用户干扰
     const exist = await prisma.bookmark.findFirst({
-      where: { chapterId, page: pageNum, userId },
+      where: { userId, chapterId, page: pageNum },
     })
     if (exist) {
       return response.json(new SResponse({ code: 1, message: '当前页已存在书签' }))
@@ -194,6 +195,10 @@ export default class BookmarksController {
       return response.json(new SResponse({ code: 0, message: '新增成功', data: bookmark }))
     } catch (err: any) {
       if (outputFile) s_delete(outputFile)
+      // P2002: 唯一键冲突 (并发下前置检查与 create 之间的竞态)
+      if (err?.code === 'P2002') {
+        return response.json(new SResponse({ code: 1, message: '当前页已存在书签' }))
+      }
       return response.json(new SResponse({ code: 1, message: '新增失败', error: err?.message }))
     }
   }
