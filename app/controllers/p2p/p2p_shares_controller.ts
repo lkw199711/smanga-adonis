@@ -9,7 +9,6 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
 import TrackerClient from '#services/p2p/tracker_client'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
@@ -181,7 +180,7 @@ export default class P2PSharesController {
     if (groupNo) {
       const g = await prisma.p2p_group.findUnique({ where: { groupNo } })
       if (!g) {
-        return response.json(new ListResponse({ code: 0, message: '', list: [], count: 0 }))
+        return response.json({ code: 200, message: '', list: [], count: 0 })
       }
       where.p2pGroupId = g.p2pGroupId
     }
@@ -254,7 +253,7 @@ export default class P2PSharesController {
       }
     })
 
-    return response.json(new ListResponse({ code: 0, message: '', list: enriched, count }))
+    return response.json({ code: 200, message: '', list: enriched, count })
   }
 
   /**
@@ -269,17 +268,17 @@ export default class P2PSharesController {
 
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) {
-      return response.status(400).json(new SResponse({ code: 1, message: '群组不存在' }))
+      return response.status(400).json({ code: 400, message: '群组不存在' })
     }
 
     if (shareType !== 'media' && shareType !== 'manga') {
-      return response.status(400).json(new SResponse({ code: 1, message: 'shareType must be media or manga' }))
+      return response.status(400).json({ code: 400, message: 'shareType must be media or manga' })
     }
     if (shareType === 'media' && !mediaId) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'mediaId required' }))
+      return response.status(400).json({ code: 400, message: 'mediaId required' })
     }
     if (shareType === 'manga' && !mangaId) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'mangaId required' }))
+      return response.status(400).json({ code: 400, message: 'mangaId required' })
     }
 
     // 自动推导 shareName
@@ -314,10 +313,10 @@ export default class P2PSharesController {
       // 异步上报
       announce_group(group.groupNo)
 
-      return response.json(new SResponse({ code: 0, message: '创建成功', data: item }))
+      return response.json({ code: 200, message: '创建成功', data: item })
     } catch (e: any) {
       log_p2p_error('share.create', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '创建失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || '创建失败' })
     }
   }
 
@@ -330,7 +329,7 @@ export default class P2PSharesController {
     const { enable, shareName } = await updateP2PShareValidator.validate(request.all())
     const existed = await prisma.p2p_local_share.findUnique({ where: { p2pLocalShareId: id } })
     if (!existed) {
-      return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
+      return response.status(404).json({ code: 404, message: 'not found' })
     }
     try {
       const item = await prisma.p2p_local_share.update({
@@ -344,10 +343,10 @@ export default class P2PSharesController {
       const group = await prisma.p2p_group.findUnique({ where: { p2pGroupId: existed.p2pGroupId } })
       if (group) announce_group(group.groupNo)
 
-      return response.json(new SResponse({ code: 0, message: '更新成功', data: item }))
+      return response.json({ code: 200, message: '更新成功', data: item })
     } catch (e: any) {
       log_p2p_error('share.update', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '更新失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || '更新失败' })
     }
   }
 
@@ -358,7 +357,7 @@ export default class P2PSharesController {
     const { id } = await idParamP2PValidator.validate(params)
     const existed = await prisma.p2p_local_share.findUnique({ where: { p2pLocalShareId: id } })
     if (!existed) {
-      return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
+      return response.status(404).json({ code: 404, message: 'not found' })
     }
     try {
       // 先清理关联的 manifest 缓存(无外键级联,需手动)
@@ -370,10 +369,10 @@ export default class P2PSharesController {
       const group = await prisma.p2p_group.findUnique({ where: { p2pGroupId: existed.p2pGroupId } })
       if (group) announce_group(group.groupNo)
 
-      return response.json(new SResponse({ code: 0, message: '删除成功' }))
+      return response.json({ code: 200, message: '删除成功' })
     } catch (e: any) {
       log_p2p_error('share.destroy', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '删除失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || '删除失败' })
     }
   }
 
@@ -385,6 +384,6 @@ export default class P2PSharesController {
   async announce({ request, response }: HttpContext) {
     const { groupNo } = await announceP2PShareValidator.validate(request.all())
     await announce_group(groupNo)
-    return response.json(new SResponse({ code: 0, message: '已触发上报' }))
+    return response.json({ code: 200, message: '已触发上报' })
   }
 }

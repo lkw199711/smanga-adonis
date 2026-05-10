@@ -6,7 +6,6 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
 import TrackerClient from '#services/p2p/tracker_client'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
@@ -42,7 +41,7 @@ export default class P2PPeersController {
   async members({ params, response }: HttpContext) {
     const client = get_client()
     if (!client) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未启用' })
     }
 
     const { groupNo } = await groupNoParamValidator.validate(params)
@@ -77,10 +76,10 @@ export default class P2PPeersController {
         }
       }
 
-      return response.json(new ListResponse({ code: 0, message: '', list: members, count: members.length }))
+      return response.json({ code: 200, message: '', list: members, count: members.length })
     } catch (e: any) {
       log_p2p_error('peer.members', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '查询失败' }))
+      return response.status(500).json({ code: 500, message: e?.response?.data?.message || e?.message || '查询失败' })
     }
   }
 
@@ -91,15 +90,15 @@ export default class P2PPeersController {
   async shares({ params, response }: HttpContext) {
     const client = get_client()
     if (!client) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未启用' })
     }
     const { groupNo } = await groupNoParamValidator.validate(params)
     try {
       const list: any[] = await client.listShares(groupNo)
-      return response.json(new ListResponse({ code: 0, message: '', list, count: list.length }))
+      return response.json({ code: 200, message: '', list, count: list.length })
     } catch (e: any) {
       log_p2p_error('peer.shares', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '查询失败' }))
+      return response.status(500).json({ code: 500, message: e?.response?.data?.message || e?.message || '查询失败' })
     }
   }
 
@@ -111,13 +110,13 @@ export default class P2PPeersController {
     const { groupNo } = await groupNoParamValidator.validate(params)
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) {
-      return response.json(new ListResponse({ code: 0, message: '', list: [], count: 0 }))
+      return response.json({ code: 200, message: '', list: [], count: 0 })
     }
     const list = await prisma.p2p_peer_cache.findMany({
       where: { p2pGroupId: group.p2pGroupId },
       orderBy: { lastSeen: 'desc' },
     })
-    return response.json(new ListResponse({ code: 0, message: '', list, count: list.length }))
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   /**
@@ -135,9 +134,7 @@ export default class P2PPeersController {
 
     if (!client) {
       // P2P 未启用 → 直接走本地缓存
-      return response.json(new SResponse({
-        code: 0, message: '', data: await this._readLocalManifests(groupNo, nodeId, since),
-      }))
+      return response.json({ code: 200, message: '', data: await this._readLocalManifests(groupNo, nodeId, since) })
     }
 
     try {
@@ -151,20 +148,20 @@ export default class P2PPeersController {
         await this._writeLocalManifests(groupNo, result.list || [])
       }
 
-      return response.json(new SResponse({ code: 0, message: '', data: result }))
+      return response.json({ code: 200, message: '', data: result })
     } catch (e: any) {
       log_p2p_error('peer.manifests', e)
 
       // tracker 不可达且开启 fallback → 走本地缓存
       if (fallback) {
-        return response.json(new SResponse({
-          code: 0,
+        return response.json({
+          code: 200,
           message: 'fallback to local cache',
           data: await this._readLocalManifests(groupNo, nodeId, since),
-        }))
+        })
       }
       return response.status(500).json(
-        new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '查询失败' })
+        { code: 500, message: e?.response?.data?.message || e?.message || '查询失败' }
       )
     }
   }
@@ -272,7 +269,7 @@ export default class P2PPeersController {
   async manifest({ params, request, response }: HttpContext) {
     const client = get_client()
     if (!client) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未启用' })
     }
     const { groupNo } = await groupNoParamValidator.validate(params)
     const { nodeId, shareType, remoteMediaId, remoteMangaId } =
@@ -285,11 +282,11 @@ export default class P2PPeersController {
         remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
         remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
       })
-      return response.json(new SResponse({ code: 0, message: '', data }))
+      return response.json({ code: 200, message: '', data })
     } catch (e: any) {
       log_p2p_error('peer.manifest', e)
       return response.status(500).json(
-        new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '查询失败' })
+        { code: 500, message: e?.response?.data?.message || e?.message || '查询失败' }
       )
     }
   }
@@ -310,18 +307,16 @@ export default class P2PPeersController {
         remoteMangaId,
       })
       if (!seeds.length) {
-        return response.status(404).json(
-          new SResponse({ code: 1, message: '未发现可用 seed' })
-        )
+        return response.status(404).json({ code: 404, message: '未发现可用 seed' })
       }
 
       const headers = buildHeaders(groupNo)
       const data = await fetchMangaTree(seeds, headers, 'peer.manga-tree', remoteMangaId)
-      return response.json(new SResponse({ code: 0, message: '', data }))
+      return response.json({ code: 200, message: '', data })
     } catch (e: any) {
       log_p2p_error('peer.manga-tree', e)
       return response.status(500).json(
-        new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '获取失败' })
+        { code: 500, message: e?.response?.data?.message || e?.message || '获取失败' }
       )
     }
   }
@@ -344,18 +339,16 @@ export default class P2PPeersController {
         remoteMangaId,
       })
       if (!seeds.length) {
-        return response.status(404).json(
-          new SResponse({ code: 1, message: '未发现可用 seed' })
-        )
+        return response.status(404).json({ code: 404, message: '未发现可用 seed' })
       }
 
       const headers = buildHeaders(groupNo)
       const data = await fetchChapterTree(seeds, headers, 'peer.chapter-tree', remoteChapterId)
-      return response.json(new SResponse({ code: 0, message: '', data }))
+      return response.json({ code: 200, message: '', data })
     } catch (e: any) {
       log_p2p_error('peer.chapter-tree', e)
       return response.status(500).json(
-        new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '获取失败' })
+        { code: 500, message: e?.response?.data?.message || e?.message || '获取失败' }
       )
     }
   }

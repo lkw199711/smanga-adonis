@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import {
   idParamUserPermissonValidator,
   createUserPermissonValidator,
@@ -11,9 +10,7 @@ export default class UserPermissonsController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -23,13 +20,7 @@ export default class UserPermissonsController {
     if (!(await this.checkAdmin(request, response))) return
 
     const list = await prisma.userPermisson.findMany()
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -39,8 +30,7 @@ export default class UserPermissonsController {
     const userPermisson = await prisma.userPermisson.findUnique({
       where: { userPermissonId },
     })
-    const showResponse = new SResponse({ code: 0, message: '', data: userPermisson })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: userPermisson })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -50,8 +40,7 @@ export default class UserPermissonsController {
     const userPermisson = await prisma.userPermisson.create({
       data: insertData as any,
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: userPermisson })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: userPermisson })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -63,8 +52,7 @@ export default class UserPermissonsController {
       where: { userPermissonId },
       data: modifyData as any,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: userPermisson })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: userPermisson })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -74,7 +62,6 @@ export default class UserPermissonsController {
     const userPermisson = await prisma.userPermisson.delete({
       where: { userPermissonId },
     })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: userPermisson })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: userPermisson })
   }
 }

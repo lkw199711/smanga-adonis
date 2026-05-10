@@ -10,7 +10,6 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '#interfaces/response'
 import { addTask } from '#services/queue_service'
 import { TaskPriority } from '#type/index'
 import path from 'path'
@@ -94,16 +93,16 @@ export default class P2PTransfersController {
       prisma.p2p_transfer.findMany(queryParams),
       prisma.p2p_transfer.count({ where }),
     ])
-    return response.json(new ListResponse({ code: 0, message: '', list, count }))
+    return response.json({ code: 200, message: '', list, count })
   }
 
   async show({ params, response }: HttpContext) {
     const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
-      return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
+      return response.status(404).json({ code: 404, message: 'not found' })
     }
-    return response.json(new SResponse({ code: 0, message: '', data: item }))
+    return response.json({ code: 200, message: '', data: item })
   }
 
   /**
@@ -124,38 +123,38 @@ export default class P2PTransfersController {
     // 节点在线校验:离线节点不允许发起新拉取任务
     const onlineError = await this.checkNodeOnline()
     if (onlineError) {
-      return response.status(403).json(new SResponse({ code: 1, message: onlineError, status: 'offline' }))
+      return response.status(403).json({ code: 403, message: onlineError, status: 'offline' })
     }
 
     const body = await pullP2PTransferValidator.validate(request.all())
 
     if (!body.groupNo) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'groupNo required' }))
+      return response.status(400).json({ code: 400, message: 'groupNo required' })
     }
     if (!body.remoteName) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'remoteName required' }))
+      return response.status(400).json({ code: 400, message: 'remoteName required' })
     }
 
     // p2p_transfer.p2pGroupId 仍是必填外键,这里仅用于满足数据库约束,不做权限语义
     const groupRow = await prisma.p2p_group.findUnique({ where: { groupNo: body.groupNo } })
     if (!groupRow) {
-      return response.status(400).json(
-        new SResponse({ code: 1, message: `本地未加入群组 groupNo=${body.groupNo} (仅用于满足外键约束)` })
-      )
+      return response
+        .status(400)
+        .json({ code: 400, message: `本地未加入群组 groupNo=${body.groupNo} (仅用于满足外键约束)` })
     }
 
     const transferType = body.transferType || 'chapter'
     if (transferType !== 'media' && transferType !== 'manga' && transferType !== 'chapter') {
-      return response.status(400).json(new SResponse({ code: 1, message: 'transferType must be media | manga | chapter' }))
+      return response.status(400).json({ code: 400, message: 'transferType must be media | manga | chapter' })
     }
     if (transferType === 'media' && !body.remoteMediaId) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'remoteMediaId required' }))
+      return response.status(400).json({ code: 400, message: 'remoteMediaId required' })
     }
     if (transferType === 'manga' && !body.remoteMangaId) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'remoteMangaId required' }))
+      return response.status(400).json({ code: 400, message: 'remoteMangaId required' })
     }
     if (transferType === 'chapter' && !body.remoteChapterId) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'remoteChapterId required' }))
+      return response.status(400).json({ code: 400, message: 'remoteChapterId required' })
     }
 
     const receivedPath =
@@ -164,9 +163,7 @@ export default class P2PTransfersController {
       ''
 
     if (!receivedPath) {
-      return response.status(400).json(
-        new SResponse({ code: 1, message: 'receivedPath 未指定且未配置默认接收路径' })
-      )
+      return response.status(400).json({ code: 400, message: 'receivedPath 未指定且未配置默认接收路径' })
     }
 
     try {
@@ -198,10 +195,10 @@ export default class P2PTransfersController {
         priority,
       })
 
-      return response.json(new SResponse({ code: 0, message: '已加入队列', data: transfer }))
+      return response.json({ code: 200, message: '已加入队列', data: transfer })
     } catch (e: any) {
       log_p2p_error('transfer.pull', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '投递失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || '投递失败' })
     }
   }
 
@@ -212,17 +209,17 @@ export default class P2PTransfersController {
     const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
-      return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
+      return response.status(404).json({ code: 404, message: 'not found' })
     }
     try {
       await prisma.p2p_transfer.update({
         where: { p2pTransferId: id },
         data: { status: 'canceled', endTime: new Date() },
       })
-      return response.json(new SResponse({ code: 0, message: '已取消' }))
+      return response.json({ code: 200, message: '已取消' })
     } catch (e: any) {
       log_p2p_error('transfer.cancel', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '取消失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || '取消失败' })
     }
   }
 
@@ -237,7 +234,7 @@ export default class P2PTransfersController {
     const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
-      return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
+      return response.status(404).json({ code: 404, message: 'not found' })
     }
     try {
       // 若任务还在进行,先标记为 canceled,Job 内部的 status 检查会让它尽快退出
@@ -248,10 +245,10 @@ export default class P2PTransfersController {
         })
       }
       await prisma.p2p_transfer.delete({ where: { p2pTransferId: id } })
-      return response.json(new SResponse({ code: 0, message: '已删除' }))
+      return response.json({ code: 200, message: '已删除' })
     } catch (e: any) {
       log_p2p_error('transfer.destroy', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '删除失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || '删除失败' })
     }
   }
 
@@ -272,11 +269,11 @@ export default class P2PTransfersController {
         where: { status: { in: targetStatus } },
       })
       return response.json(
-        new SResponse({ code: 0, message: `已清理 ${result.count} 条记录`, data: { count: result.count } })
+        { code: 200, message: `已清理 ${result.count} 条记录`, data: { count: result.count } }
       )
     } catch (e: any) {
       log_p2p_error('transfer.clear', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '清理失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || '清理失败' })
     }
   }
 
@@ -287,13 +284,13 @@ export default class P2PTransfersController {
     // 节点在线校验:离线节点不允许重试任务
     const onlineError = await this.checkNodeOnline()
     if (onlineError) {
-      return response.status(403).json(new SResponse({ code: 1, message: onlineError, status: 'offline' }))
+      return response.status(403).json({ code: 403, message: onlineError, status: 'offline' })
     }
 
     const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
-      return response.status(404).json(new SResponse({ code: 1, message: 'not found' }))
+      return response.status(404).json({ code: 404, message: 'not found' })
     }
     try {
       await prisma.p2p_transfer.update({
@@ -312,10 +309,10 @@ export default class P2PTransfersController {
         priority,
       })
 
-      return response.json(new SResponse({ code: 0, message: '已重新入队' }))
+      return response.json({ code: 200, message: '已重新入队' })
     } catch (e: any) {
       log_p2p_error('transfer.retry', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || '重试失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || '重试失败' })
     }
   }
 }

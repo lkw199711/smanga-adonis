@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse, SResponseCode } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import CreateMediaPosterJob from '#services/create_media_poster_job'
@@ -16,9 +15,7 @@ export default class MediaController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -30,7 +27,7 @@ export default class MediaController {
     if (!user) {
       return response
         .status(401)
-        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+        .json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons =
@@ -54,13 +51,7 @@ export default class MediaController {
       prisma.media.count({ where }),
     ])
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count })
   }
 
   public async show({ request, params, response }: HttpContext) {
@@ -69,7 +60,7 @@ export default class MediaController {
     if (!user) {
       return response
         .status(401)
-        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+        .json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons =
@@ -84,11 +75,10 @@ export default class MediaController {
     if (!isAdmin && !mediaPermissons.some((item) => item.mediaId === mediaId)) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '无权限查看', status: 'no permission' }))
+        .json({ code: 403, message: '无权限查看', status: 'no permission' })
     }
     const media = await prisma.media.findUnique({ where: { mediaId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: media })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: media })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -113,8 +103,7 @@ export default class MediaController {
       })
     }
 
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: media })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: media })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -126,8 +115,7 @@ export default class MediaController {
       where: { mediaId },
       data: modifyData as any,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: media })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: media })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -143,8 +131,7 @@ export default class MediaController {
       priority: TaskPriority.deleteManga,
     })
 
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: media })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: media })
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
@@ -163,8 +150,7 @@ export default class MediaController {
       })
     }
 
-    const destroyResponse = new SResponse({ code: SResponseCode.Success, message: '删除成功' })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功' })
   }
 
   public async poster({ params, request, response }: HttpContext) {
@@ -172,18 +158,8 @@ export default class MediaController {
 
     const { mediaId } = await idParamMediaValidator.validate(params)
     const posterFile = await new CreateMediaPosterJob({ mediaId }).run()
-    const posterResponse = new SResponse({
-      code: SResponseCode.Success,
-      message: '生成成功',
-      data: posterFile,
-    })
-    if (posterResponse) {
-      return response.json(posterResponse)
-    } else {
-      return response
-        .status(500)
-        .json(new SResponse({ code: SResponseCode.Failed, message: '生成封面失败' }))
-    }
+    if (posterFile) return response.json({ code: 200, message: '生成成功', data: posterFile })
+    return response.status(500).json({ code: 500, message: '生成封面失败' })
   }
 
   public async scan({ params, request, response }: HttpContext) {
@@ -203,7 +179,6 @@ export default class MediaController {
       })
     }
 
-    const scanResponse = new SResponse({ code: 0, message: '已加入扫描队列' })
-    return response.json(scanResponse)
+    return response.json({ code: 200, message: '已加入扫描队列' })
   }
 }

@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { ListResponse, SResponse } from '#interfaces/response'
 import trackerShareService from '#services/tracker/tracker_share_service'
 import { log_tracker_error } from '#utils/p2p_log'
 import {
@@ -29,10 +28,10 @@ export default class TrackerSharesController {
         groupNo,
         payload as any
       )
-      return response.json(new SResponse({ code: 0, message: '上报成功', data: result }))
+      return response.json({ code: 200, message: '上报成功', data: result })
     } catch (err: any) {
       log_tracker_error('share.announce', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -51,11 +50,11 @@ export default class TrackerSharesController {
         remoteMangaId: remoteMangaId ? Number(remoteMangaId) : undefined,
       })
       return response.json(
-        new ListResponse({ code: 0, message: '', list: list as any, count })
+        { code: 200, message: '', list: list as any, count }
       )
     } catch (err: any) {
       log_tracker_error('share.seeds', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -76,10 +75,10 @@ export default class TrackerSharesController {
           nodeId: nodeId || undefined,
         }
       )
-      return response.json(new SResponse({ code: 0, message: '', data }))
+      return response.json({ code: 200, message: '', data })
     } catch (err: any) {
       log_tracker_error('manifest.list', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -100,10 +99,10 @@ export default class TrackerSharesController {
         remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
         remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
       })
-      return response.json(new SResponse({ code: 0, message: '', data }))
+      return response.json({ code: 200, message: '', data })
     } catch (err: any) {
       log_tracker_error('manifest.detail', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -120,11 +119,11 @@ export default class TrackerSharesController {
         keyword,
       })
       return response.json(
-        new ListResponse({ code: 0, message: '', list: list as any, count })
+        { code: 200, message: '', list: list as any, count }
       )
     } catch (err: any) {
       log_tracker_error('share.list', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 }

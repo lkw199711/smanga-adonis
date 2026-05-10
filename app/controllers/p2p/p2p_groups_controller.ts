@@ -14,7 +14,6 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
 import TrackerClient from '#services/p2p/tracker_client'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
@@ -111,16 +110,16 @@ export default class P2PGroupsController {
    */
   async index({ response }: HttpContext) {
     const list = await prisma.p2p_group.findMany({ orderBy: { createTime: 'desc' } })
-    return response.json(new ListResponse({ code: 0, message: '', list, count: list.length }))
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   async show({ params, response }: HttpContext) {
     const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_group.findUnique({ where: { p2pGroupId: id } })
     if (!item) {
-      return response.status(404).json(new SResponse({ code: 1, message: 'not found', status: 'not found' }))
+      return response.status(404).json({ code: 404, message: 'not found', status: 'not found' })
     }
-    return response.json(new SResponse({ code: 0, message: '', data: item }))
+    return response.json({ code: 200, message: '', data: item })
   }
 
   /**
@@ -130,7 +129,7 @@ export default class P2PGroupsController {
   async create({ request, response }: HttpContext) {
     const client = get_client()
     if (!client) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
     }
 
     const { groupName, describe, password, maxMembers } = await createP2PGroupValidator.validate(
@@ -155,10 +154,12 @@ export default class P2PGroupsController {
           memberCount: 1,
         },
       })
-      return response.json(new SResponse({ code: 0, message: '创建成功', data: { local, remote: res } }))
+      return response.json({ code: 200, message: '创建成功', data: { local, remote: res } })
     } catch (e: any) {
       log_p2p_error('group.create', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '创建失败' }))
+      return response
+        .status(500)
+        .json({ code: 500, message: e?.response?.data?.message || e?.message || '创建失败' })
     }
   }
 
@@ -169,7 +170,7 @@ export default class P2PGroupsController {
   async join({ request, response }: HttpContext) {
     const client = get_client()
     if (!client) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
     }
 
     const { groupNo, password, inviteCode } = await joinP2PGroupValidator.validate(request.all())
@@ -183,7 +184,7 @@ export default class P2PGroupsController {
       const remoteGroup = res?.group || res
       const existed = await prisma.p2p_group.findUnique({ where: { groupNo } })
       if (existed) {
-        return response.json(new SResponse({ code: 0, message: '已在群组中', data: existed }))
+        return response.json({ code: 200, message: '已在群组中', data: existed })
       }
 
       // tracker 旧版本可能不返回 ownerNodeId,这里给空串占位,后续 refresh 会同步真实值
@@ -199,10 +200,12 @@ export default class P2PGroupsController {
           memberCount: remoteGroup?.memberCount || 1,
         },
       })
-      return response.json(new SResponse({ code: 0, message: '加入成功', data: local }))
+      return response.json({ code: 200, message: '加入成功', data: local })
     } catch (e: any) {
       log_p2p_error('group.join', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.response?.data?.message || e?.message || '加入失败' }))
+      return response
+        .status(500)
+        .json({ code: 500, message: e?.response?.data?.message || e?.message || '加入失败' })
     }
   }
 
@@ -213,7 +216,7 @@ export default class P2PGroupsController {
   async leave({ request, response }: HttpContext) {
     const client = get_client()
     if (!client) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
     }
     const { groupNo } = await leaveP2PGroupValidator.validate(request.all())
 
@@ -226,7 +229,7 @@ export default class P2PGroupsController {
 
     await purgeLocalGroupByGroupNo(groupNo)
 
-    return response.json(new SResponse({ code: 0, message: '已退出' }))
+    return response.json({ code: 200, message: '已退出' })
   }
 
   /**
@@ -243,7 +246,7 @@ export default class P2PGroupsController {
   async refresh({ response }: HttpContext) {
     const cfg = get_config()?.p2p
     if (!cfg?.enable || !cfg?.role?.node) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
     }
 
     // reconcile 服务内部会自动处理 401/403 的身份重注册场景(沿用 buildClient + 失败返回)
@@ -259,22 +262,14 @@ export default class P2PGroupsController {
     }
 
     if (!result.ok) {
-      return response.status(500).json(
-        new SResponse({ code: 1, message: result.error || '同步失败' })
-      )
+      return response.status(500).json({ code: 500, message: result.error || '同步失败' })
     }
 
-    return response.json(
-      new SResponse({
-        code: 0,
-        message: '同步完成',
-        data: {
-          count: result.remoteCount,
-          upserted: result.upserted,
-          removed: result.removed,
-        },
-      })
-    )
+    return response.json({
+      code: 200,
+      message: '同步完成',
+      data: { count: result.remoteCount, upserted: result.upserted, removed: result.removed },
+    })
   }
 
   /**
@@ -283,16 +278,7 @@ export default class P2PGroupsController {
    */
   async whoami({ response }: HttpContext) {
     const id = p2pIdentityService.getIdentity()
-    return response.json(
-      new SResponse({
-        code: 0,
-        message: '',
-        data: {
-          nodeId: id?.nodeId || '',
-          nodeName: id?.nodeName || '',
-        },
-      })
-    )
+    return response.json({ code: 200, message: '', data: { nodeId: id?.nodeId || '', nodeName: id?.nodeName || '' } })
   }
 
   /**
@@ -304,19 +290,13 @@ export default class P2PGroupsController {
     const { groupNo } = await groupNoParamValidator.validate(params)
     const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!local) {
-      return response.status(404).json(new SResponse({ code: 1, message: '本机未加入该群' }))
+      return response.status(404).json({ code: 404, message: '本机未加入该群' })
     }
 
     const client = get_client()
     if (!client) {
       // P2P 未启用:仅返回本地视图
-      return response.json(
-        new SResponse({
-          code: 0,
-          message: '',
-          data: { local, members: [], remote: null, fromTracker: false },
-        })
-      )
+      return response.json({ code: 200, message: '', data: { local, members: [], remote: null, fromTracker: false } })
     }
 
     try {
@@ -336,23 +316,15 @@ export default class P2PGroupsController {
           })
         : members
 
-      return response.json(
-        new SResponse({
-          code: 0,
-          message: '',
-          data: { local, members: sanitizedMembers, remote, fromTracker: true },
-        })
-      )
+      return response.json({ code: 200, message: '', data: { local, members: sanitizedMembers, remote, fromTracker: true } })
     } catch (e: any) {
       log_p2p_error('group.detail', e)
       // tracker 不可达:降级为本地视图
-      return response.json(
-        new SResponse({
-          code: 0,
-          message: 'tracker 暂不可达,仅返回本地数据',
-          data: { local, members: [], remote: null, fromTracker: false },
-        })
-      )
+      return response.json({
+        code: 200,
+        message: 'tracker 暂不可达,仅返回本地数据',
+        data: { local, members: [], remote: null, fromTracker: false },
+      })
     }
   }
 
@@ -370,7 +342,7 @@ export default class P2PGroupsController {
   async kick({ request, response }: HttpContext) {
     const client = get_client()
     if (!client) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
     }
 
     const { groupNo, targetNodeId } = await kickP2PGroupValidator.validate(request.all())
@@ -388,17 +360,12 @@ export default class P2PGroupsController {
           data: { memberCount: { decrement: 1 } },
         })
       }
-      return response.json(new SResponse({ code: 0, message: '已踢出该成员' }))
+      return response.json({ code: 200, message: '已踢出该成员' })
     } catch (e: any) {
       log_p2p_error('group.kick', e)
       return response
         .status(500)
-        .json(
-          new SResponse({
-            code: 1,
-            message: e?.response?.data?.message || e?.message || '踢出失败',
-          })
-        )
+        .json({ code: 500, message: e?.response?.data?.message || e?.message || '踢出失败' })
     }
   }
 
@@ -413,7 +380,7 @@ export default class P2PGroupsController {
   async dismiss({ request, response }: HttpContext) {
     const client = get_client()
     if (!client) {
-      return response.status(400).json(new SResponse({ code: 1, message: 'P2P 未配置或未启用' }))
+      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
     }
     const { groupNo } = await dismissP2PGroupValidator.validate(request.all())
 
@@ -423,17 +390,12 @@ export default class P2PGroupsController {
       log_p2p_error('group.dismiss.tracker', e)
       return response
         .status(500)
-        .json(
-          new SResponse({
-            code: 1,
-            message: e?.response?.data?.message || e?.message || '解散失败',
-          })
-        )
+        .json({ code: 500, message: e?.response?.data?.message || e?.message || '解散失败' })
     }
 
     // tracker 端已经成功 → 清理本机数据
     await purgeLocalGroupByGroupNo(groupNo)
 
-    return response.json(new SResponse({ code: 0, message: '群组已解散' }))
+    return response.json({ code: 200, message: '群组已解散' })
   }
 }

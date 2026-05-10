@@ -10,7 +10,6 @@
  * 仅当本机开启了 tracker 角色时才允许访问;否则返回 503。
  */
 import type { HttpContext } from '@adonisjs/core/http'
-import { ListResponse, SResponse } from '#interfaces/response'
 import trackerGroupService from '#services/tracker/tracker_group_service'
 import { log_tracker_error } from '#utils/p2p_log'
 import { get_config } from '#utils/index'
@@ -27,13 +26,13 @@ import {
 function ensureTrackerEnabled({ request, response }: HttpContext): boolean {
   const p2p = get_config()?.p2p
   if (!p2p?.enable || !p2p?.role?.tracker) {
-    response.status(503).json(new SResponse({ code: 1, message: '本机未启用 Tracker 角色' }))
+    response.status(503).json({ code: 503, message: '本机未启用 Tracker 角色' })
     return false
   }
   // auth_middleware 已经把 user 挂到 request 上
   const user = (request as any).user
   if (!user || user.role !== 'admin') {
-    response.status(403).json(new SResponse({ code: 1, message: '仅管理员可操作' }))
+    response.status(403).json({ code: 403, message: '仅管理员可操作' })
     return false
   }
   return true
@@ -58,10 +57,10 @@ export default class TrackerAdminGroupsController {
         keyword,
         enable: enableNum,
       })
-      return response.json(new ListResponse({ code: 0, message: '', list: list as any, count }))
+      return response.json({ code: 200, message: '', list: list as any, count })
     } catch (err: any) {
       log_tracker_error('admin.group.index', err)
-      return response.status(500).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(500).json({ code: 500, message: err.message })
     }
   }
 
@@ -74,10 +73,10 @@ export default class TrackerAdminGroupsController {
     try {
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const data = await trackerGroupService.adminDetail(groupNo)
-      return response.json(new SResponse({ code: 0, message: '', data }))
+      return response.json({ code: 200, message: '', data })
     } catch (err: any) {
       log_tracker_error('admin.group.show', err)
-      return response.status(404).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(404).json({ code: 404, message: err.message })
     }
   }
 
@@ -91,11 +90,11 @@ export default class TrackerAdminGroupsController {
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const list = await trackerGroupService.listMembers(groupNo)
       return response.json(
-        new ListResponse({ code: 0, message: '', list: list as any, count: list.length })
+        { code: 200, message: '', list: list as any, count: list.length }
       )
     } catch (err: any) {
       log_tracker_error('admin.group.members', err)
-      return response.status(404).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(404).json({ code: 404, message: err.message })
     }
   }
 
@@ -108,10 +107,10 @@ export default class TrackerAdminGroupsController {
     try {
       const { groupNo, nodeId } = await trackerGroupKickParamValidator.validate(params)
       await trackerGroupService.adminKick(groupNo, nodeId)
-      return response.json(new SResponse({ code: 0, message: '已移出群组' }))
+      return response.json({ code: 200, message: '已移出群组' })
     } catch (err: any) {
       log_tracker_error('admin.group.kick', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -125,10 +124,10 @@ export default class TrackerAdminGroupsController {
     try {
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const data = await trackerGroupService.adminDismiss(groupNo)
-      return response.json(new SResponse({ code: 0, message: '已解散群组', data }))
+      return response.json({ code: 200, message: '已解散群组', data })
     } catch (err: any) {
       log_tracker_error('admin.group.dismiss', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 }

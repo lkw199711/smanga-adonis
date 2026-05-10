@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
 import { addTask } from '#services/queue_service'
 import { TaskPriority } from '#type/index'
@@ -16,9 +15,7 @@ export default class SyncsController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -40,15 +37,7 @@ export default class SyncsController {
       prisma.sync.findMany(queryParams),
       prisma.sync.count(),
     ])
-
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count,
-    })
-
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count })
   }
 
   async create({ request, response }: HttpContext) {
@@ -61,20 +50,16 @@ export default class SyncsController {
     if (fs.existsSync(receivedPath) === false) {
       return response
         .status(400)
-        .json(new SResponse({ code: 1, message: '接收路径不存在', status: 'bad request' }))
+        .json({ code: 400, message: '接收路径不存在', status: 'bad request' })
     }
 
     // 路径无法写入
     try {
       fs.accessSync(receivedPath, fs.constants.W_OK)
     } catch (err) {
-      return response.status(400).json(
-        new SResponse({
-          code: 1,
-          message: '接收路径无法写入，请检查权限',
-          status: 'bad request',
-        })
-      )
+      return response
+        .status(400)
+        .json({ code: 400, message: '接收路径无法写入，请检查权限', status: 'bad request' })
     }
 
     let sync = await prisma.sync.findFirst({ where: { link } })
@@ -102,7 +87,7 @@ export default class SyncsController {
     if (!sync) {
       return response
         .status(500)
-        .json(new SResponse({ code: 1, message: '同步任务创建失败', status: 'error' }))
+        .json({ code: 500, message: '同步任务创建失败', status: 'error' })
     }
 
     if (syncType === 'media') {
@@ -121,7 +106,7 @@ export default class SyncsController {
       })
     }
 
-    return response.json(new SResponse({ code: 0, message: '同步任务创建成功', data: sync }))
+    return response.json({ code: 200, message: '同步任务创建成功', data: sync })
   }
 
   async update({ params, request, response }: HttpContext) {
@@ -147,10 +132,10 @@ export default class SyncsController {
     if (!sync) {
       return response
         .status(404)
-        .json(new SResponse({ code: 1, message: '同步任务未找到', status: 'not found' }))
+        .json({ code: 404, message: '同步任务未找到', status: 'not found' })
     }
 
-    return response.json(new SResponse({ code: 0, message: '同步任务更新成功', data: sync }))
+    return response.json({ code: 200, message: '同步任务更新成功', data: sync })
   }
 
   async execute({ params, request, response }: HttpContext) {
@@ -162,7 +147,7 @@ export default class SyncsController {
     if (!sync) {
       return response
         .status(404)
-        .json(new SResponse({ code: 1, message: '同步记录未找到', status: 'not found' }))
+        .json({ code: 404, message: '同步记录未找到', status: 'not found' })
     }
 
     if (sync.syncType === 'media') {
@@ -181,7 +166,7 @@ export default class SyncsController {
       })
     }
 
-    return response.json(new SResponse({ code: 0, message: '同步任务已加入队列', data: sync }))
+    return response.json({ code: 200, message: '同步任务已加入队列', data: sync })
   }
 
   async destroy({ params, request, response }: HttpContext) {
@@ -193,10 +178,10 @@ export default class SyncsController {
     if (!sync) {
       return response
         .status(404)
-        .json(new SResponse({ code: 1, message: '同步记录未找到', status: 'not found' }))
+        .json({ code: 404, message: '同步记录未找到', status: 'not found' })
     }
 
-    return response.json(new SResponse({ code: 0, message: '同步记录删除成功', data: sync }))
+    return response.json({ code: 200, message: '同步记录删除成功', data: sync })
   }
 
   async destroy_batch({ params, request, response }: HttpContext) {
@@ -206,6 +191,6 @@ export default class SyncsController {
     await prisma.sync.deleteMany({
       where: { syncId: { in: syncIds } },
     })
-    return response.json(new SResponse({ code: 0, message: '同步记录删除成功', status: 'success' }))
+    return response.json({ code: 200, message: '同步记录删除成功', status: 'success' })
   }
 }

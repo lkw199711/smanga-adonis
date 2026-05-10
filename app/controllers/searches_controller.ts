@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import { order_params } from '../utils/index.js'
 import { searchMangaValidator, searchChapterValidator } from '#validators/search'
 
@@ -15,7 +14,7 @@ export default class SearchesController {
     if (!user) {
       return response
         .status(401)
-        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+        .json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons =
@@ -69,13 +68,7 @@ export default class SearchesController {
       manga.unWatched = Math.max(total - watched, 0)
     })
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count })
   }
 
   public async chapters({ request, response }: HttpContext) {
@@ -88,7 +81,7 @@ export default class SearchesController {
     if (!user) {
       return response
         .status(401)
-        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+        .json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons =
@@ -127,13 +120,6 @@ export default class SearchesController {
       chapter.latest = latestMap.get(chapter.chapterId) || null
     })
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count,
-    })
-
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count })
   }
 }

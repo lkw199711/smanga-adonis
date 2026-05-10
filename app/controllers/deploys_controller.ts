@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { get_config } from '#utils/index'
-import { SResponse } from '#interfaces/response'
 import { runNpxCommand } from '#utils/npxShell'
 import { stopTimer } from '#services/timer_service'
 import prisma from '#start/prisma'
@@ -15,9 +14,7 @@ export default class DeploysController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || user.role !== 'admin') {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -27,13 +24,13 @@ export default class DeploysController {
     if (!(await this.checkAdmin(request, response))) return
 
     const config = get_config()
-    return response.json(new SResponse({ code: 0, message: '', data: config.sql }))
+    return response.json({ code: 200, message: '', data: config.sql })
   }
 
   public async database_test({ request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
-    return response.json(new SResponse({ code: 0, message: '连接成功', data: true }))
+    return response.json({ code: 200, message: '连接成功', data: true })
   }
 
   public async database_check({ request, response }: HttpContext) {
@@ -57,11 +54,11 @@ export default class DeploysController {
       await runNpxCommand('npx prisma generate --schema=' + schemaPath)
       await runNpxCommand('npx prisma migrate deploy --schema=' + schemaPath)
     } else {
-      return response.json(new SResponse({ code: 1, message: '数据库类型不支持', data: false }))
+      return response.status(400).json({ code: 400, message: '数据库类型不支持', data: false })
     }
 
     await prisma?.$connect()
 
-    return response.json(new SResponse({ code: 0, message: '连接成功', data: true }))
+    return response.json({ code: 200, message: '连接成功', data: true })
   }
 }

@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import prisma from '#start/prisma'
 import { get_config } from '#utils/index'
 import {
@@ -35,14 +34,7 @@ export default class HistoriesController {
       chapter.latest = chapterId ? latestMap.get(chapterId) || null : null
     })
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: Number((distinct as any)[0].count),
-    })
-
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: Number((distinct as any)[0].count) })
   }
 
   private async raw_sql_select_postgres({
@@ -137,8 +129,7 @@ export default class HistoriesController {
         mangaName: mangaName as any,
       },
     })
-    const saveResponse = new SResponse({ code: 0, message: '', data: history })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '', data: history })
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -146,10 +137,9 @@ export default class HistoriesController {
     const { historyId } = await idParamHistoryValidator.validate(params)
     const history = await prisma.history.findFirst({ where: { historyId, userId } })
     if (!history) {
-      return response.status(404).json(new SResponse({ code: 404, message: '记录不存在' }))
+      return response.status(404).json({ code: 404, message: '记录不存在' })
     }
-    const showResponse = new SResponse({ code: 0, message: '', data: history })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: history })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -160,16 +150,14 @@ export default class HistoriesController {
       where: { chapterId, userId },
       data: modifyData,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: history })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: history })
   }
 
   public async destroy({ request, params, response }: HttpContext) {
     const { userId } = request as any
     const { chapterId } = await chapterParamHistoryValidator.validate(params)
     const data = await prisma.history.deleteMany({ where: { chapterId, userId } })
-    const destroyResponse = new SResponse({ code: 0, message: '', data })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '', data })
   }
 
   public async read_all_chapters({ request, params, response }: HttpContext) {
@@ -209,8 +197,7 @@ export default class HistoriesController {
       })
     }
 
-    const saveResponse = new SResponse({ code: 0, message: '操作成功', data: null })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '操作成功', data: null })
   }
 
   public async unread_all_chapters({ request, params, response }: HttpContext) {
@@ -219,8 +206,7 @@ export default class HistoriesController {
     await prisma.history.deleteMany({ where: { mangaId, userId } })
     await prisma.latest.deleteMany({ where: { mangaId, userId } })
 
-    const saveResponse = new SResponse({ code: 0, message: '操作成功', data: null })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '操作成功', data: null })
   }
 
   /**
@@ -232,7 +218,6 @@ export default class HistoriesController {
     const history = await prisma.history.findFirst({
       where: { userId, chapterId },
     })
-    const showResponse = new SResponse({ code: 0, message: '', data: !!history })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: !!history })
   }
 }

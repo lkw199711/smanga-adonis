@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import { Prisma } from '@prisma/client'
 import {
   listLogValidator,
@@ -13,9 +12,7 @@ export default class LogsController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || user.role !== 'admin') {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -35,8 +32,7 @@ export default class LogsController {
       },
     }
     const [list, count] = await Promise.all([prisma.log.findMany(queryParams), prisma.log.count()])
-    const listResponse = new ListResponse({ code: 0, message: '', list, count })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count })
   }
 
   public async show({ request, params, response }: HttpContext) {
@@ -44,8 +40,7 @@ export default class LogsController {
 
     const { logId } = await idParamLogValidator.validate(params)
     const log = await prisma.log.findUnique({ where: { logId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: log })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: log })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -55,8 +50,7 @@ export default class LogsController {
     const log = await prisma.log.create({
       data: insertData as any,
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: log })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: log })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -68,8 +62,7 @@ export default class LogsController {
       where: { logId },
       data: modifyData as any,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: log })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: log })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -77,7 +70,6 @@ export default class LogsController {
 
     const { logId } = await idParamLogValidator.validate(params)
     const log = await prisma.log.delete({ where: { logId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: log })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: log })
   }
 }

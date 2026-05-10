@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { SResponse } from '#interfaces/response'
 import trackerNodeService from '#services/tracker/tracker_node_service'
 import { log_tracker_error } from '#utils/p2p_log'
 import { resolve_client_ip } from '#utils/ip_resolver'
@@ -31,12 +30,12 @@ export default class TrackerNodesController {
 
       const result = await trackerNodeService.register(payload, clientIp, userAgent)
 
-      return response.json(new SResponse({ code: 0, message: '节点注册成功', data: result }))
+      return response.json({ code: 200, message: '节点注册成功', data: result })
     } catch (err: any) {
       log_tracker_error('node.register', err)
       return response
         .status(400)
-        .json(new SResponse({ code: 1, message: err.message || '注册失败', status: 'register failed' }))
+        .json({ code: 400, message: err.message || '注册失败', status: 'register failed' })
     }
   }
 
@@ -52,12 +51,10 @@ export default class TrackerNodesController {
 
       const result = await trackerNodeService.heartbeat(nodeId, payload, clientIp)
 
-      return response.json(new SResponse({ code: 0, message: '', data: result }))
+      return response.json({ code: 200, message: '', data: result })
     } catch (err: any) {
       log_tracker_error('node.heartbeat', err)
-      return response
-        .status(500)
-        .json(new SResponse({ code: 1, message: err.message || '心跳失败' }))
+      return response.status(500).json({ code: 500, message: err.message || '心跳失败' })
     }
   }
 
@@ -69,10 +66,10 @@ export default class TrackerNodesController {
       const nodeId = (request as any).trackerNodeId as string
       const data = await updateTrackerNodeValidator.validate(request.all())
       const node = await trackerNodeService.update(nodeId, data)
-      return response.json(new SResponse({ code: 0, message: '更新成功', data: node }))
+      return response.json({ code: 200, message: '更新成功', data: node })
     } catch (err: any) {
       log_tracker_error('node.update', err)
-      return response.status(500).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(500).json({ code: 500, message: err.message })
     }
   }
 
@@ -83,10 +80,10 @@ export default class TrackerNodesController {
     try {
       const nodeId = (request as any).trackerNodeId as string
       await trackerNodeService.deregister(nodeId)
-      return response.json(new SResponse({ code: 0, message: '节点已注销' }))
+      return response.json({ code: 200, message: '节点已注销' })
     } catch (err: any) {
       log_tracker_error('node.deregister', err)
-      return response.status(500).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(500).json({ code: 500, message: err.message })
     }
   }
 
@@ -103,8 +100,8 @@ export default class TrackerNodesController {
   async whoami(ctx: HttpContext) {
     const clientIp = resolve_client_ip(ctx)
     return ctx.response.json(
-      new SResponse({
-        code: 0,
+      {
+        code: 200,
         message: '',
         data: {
           ip: clientIp.ip,
@@ -113,7 +110,7 @@ export default class TrackerNodesController {
           reachable: clientIp.category === 'public',
           serverTime: Date.now(),
         },
-      })
+      }
     )
   }
 }

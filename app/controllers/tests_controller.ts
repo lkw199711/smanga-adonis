@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 // import { TaskPriority } from '#type/index'
-import { SResponse } from '#interfaces/response'
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 import * as path from 'path'
@@ -20,7 +19,7 @@ export default class TestsController {
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
       response
         .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+        .json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -32,7 +31,7 @@ export default class TestsController {
     const str = 'A:\\06download\\02韩漫'
     const fsStat = fs.statSync(str)
     const mtimeMs = fsStat.mtime
-    const res = new SResponse({ code: 0, data: mtimeMs, message: '操作成功' })
+    const res = { code: 200, data: mtimeMs, message: '操作成功' }
     return response.status(200).send(res)
   }
 

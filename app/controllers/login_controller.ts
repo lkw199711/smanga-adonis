@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
 import { get_config } from '#utils/index'
 import { v4 as uuidv4 } from 'uuid'
@@ -14,9 +13,7 @@ export default class LoginController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || user.role !== 'admin') {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -26,13 +23,7 @@ export default class LoginController {
     if (!(await this.checkAdmin(request, response))) return
 
     const list = await prisma.login.findMany()
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   public async show({ request, params, response }: HttpContext) {
@@ -40,8 +31,7 @@ export default class LoginController {
 
     const { loginId } = await idParamLoginValidator.validate(params)
     const login = await prisma.login.findUnique({ where: { loginId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: login })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: login })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -63,7 +53,7 @@ export default class LoginController {
           userAgent: request.header('user-agent'),
         },
       })
-      return response.status(401).json(new SResponse({ code: 1, message: '用户不存在', data: login }))
+      return response.status(401).json({ code: 401, message: '用户不存在', data: login })
     }
     if (user.passWord !== md5(passWord)) {
       login = await prisma.login.create({
@@ -75,7 +65,7 @@ export default class LoginController {
           userAgent: request.header('user-agent'),
         },
       })
-      return response.status(401).json(new SResponse({ code: 1, message: '密码错误', data: login }))
+      return response.status(401).json({ code: 401, message: '密码错误', data: login })
     }
 
     // 生成token
@@ -97,16 +87,11 @@ export default class LoginController {
         userAgent: request.header('user-agent'),
       },
     })
-    const saveResponse = new SResponse({
-      code: 0,
+    return response.json({
+      code: 200,
       message: '登录成功',
-      data: {
-        ...login,
-        serverKey: get_config()?.serverKey,
-        userRole: user.role,
-      },
+      data: { ...login, serverKey: get_config()?.serverKey, userRole: user.role },
     })
-    return response.json(saveResponse)
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -118,8 +103,7 @@ export default class LoginController {
       where: { loginId },
       data: modifyData,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: login })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: login })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -127,7 +111,6 @@ export default class LoginController {
 
     const { loginId } = await idParamLoginValidator.validate(params)
     const login = await prisma.login.delete({ where: { loginId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: login })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: login })
   }
 }

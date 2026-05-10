@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { ListResponse, SResponse } from '#interfaces/response'
 import trackerGroupService from '#services/tracker/tracker_group_service'
 import { log_tracker_error } from '#utils/p2p_log'
 import {
@@ -24,8 +23,8 @@ export default class TrackerGroupsController {
       const payload = await createTrackerGroupValidator.validate(request.all())
       const group = await trackerGroupService.create(nodeId, payload)
       return response.json(
-        new SResponse({
-          code: 0,
+        {
+          code: 200,
           message: '群组创建成功',
           data: {
             groupNo: group.groupNo,
@@ -37,11 +36,11 @@ export default class TrackerGroupsController {
             memberCount: group.memberCount,
             ownerRole: 'owner',
           },
-        })
+        }
       )
     } catch (err: any) {
       log_tracker_error('group.create', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -54,8 +53,8 @@ export default class TrackerGroupsController {
       const payload = await joinTrackerGroupValidator.validate(request.all())
       const group = await trackerGroupService.join(nodeId, payload)
       return response.json(
-        new SResponse({
-          code: 0,
+        {
+          code: 200,
           message: '加入成功',
           data: {
             trackerGroupId: group.trackerGroupId,
@@ -66,11 +65,11 @@ export default class TrackerGroupsController {
             maxMembers: group.maxMembers,
             memberCount: group.memberCount,
           },
-        })
+        }
       )
     } catch (err: any) {
       log_tracker_error('group.join', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -82,10 +81,10 @@ export default class TrackerGroupsController {
       const nodeId = (request as any).trackerNodeId as string
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       await trackerGroupService.leave(nodeId, groupNo)
-      return response.json(new SResponse({ code: 0, message: '已退出群组' }))
+      return response.json({ code: 200, message: '已退出群组' })
     } catch (err: any) {
       log_tracker_error('group.leave', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -97,11 +96,11 @@ export default class TrackerGroupsController {
       const nodeId = (request as any).trackerNodeId as string
       const list = await trackerGroupService.listMine(nodeId)
       return response.json(
-        new ListResponse({ code: 0, message: '', list: list as any, count: list.length })
+        { code: 200, message: '', list: list as any, count: list.length }
       )
     } catch (err: any) {
       log_tracker_error('group.listMine', err)
-      return response.status(500).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(500).json({ code: 500, message: err.message })
     }
   }
 
@@ -113,11 +112,11 @@ export default class TrackerGroupsController {
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const list = await trackerGroupService.listMembers(groupNo)
       return response.json(
-        new ListResponse({ code: 0, message: '', list: list as any, count: list.length })
+        { code: 200, message: '', list: list as any, count: list.length }
       )
     } catch (err: any) {
       log_tracker_error('group.members', err)
-      return response.status(404).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(404).json({ code: 404, message: err.message })
     }
   }
 
@@ -129,10 +128,10 @@ export default class TrackerGroupsController {
       const operator = (request as any).trackerNodeId as string
       const { groupNo, nodeId } = await trackerGroupKickParamValidator.validate(params)
       await trackerGroupService.kick(operator, groupNo, nodeId)
-      return response.json(new SResponse({ code: 0, message: '已移出群组' }))
+      return response.json({ code: 200, message: '已移出群组' })
     } catch (err: any) {
       log_tracker_error('group.kick', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -144,10 +143,10 @@ export default class TrackerGroupsController {
       const operator = (request as any).trackerNodeId as string
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const data = await trackerGroupService.dismiss(operator, groupNo)
-      return response.json(new SResponse({ code: 0, message: '群组已解散', data }))
+      return response.json({ code: 200, message: '群组已解散', data })
     } catch (err: any) {
       log_tracker_error('group.dismiss', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 
@@ -164,10 +163,10 @@ export default class TrackerGroupsController {
         groupNo,
         expiresHours
       )
-      return response.json(new SResponse({ code: 0, message: '邀请码生成成功', data }))
+      return response.json({ code: 200, message: '邀请码生成成功', data })
     } catch (err: any) {
       log_tracker_error('group.invite', err)
-      return response.status(400).json(new SResponse({ code: 1, message: err.message }))
+      return response.status(400).json({ code: 400, message: err.message })
     }
   }
 }

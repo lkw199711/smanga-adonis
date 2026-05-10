@@ -2,7 +2,6 @@ import { is_img, path_poster, path_compress } from '#utils/index'
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 import path from 'path'
-import { SResponse } from '#interfaces/response'
 import { imageFileBodyValidator, uploadImageBodyValidator } from '#validators/image'
 import prisma from '#start/prisma'
 
@@ -60,7 +59,7 @@ export default class ImagesController {
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限操作', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限操作', status: 'no permission' })
     }
 
     // 获取请求参数
@@ -69,22 +68,16 @@ export default class ImagesController {
     // 获取上传的文件
     const imageFile = request.file('image')
     if (!imageFile) {
-      const errorResponse = new SResponse({
-        code: 1,
-        message: '未找到上传的图片文件',
-        error: 'No image file uploaded',
-      })
-      return response.status(400).json(errorResponse)
+      return response
+        .status(400)
+        .json({ code: 400, message: '未找到上传的图片文件', error: 'No image file uploaded' })
     }
 
     // 验证文件类型
     if (!is_img(imageFile.clientName)) {
-      const errorResponse = new SResponse({
-        code: 1,
-        message: '不支持的图片格式',
-        error: 'Unsupported image format',
-      })
-      return response.status(400).json(errorResponse)
+      return response
+        .status(400)
+        .json({ code: 400, message: '不支持的图片格式', error: 'Unsupported image format' })
     }
 
     // 获取保存目录
@@ -108,12 +101,9 @@ export default class ImagesController {
       posterType = 'media'
       bindId = mediaId
     } else {
-      const errorResponse = new SResponse({
-        code: 1,
-        message: '必须提供mangaId、chapterId或mediaId',
-        error: 'Missing required parameters',
-      })
-      return response.status(400).json(errorResponse)
+      return response
+        .status(400)
+        .json({ code: 400, message: '必须提供mangaId、chapterId或mediaId', error: 'Missing required parameters' })
     }
     const fileName = `smanga_${posterType}_${bindId}.jpg`
     const filePath = path.join(posterDir, fileName)
@@ -125,17 +115,10 @@ export default class ImagesController {
     })
 
     // 返回成功响应
-    const successResponse = new SResponse({
-      code: 0,
+    return response.status(200).json({
+      code: 200,
       message: '图片上传成功',
-      data: {
-        filePath: filePath,
-        fileName: fileName,
-        mangaId: mangaId,
-        chapterId: chapterId,
-        mediaId: mediaId,
-      },
+      data: { filePath, fileName, mangaId, chapterId, mediaId },
     })
-    return response.status(200).json(successResponse)
   }
 }

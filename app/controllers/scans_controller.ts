@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import {
   idParamScanValidator,
   createScanValidator,
@@ -11,9 +10,7 @@ export default class ScansController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -23,13 +20,7 @@ export default class ScansController {
     if (!(await this.checkAdmin(request, response))) return
 
     const list = await prisma.scan.findMany()
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -39,8 +30,7 @@ export default class ScansController {
     const scan = await prisma.scan.findFirst({
       where: { scanId },
     })
-    const showResponse = new SResponse({ code: 0, message: '', data: scan })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: scan })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -50,8 +40,7 @@ export default class ScansController {
     const scan = await prisma.scan.create({
       data: insertData as any,
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: scan })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: scan })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -63,8 +52,7 @@ export default class ScansController {
       where: { scanId },
       data: modifyData as any,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: scan })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: scan })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -72,7 +60,6 @@ export default class ScansController {
 
     const { scanId } = await idParamScanValidator.validate(params)
     const scan = await prisma.scan.deleteMany({ where: { scanId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: scan })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: scan })
   }
 }

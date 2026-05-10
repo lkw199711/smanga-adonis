@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import { s_delete } from '#utils/index'
 import { addTask } from '#services/queue_service'
 import {
@@ -17,9 +16,7 @@ export default class CompressesController {
     const userId = request.userId
     const user = await prisma.user.findUnique({ where: { userId } })
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '没有权限访问', status: 'no permission' })
       return false
     }
     return true
@@ -40,13 +37,7 @@ export default class CompressesController {
       prisma.compress.count(),
     ])
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -54,8 +45,7 @@ export default class CompressesController {
 
     const data = await createCompressValidator.validate(request.all())
     const compress = await prisma.compress.create({ data: data as any })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: compress })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: compress })
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -64,10 +54,9 @@ export default class CompressesController {
     const { compressId } = await idParamCompressValidator.validate(params)
     const compress = await prisma.compress.findUnique({ where: { compressId } })
     if (!compress) {
-      return response.status(404).json(new SResponse({ code: 404, message: '记录不存在' }))
+      return response.status(404).json({ code: 404, message: '记录不存在' })
     }
-    const showResponse = new SResponse({ code: 0, message: '', data: compress })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: compress })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -79,8 +68,7 @@ export default class CompressesController {
       where: { compressId },
       data: data as any,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: compress })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: compress })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -89,7 +77,7 @@ export default class CompressesController {
     const { compressId } = await idParamCompressValidator.validate(params)
     const compress = await prisma.compress.findUnique({ where: { compressId } })
     if (!compress) {
-      return response.status(404).json(new SResponse({ code: 404, message: '记录不存在' }))
+      return response.status(404).json({ code: 404, message: '记录不存在' })
     }
 
     // 先删文件再删记录
@@ -100,8 +88,7 @@ export default class CompressesController {
     }
     await prisma.compress.delete({ where: { compressId } })
 
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: compress })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: compress })
   }
 
   // 批量删除
@@ -127,8 +114,7 @@ export default class CompressesController {
       where: { compressId: { in: compressIds } },
     })
 
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: deleteResponse })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: deleteResponse })
   }
 
   public async clear({ request, response }: HttpContext) {
@@ -139,7 +125,6 @@ export default class CompressesController {
       command: 'clearCompressCache',
       args: {},
     })
-    const clearResponse = new SResponse({ code: 0, message: '清除任务新增成功' })
-    return response.json(clearResponse)
+    return response.json({ code: 200, message: '清除任务新增成功' })
   }
 }

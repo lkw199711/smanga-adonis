@@ -14,7 +14,6 @@
  */
 
 import type { HttpContext } from '@adonisjs/core/http'
-import { SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
 import { p2pVerifyEchoValidator } from '#validators/p2p'
@@ -37,32 +36,21 @@ export default class P2PVerifyController {
     try {
       const p2p = get_config()?.p2p
       if (!p2p?.enable || !p2p?.role?.node) {
-        return response
-          .status(503)
-          .json(new SResponse({ code: 1, message: 'P2P 未启用', status: 'p2p disabled' }))
+        return response.status(503).json({ code: 503, message: 'P2P 未启用', status: 'p2p disabled' })
       }
 
       const { challenge } = await p2pVerifyEchoValidator.validate(request.qs())
 
       const localNodeId: string = p2p?.node?.nodeId || ''
 
-      return response.json(
-        new SResponse({
-          code: 0,
-          message: 'ok',
-          data: {
-            challenge,
-            nodeId: localNodeId,
-            serverTime: Date.now(),
-            version: 'smanga-adonis',
-          },
-        })
-      )
+      return response.json({
+        code: 200,
+        message: 'ok',
+        data: { challenge, nodeId: localNodeId, serverTime: Date.now(), version: 'smanga-adonis' },
+      })
     } catch (err: any) {
       log_p2p_error('verify.echo', err)
-      return response
-        .status(500)
-        .json(new SResponse({ code: 1, message: err?.message || 'verify failed' }))
+      return response.status(500).json({ code: 500, message: err?.message || 'verify failed' })
     }
   }
 }

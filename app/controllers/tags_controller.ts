@@ -1,7 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import _ from 'lodash'
 import {
   listTagValidator,
@@ -18,9 +17,7 @@ export default class TagsController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -29,14 +26,10 @@ export default class TagsController {
   public async index({ request, response }: HttpContext) {
     const { page, pageSize } = await listTagValidator.validate(request.qs())
 
-    let listResponse = null
     if (page) {
-      listResponse = await this.paginate(page, pageSize ?? 10)
-    } else {
-      listResponse = await this.no_paginate({ request, response })
+      return response.json(await this.paginate(page, pageSize ?? 10))
     }
-
-    return response.json(listResponse)
+    return await this.no_paginate({ request, response })
   }
 
   // 不分页
@@ -46,7 +39,7 @@ export default class TagsController {
     if (!user) {
       return response
         .status(401)
-        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+        .json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons =
@@ -58,7 +51,7 @@ export default class TagsController {
 
     // 非管理员且无媒体库权限时返回空列表
     if (!isAdmin && mediaIds.length === 0) {
-      return new ListResponse({ code: 0, message: '', list: [], count: 0 })
+      return response.json({ code: 200, message: '', list: [], count: 0 })
     }
 
     const tagList: any[] = await prisma.$queryRaw`SELECT 
@@ -87,12 +80,7 @@ export default class TagsController {
           COUNT(history.historyId) DESC
       `
 
-    return new ListResponse({
-      code: 0,
-      message: '',
-      list: tagList,
-      count: tagList.length,
-    })
+    return response.json({ code: 200, message: '', list: tagList, count: tagList.length })
   }
 
   // 分页
@@ -108,19 +96,13 @@ export default class TagsController {
       prisma.tag.count({ where: queryParams.where }),
     ])
 
-    return new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: count,
-    })
+    return { code: 200, message: '', list, count }
   }
 
   public async show({ params, response }: HttpContext) {
     const { tagId } = await idParamTagValidator.validate(params)
     const tag = await prisma.tag.findUnique({ where: { tagId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: tag })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: tag })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -129,8 +111,7 @@ export default class TagsController {
     const tag = await prisma.tag.create({
       data: { ...insertData, userId },
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: tag })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: tag })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -142,8 +123,7 @@ export default class TagsController {
       where: { tagId },
       data: modifyData,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: tag })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: tag })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -153,8 +133,7 @@ export default class TagsController {
     // 删除关联数据
     await prisma.mangaTag.deleteMany({ where: { tagId } })
     const tag = await prisma.tag.delete({ where: { tagId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: tag })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: tag })
   }
 
   // 批量删除
@@ -169,8 +148,7 @@ export default class TagsController {
     const deleteResponse = await prisma.tag.deleteMany({
       where: { tagId: { in: tagIds } },
     })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: deleteResponse })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: deleteResponse })
   }
 
   public async manga_tags({ params, response }: HttpContext) {
@@ -184,14 +162,7 @@ export default class TagsController {
 
     const list = mangaTags.map((item) => Object.assign(item.tag, { mangaTagId: item.mangaTagId }))
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
-
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   public async tags_manga({ request, response }: HttpContext) {
@@ -202,7 +173,7 @@ export default class TagsController {
     // tagIds 支持 CSV 字符串或数组,统一走 shared 工具转正整数数组
     const tagIds = csvToPositiveIds(query.tagIds)
     if (!tagIds.length) {
-      return response.status(400).json(new SResponse({ code: 400, message: 'tagIds不能为空' }))
+      return response.status(400).json({ code: 400, message: 'tagIds不能为空' })
     }
 
     const userId = (request as any).userId
@@ -210,7 +181,7 @@ export default class TagsController {
     if (!user) {
       return response
         .status(401)
-        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+        .json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons =
@@ -238,13 +209,6 @@ export default class TagsController {
     const uniqueMangaTags = _.uniqBy(mangaTags, 'mangaId')
     const list = uniqueMangaTags.map((item) => Object.assign(item.manga, { mangaTagId: item.mangaTagId }))
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
-
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 }

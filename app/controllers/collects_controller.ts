@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import {
   listCollectValidator,
   idParamCollectValidator,
@@ -18,13 +17,7 @@ export default class CollectsController {
   public async index({ request, response }: HttpContext) {
     const { userId } = request as any
     const collect = await prisma.collect.findMany({ where: { userId } })
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list: collect,
-      count: collect.length,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list: collect, count: collect.length })
   }
 
   public async mangas({ request, response }: HttpContext) {
@@ -83,18 +76,12 @@ export default class CollectsController {
       manga.unWatched = total - watched
     })
 
-    const listResponse = new ListResponse({
-      code: 0,
+    return response.json({
+      code: 200,
       message: '',
-      list: list.map((item) => {
-        return {
-          ...item,
-          ...item.manga,
-        }
-      }),
+      list: list.map((item) => ({ ...item, ...item.manga })),
       count,
     })
-    return response.json(listResponse)
   }
 
   public async chapters({ request, response }: HttpContext) {
@@ -143,19 +130,12 @@ export default class CollectsController {
       chapter.latest = chapter.chapterId ? latestMap.get(chapter.chapterId) || null : null
     })
 
-    const listResponse = new ListResponse({
-      code: 0,
+    return response.json({
+      code: 200,
       message: '',
-      list: list.map((item) => {
-        return {
-          ...item,
-          ...item.chapter,
-          ...item.manga,
-        }
-      }),
+      list: list.map((item) => ({ ...item, ...item.chapter, ...item.manga })),
       count,
     })
-    return response.json(listResponse)
   }
 
   public async collect_manga({ params, request, response }: HttpContext) {
@@ -169,8 +149,7 @@ export default class CollectsController {
 
     if (existing) {
       const deleted = await prisma.collect.delete({ where: { collectId: existing.collectId } })
-      const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: deleted })
-      return response.json(destroyResponse)
+      return response.json({ code: 200, message: '取消收藏成功', data: deleted })
     } else {
       const collect = await prisma.collect.create({
         data: {
@@ -182,8 +161,7 @@ export default class CollectsController {
         } as any,
       })
 
-      const saveResponse = new SResponse({ code: 0, message: '收藏成功', data: collect })
-      return response.json(saveResponse)
+      return response.json({ code: 200, message: '收藏成功', data: collect })
     }
   }
 
@@ -200,8 +178,7 @@ export default class CollectsController {
 
     if (existing) {
       const deleted = await prisma.collect.delete({ where: { collectId: existing.collectId } })
-      const destroyResponse = new SResponse({ code: 0, message: '取消收藏成功', data: deleted })
-      return response.json(destroyResponse)
+      return response.json({ code: 200, message: '取消收藏成功', data: deleted })
     } else {
       const collect = await prisma.collect.create({
         data: {
@@ -215,8 +192,7 @@ export default class CollectsController {
         } as any,
       })
 
-      const saveResponse = new SResponse({ code: 0, message: '收藏成功', data: collect })
-      return response.json(saveResponse)
+      return response.json({ code: 200, message: '收藏成功', data: collect })
     }
   }
 
@@ -225,8 +201,7 @@ export default class CollectsController {
     const data = await createCollectValidator.validate(request.all())
     const collect = await prisma.collect.create({ data: { ...data, userId } as any })
 
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: collect })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: collect })
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -234,10 +209,9 @@ export default class CollectsController {
     const { collectId } = await idParamCollectValidator.validate(params)
     const collect = await prisma.collect.findFirst({ where: { collectId, userId } })
     if (!collect) {
-      return response.status(404).json(new SResponse({ code: 404, message: '收藏不存在' }))
+      return response.status(404).json({ code: 404, message: '收藏不存在' })
     }
-    const showResponse = new SResponse({ code: 0, message: '', data: collect })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: collect })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -246,7 +220,7 @@ export default class CollectsController {
 
     const existing = await prisma.collect.findFirst({ where: { collectId, userId } })
     if (!existing) {
-      return response.status(404).json(new SResponse({ code: 404, message: '收藏不存在' }))
+      return response.status(404).json({ code: 404, message: '收藏不存在' })
     }
 
     const data = await updateCollectValidator.validate(request.all())
@@ -254,8 +228,7 @@ export default class CollectsController {
       where: { collectId },
       data,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: collect })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: collect })
   }
 
   public async is_collect({ request, params, response }: HttpContext) {
@@ -267,7 +240,7 @@ export default class CollectsController {
       const collect = await prisma.collect.findFirst({
         where: { mangaId, chapterId: null, userId },
       })
-      return response.json(new SResponse({ code: 0, message: '', data: !!collect }))
+      return response.json({ code: 200, message: '', data: !!collect })
     }
 
     if (params.chapterId !== undefined) {
@@ -275,10 +248,10 @@ export default class CollectsController {
       const collect = await prisma.collect.findFirst({
         where: { chapterId, userId },
       })
-      return response.json(new SResponse({ code: 0, message: '', data: !!collect }))
+      return response.json({ code: 200, message: '', data: !!collect })
     }
 
-    return response.json(new SResponse({ code: 0, message: '', data: false }))
+    return response.json({ code: 200, message: '', data: false })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -287,11 +260,10 @@ export default class CollectsController {
 
     const existing = await prisma.collect.findFirst({ where: { collectId, userId } })
     if (!existing) {
-      return response.status(404).json(new SResponse({ code: 404, message: '收藏不存在' }))
+      return response.status(404).json({ code: 404, message: '收藏不存在' })
     }
 
     const collect = await prisma.collect.delete({ where: { collectId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: collect })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: collect })
   }
 }

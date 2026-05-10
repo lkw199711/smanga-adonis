@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import {
   idParamTaskSuccessValidator,
   createTaskSuccessValidator,
@@ -11,9 +10,7 @@ export default class TaskSuccessesController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -23,13 +20,7 @@ export default class TaskSuccessesController {
     if (!(await this.checkAdmin(request, response))) return
 
     const list = await prisma.taskSuccess.findMany()
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -37,8 +28,7 @@ export default class TaskSuccessesController {
 
     const { taskSuccessId } = await idParamTaskSuccessValidator.validate(params)
     const taskSuccess = await prisma.taskSuccess.findUnique({ where: { taskId: taskSuccessId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: taskSuccess })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: taskSuccess })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -48,8 +38,7 @@ export default class TaskSuccessesController {
     const taskSuccess = await prisma.taskSuccess.create({
       data: insertData as any,
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: taskSuccess })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: taskSuccess })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -61,8 +50,7 @@ export default class TaskSuccessesController {
       where: { taskId: taskSuccessId },
       data: modifyData as any,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: taskSuccess })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: taskSuccess })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -70,7 +58,6 @@ export default class TaskSuccessesController {
 
     const { taskSuccessId } = await idParamTaskSuccessValidator.validate(params)
     const taskSuccess = await prisma.taskSuccess.delete({ where: { taskId: taskSuccessId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: taskSuccess })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: taskSuccess })
   }
 }

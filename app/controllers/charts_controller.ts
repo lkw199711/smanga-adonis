@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { SResponse } from '../interfaces/response.js'
 import { sliceChartValidator } from '#validators/chart'
 
 export default class ChartsController {
@@ -25,7 +24,7 @@ export default class ChartsController {
       typeObj[item.browseType] = item._count.browseType
     })
 
-    return response.json(new SResponse({ code: 0, data: typeObj, message: '' }))
+    return response.json({ code: 200, data: typeObj, message: '' })
   }
 
   public async tag({ request, response }: HttpContext) {
@@ -52,17 +51,15 @@ export default class ChartsController {
     })
     const tagMap = new Map(tags.map((t) => [t.tagId, t.tagName]))
 
-    return response.json(
-      new SResponse({
-        code: 0,
-        data: tagCounts.map((item) => ({
-          tagId: item.tagId,
-          tagName: tagMap.get(item.tagId) || '',
-          count: item._count.tagId,
-        })),
-        message: '',
-      })
-    )
+    return response.json({
+      code: 200,
+      data: tagCounts.map((item) => ({
+        tagId: item.tagId,
+        tagName: tagMap.get(item.tagId) || '',
+        count: item._count.tagId,
+      })),
+      message: '',
+    })
   }
 
   public async ranking({ request, response }: HttpContext) {
@@ -90,17 +87,15 @@ export default class ChartsController {
     })
     const mangaMap = new Map(mangas.map((m) => [m.mangaId, m.mangaName]))
 
-    return response.json(
-      new SResponse({
-        code: 0,
-        data: mangaRanking.map((item) => ({
-          mangaId: item.mangaId,
-          mangaName: mangaMap.get(item.mangaId) || '',
-          count: item._count.mangaId,
-        })),
-        message: '',
-      })
-    )
+    return response.json({
+      code: 200,
+      data: mangaRanking.map((item) => ({
+        mangaId: item.mangaId,
+        mangaName: mangaMap.get(item.mangaId) || '',
+        count: item._count.mangaId,
+      })),
+      message: '',
+    })
   }
 
   public async frequency({ request, response }: HttpContext) {
@@ -146,6 +141,6 @@ export default class ChartsController {
       (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
     )
 
-    return response.json(new SResponse({ code: 0, data: result, message: '' }))
+    return response.json({ code: 200, data: result, message: '' })
   }
 }

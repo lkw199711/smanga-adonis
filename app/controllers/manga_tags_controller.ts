@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import {
   idParamMangaTagValidator,
   createMangaTagValidator,
@@ -11,9 +10,7 @@ export default class MangaTagsController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || user.role !== 'admin') {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -21,20 +18,13 @@ export default class MangaTagsController {
 
   public async index({ response }: HttpContext) {
     const list = await prisma.mangaTag.findMany()
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   public async show({ params, response }: HttpContext) {
     const { mangaTagId } = await idParamMangaTagValidator.validate(params)
     const mangaTag = await prisma.mangaTag.findUnique({ where: { mangaTagId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: mangaTag })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: mangaTag })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -44,8 +34,7 @@ export default class MangaTagsController {
     const mangaTag = await prisma.mangaTag.create({
       data: insertData,
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: mangaTag })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: mangaTag })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -57,8 +46,7 @@ export default class MangaTagsController {
       where: { mangaTagId },
       data: modifyData,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: mangaTag })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: mangaTag })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -66,7 +54,6 @@ export default class MangaTagsController {
 
     const { mangaTagId } = await idParamMangaTagValidator.validate(params)
     const mangaTag = await prisma.mangaTag.delete({ where: { mangaTagId } })
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: mangaTag })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: mangaTag })
   }
 }

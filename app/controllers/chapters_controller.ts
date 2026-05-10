@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { path_compress, order_params, extract_numbers, get_config, s_delete } from '#utils/index'
@@ -30,7 +29,7 @@ export default class ChaptersController {
       if (!manga) {
         return response
           .status(404)
-          .json(new SResponse({ code: 404, message: '漫画不存在', status: 'manga not exist' }))
+          .json({ code: 404, message: '漫画不存在', status: 'manga not exist' })
       }
       mediaId = manga.mediaId
     }
@@ -39,7 +38,7 @@ export default class ChaptersController {
     if (!user) {
       return response
         .status(401)
-        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+        .json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons = await prisma.mediaPermisson.findMany({
@@ -52,7 +51,7 @@ export default class ChaptersController {
       if (mediaId !== undefined && !mediaIds.includes(mediaId)) {
         return response
           .status(403)
-          .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+          .json({ code: 403, message: '没有权限访问', status: 'no permission' })
       }
     }
 
@@ -107,12 +106,12 @@ export default class ChaptersController {
       chapter.latest = chapter.latests?.length ? chapter.latests[0] : null
     })
 
-    return new ListResponse({
-      code: 0,
+    return {
+      code: 200,
       message: '',
       list,
       count: list.length,
-    })
+    }
   }
 
   // 分页
@@ -156,30 +155,29 @@ export default class ChaptersController {
       }
     })
 
-    return new ListResponse({
-      code: 0,
+    return {
+      code: 200,
       message: '',
       list,
       count,
-    })
+    }
   }
 
   public async show({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
-      return response.status(404).json(new SResponse({ code: 404, message: '章节不存在' }))
+      return response.status(404).json({ code: 404, message: '章节不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
-    const showResponse = new SResponse({ code: 0, message: '', data: chapter })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: chapter })
   }
 
   public async first({ request, response }: HttpContext) {
@@ -188,12 +186,12 @@ export default class ChaptersController {
     const userId = (request as any).userId
     const manga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!manga) {
-      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+      return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
     if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     const chapter = await prisma.chapter.findFirst({
@@ -201,8 +199,7 @@ export default class ChaptersController {
       orderBy: order_params(order),
     })
 
-    const showResponse = new SResponse({ code: 0, message: '', data: chapter })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: chapter })
   }
 
   public async images({ params, request, response }: HttpContext) {
@@ -210,26 +207,24 @@ export default class ChaptersController {
     const { orderChapterByNumber, reTry } = await imagesChapterValidator.validate(request.all())
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
-      return response.json(
-        new SResponse({ code: 1, message: '章节不存在', data: [], status: 'compressed' })
-      )
+      return response.status(404).json({ code: 404, message: '章节不存在', data: [], status: 'compressed' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     if (!fs.existsSync(chapter.chapterPath)) {
-      return response.json(
-        new SResponse({ code: 1, message: '章节文件不存在', data: [], status: 'compressed' })
-      )
+      return response
+        .status(404)
+        .json({ code: 404, message: '章节文件不存在', data: [], status: 'compressed' })
     }
 
     let images: string[] = []
-    let imagesResponse: SResponse
+    let imagesResponse: any
     // 查询解压记录
     let compress: any = await prisma.compress.findUnique({ where: { chapterId } })
     const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
@@ -239,21 +234,21 @@ export default class ChaptersController {
     if (chapter.chapterType === 'img') {
       // 纯图片章节
       images = image_files(chapter.chapterPath, exclude)
-      imagesResponse = new SResponse({
-        code: 0,
+      imagesResponse = {
+        code: 200,
         message: '',
         data: images,
         status: 'compressed',
-      })
+      }
     } else if (chapter.chapterType === 'pdf') {
       // PDF章节，直接返回PDF文件路径
       images = [chapter.chapterPath]
-      imagesResponse = new SResponse({
-        code: 0,
+      imagesResponse = {
+        code: 200,
         message: '',
         data: images,
         status: 'compressed',
-      })
+      }
     } else if (!compress && get_config().compress.sync) {
       // 同步解压缩
       const compressPath = path.join(path_compress(), `smanga_chapter_${chapter.chapterId}`)
@@ -278,12 +273,12 @@ export default class ChaptersController {
           },
         })
         .catch((_error: any) => {
-          imagesResponse = new SResponse({
-            code: 0,
+          imagesResponse = {
+            code: 202,
             message: '',
             data: images,
             status: 'compressing',
-          })
+          }
 
           return response.json(imagesResponse)
         })
@@ -294,12 +289,12 @@ export default class ChaptersController {
         data: { compressStatus: 'compressed' },
       })
       images = image_files(compressPath, exclude)
-      imagesResponse = new SResponse({
-        code: 0,
+      imagesResponse = {
+        code: 200,
         message: '',
         data: images,
         status: 'compressed',
-      })
+      }
 
       // 清理解压缓存
       if (get_config().compress.autoClear === 1) {
@@ -334,12 +329,12 @@ export default class ChaptersController {
           },
         })
         .catch((_error: any) => {
-          imagesResponse = new SResponse({
-            code: 0,
+          imagesResponse = {
+            code: 202,
             message: '',
             data: images,
             status: 'compressing',
-          })
+          }
 
           return response.json(imagesResponse)
         })
@@ -359,24 +354,24 @@ export default class ChaptersController {
         timeout: 1000 * 60 * 10,
       })
 
-      imagesResponse = new SResponse({
-        code: 0,
+      imagesResponse = {
+        code: 202,
         message: '',
         data: images,
         status: 'compressing',
-      })
+      }
     } else if (!compressPathExists && reTry !== undefined && reTry < 10) {
       // 等待解压任务
-      imagesResponse = new SResponse({ code: 1, message: '', data: [], status: 'compressing' })
+      imagesResponse = { code: 202, message: '', data: [], status: 'compressing' }
     } else if (compressPathExists) {
       // 已完成解压缩的章节
       images = image_files(compress.compressPath, exclude)
-      imagesResponse = new SResponse({
-        code: 0,
+      imagesResponse = {
+        code: 200,
         message: '',
         data: images,
         status: compress.compressStatus,
-      })
+      }
 
       // 清理解压缓存
       if (get_config().compress.autoClear === 1) {
@@ -390,12 +385,12 @@ export default class ChaptersController {
     } else {
       // 解压任务超时，删除任务记录
       await prisma.compress.delete({ where: { chapterId } })
-      imagesResponse = new SResponse({
-        code: 1,
+      imagesResponse = {
+        code: 500,
         message: '章节解压超时',
         data: [],
         status: 'failed',
-      })
+      }
     }
 
     // 将返回的图片按数字排序
@@ -416,8 +411,7 @@ export default class ChaptersController {
     const chapter = await prisma.chapter.create({
       data: insertData as any,
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: chapter })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: chapter })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -427,8 +421,7 @@ export default class ChaptersController {
       where: { chapterId },
       data: modifyData,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: chapter })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: chapter })
   }
 
   public async destroy({ params, response }: HttpContext) {
@@ -442,8 +435,7 @@ export default class ChaptersController {
       priority: TaskPriority.deleteManga,
     })
 
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapter })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: chapter })
   }
 
   public async destroy_batch({ params, response }: HttpContext) {
@@ -465,36 +457,35 @@ export default class ChaptersController {
       })
     }
 
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: chapters })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: chapters })
   }
 
   public async download({ request, response }: HttpContext) {
     const { chapterId } = await downloadChapterValidator.validate(request.all())
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
-      return response.json(new SResponse({ code: 1, message: '章节不存在' }))
+      return response.status(404).json({ code: 404, message: '章节不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     if (!fs.existsSync(chapter.chapterPath)) {
-      return response.json(new SResponse({ code: 1, message: '章节文件不存在' }))
+      return response.status(404).json({ code: 404, message: '章节文件不存在' })
     }
 
     if (chapter.chapterType === 'img') {
       const images = image_files(chapter.chapterPath, '')
-      const imagesResponse = new SResponse({
-        code: 0,
+      const imagesResponse = {
+        code: 200,
         message: '',
         data: images,
         status: 'compressed',
-      })
+      }
       return response.json(imagesResponse)
     } else {
       const fileName = path.basename(chapter.chapterPath)
@@ -520,13 +511,13 @@ export default class ChaptersController {
       if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {
         return response
           .status(403)
-          .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+          .json({ code: 403, message: '没有权限访问', status: 'no permission' })
       }
     }
 
     const compress = await prisma.compress.findUnique({ where: { chapterId } })
     if (!compress) {
-      return response.json(new SResponse({ code: 1, message: '章节解压记录不存在' }))
+      return response.status(404).json({ code: 404, message: '章节解压记录不存在' })
     }
     try {
       s_delete(compress.compressPath)
@@ -534,7 +525,7 @@ export default class ChaptersController {
       // 目录可能已不存在，忽略删除错误
     }
     await prisma.compress.delete({ where: { compressId: compress.compressId } })
-    return response.json(new SResponse({ code: 0, message: '删除成功' }))
+    return response.json({ code: 200, message: '删除成功' })
   }
 }
 

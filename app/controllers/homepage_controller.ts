@@ -6,7 +6,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import env from '#start/env'
 import prisma from '#start/prisma'
-import { SResponse } from '../interfaces/response.js'
 
 export default class HomepageController {
   /**
@@ -37,13 +36,7 @@ export default class HomepageController {
     const { response } = ctx
 
     if (!this.verify_apikey(ctx)) {
-      return response.status(401).json(
-        new SResponse({
-          code: 1,
-          message: 'invalid apikey',
-          status: 'apikey error',
-        })
-      )
+      return response.status(401).json({ code: 401, message: 'invalid apikey', status: 'apikey error' })
     }
 
     // 时间区间
@@ -112,6 +105,6 @@ export default class HomepageController {
       server_time: now.toISOString(),
     }
 
-    return response.json(new SResponse({ code: 0, data, message: '' }))
+    return response.json({ code: 200, data, message: '' })
   }
 }

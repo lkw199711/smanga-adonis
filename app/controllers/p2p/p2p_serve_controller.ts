@@ -13,7 +13,6 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import fs from 'fs'
 import path from 'path'
-import { ListResponse, SResponse } from '#interfaces/response'
 import { image_files, is_img } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
 import {
@@ -124,10 +123,10 @@ export default class P2PServeController {
    */
   async ping({ response }: HttpContext) {
     try {
-      return response.json(new SResponse({ code: 0, message: 'pong', data: { time: Date.now() } }))
+      return response.json({ code: 200, message: 'pong', data: { time: Date.now() } })
     } catch (e: any) {
       log_p2p_error('serve.ping', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || 'ping 失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || 'ping 失败' })
     }
   }
 
@@ -137,7 +136,7 @@ export default class P2PServeController {
    * 保留路由以兼容旧客户端,直接返回空列表
    */
   async shares({ response }: HttpContext) {
-    return response.json(new ListResponse({ code: 0, message: '', list: [], count: 0 }))
+    return response.json({ code: 200, message: '', list: [], count: 0 })
   }
 
   /**
@@ -155,12 +154,10 @@ export default class P2PServeController {
       console.log(
         `[p2p-serve] mangas 200 | caller=${callerNodeId} groupNo=${groupNo} mediaId=${mediaId} count=${mangas.length}`
       )
-      return response.json(
-        new ListResponse({ code: 0, message: '', list: mangas, count: mangas.length })
-      )
+      return response.json({ code: 200, message: '', list: mangas, count: mangas.length })
     } catch (e: any) {
       log_p2p_error('serve.mangas', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || 'mangas 查询失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || 'mangas 查询失败' })
     }
   }
 
@@ -177,7 +174,7 @@ export default class P2PServeController {
         console.warn(`[p2p-serve] chapters 404 漫画不存在 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId}`)
         return response
           .status(404)
-          .json(new SResponse({ code: 1, message: `manga not found (mangaId=${mangaId})`, status: 'not found' }))
+          .json({ code: 404, message: `manga not found (mangaId=${mangaId})`, status: 'not found' })
       }
 
       const chapters = await prisma.chapter.findMany({
@@ -187,12 +184,10 @@ export default class P2PServeController {
       console.log(
         `[p2p-serve] chapters 200 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId} count=${chapters.length}`
       )
-      return response.json(
-        new ListResponse({ code: 0, message: '', list: chapters, count: chapters.length })
-      )
+      return response.json({ code: 200, message: '', list: chapters, count: chapters.length })
     } catch (e: any) {
       log_p2p_error('serve.chapters', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || 'chapters 查询失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || 'chapters 查询失败' })
     }
   }
 
@@ -209,7 +204,7 @@ export default class P2PServeController {
         console.warn(`[p2p-serve] images 404 章节不存在 | caller=${callerNodeId} groupNo=${groupNo} chapterId=${chapterId}`)
         return response
           .status(404)
-          .json(new SResponse({ code: 1, message: `chapter not found (chapterId=${chapterId})`, status: 'not found' }))
+          .json({ code: 404, message: `chapter not found (chapterId=${chapterId})`, status: 'not found' })
       }
 
       const images = image_files(chapter.chapterPath)
@@ -217,12 +212,10 @@ export default class P2PServeController {
         `[p2p-serve] images 200 | caller=${callerNodeId} groupNo=${groupNo} ` +
         `chapterId=${chapterId} path=${chapter.chapterPath} count=${images.length}`
       )
-      return response.json(
-        new ListResponse({ code: 0, message: '', list: images, count: images.length })
-      )
+      return response.json({ code: 200, message: '', list: images, count: images.length })
     } catch (e: any) {
       log_p2p_error('serve.images', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || 'images 查询失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || 'images 查询失败' })
     }
   }
 
@@ -246,7 +239,7 @@ export default class P2PServeController {
         console.warn(`[p2p-serve] tree 404 漫画不存在 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId}`)
         return response
           .status(404)
-          .json(new SResponse({ code: 1, message: `manga not found (mangaId=${mangaId})`, status: 'not found' }))
+          .json({ code: 404, message: `manga not found (mangaId=${mangaId})`, status: 'not found' })
       }
 
       const mangaPath = manga.mangaPath
@@ -254,7 +247,7 @@ export default class P2PServeController {
         console.warn(`[p2p-serve] tree 404 漫画路径不存在 | mangaId=${mangaId} path=${mangaPath}`)
         return response
           .status(404)
-          .json(new SResponse({ code: 1, message: `manga path not found: ${mangaPath}`, status: 'not found' }))
+          .json({ code: 404, message: `manga path not found: ${mangaPath}`, status: 'not found' })
       }
 
       const stat = fs.statSync(mangaPath)
@@ -322,28 +315,25 @@ export default class P2PServeController {
         `sideFileCount=${sideFiles.length} totalBytes=${totalBytes}`
       )
 
-      return response.json(
-        new SResponse({
-          code: 0,
-          message: '',
-          data: {
-            mangaId: manga.mangaId,
-            mangaName: manga.mangaName,
-            mangaPath: manga.mangaPath,
-            isSingleFile,
-            rootDir,
-            // parentDir: sideFiles 的根目录,客户端按此拼接 relPath
-            parentDir: mangaParentDir,
-            fileCount: files.length,
-            totalBytes,
-            files,
-            sideFiles,
-          },
-        })
-      )
+      return response.json({
+        code: 200,
+        message: '',
+        data: {
+          mangaId: manga.mangaId,
+          mangaName: manga.mangaName,
+          mangaPath: manga.mangaPath,
+          isSingleFile,
+          rootDir,
+          parentDir: mangaParentDir,
+          fileCount: files.length,
+          totalBytes,
+          files,
+          sideFiles,
+        },
+      })
     } catch (e: any) {
       log_p2p_error('serve.tree', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || 'tree 查询失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || 'tree 查询失败' })
     }
   }
 
@@ -360,14 +350,14 @@ export default class P2PServeController {
       if (!chapter) {
         return response
           .status(404)
-          .json(new SResponse({ code: 1, message: `chapter not found (chapterId=${chapterId})`, status: 'not found' }))
+          .json({ code: 404, message: `chapter not found (chapterId=${chapterId})`, status: 'not found' })
       }
 
       const chapterPath = chapter.chapterPath
       if (!fs.existsSync(chapterPath)) {
         return response
           .status(404)
-          .json(new SResponse({ code: 1, message: `chapter path not found: ${chapterPath}`, status: 'not found' }))
+          .json({ code: 404, message: `chapter path not found: ${chapterPath}`, status: 'not found' })
       }
 
       const stat = fs.statSync(chapterPath)
@@ -416,27 +406,25 @@ export default class P2PServeController {
         `sideFileCount=${sideFiles.length} totalBytes=${totalBytes}`
       )
 
-      return response.json(
-        new SResponse({
-          code: 0,
-          message: '',
-          data: {
-            chapterId: chapter.chapterId,
-            chapterName: chapter.chapterName,
-            chapterPath: chapter.chapterPath,
-            isSingleFile,
-            rootDir,
-            parentDir: chParentDir,
-            fileCount: files.length,
-            totalBytes,
-            files,
-            sideFiles,
-          },
-        })
-      )
+      return response.json({
+        code: 200,
+        message: '',
+        data: {
+          chapterId: chapter.chapterId,
+          chapterName: chapter.chapterName,
+          chapterPath: chapter.chapterPath,
+          isSingleFile,
+          rootDir,
+          parentDir: chParentDir,
+          fileCount: files.length,
+          totalBytes,
+          files,
+          sideFiles,
+        },
+      })
     } catch (e: any) {
       log_p2p_error('serve.chapter_tree', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || 'chapter_tree 查询失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || 'chapter_tree 查询失败' })
     }
   }
 
@@ -451,19 +439,13 @@ export default class P2PServeController {
 
       if (!fs.existsSync(file)) {
         console.warn(`[p2p-serve] file_stat 404 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
-        return response.status(404).json(new SResponse({ code: 1, message: `file not found: ${file}` }))
+        return response.status(404).json({ code: 404, message: `file not found: ${file}` })
       }
       const st = fs.statSync(file)
-      return response.json(
-        new SResponse({
-          code: 0,
-          message: '',
-          data: { size: st.size, mtime: st.mtimeMs, isFile: st.isFile() },
-        })
-      )
+      return response.json({ code: 200, message: '', data: { size: st.size, mtime: st.mtimeMs, isFile: st.isFile() } })
     } catch (e: any) {
       log_p2p_error('serve.file_stat', e)
-      return response.status(500).json(new SResponse({ code: 1, message: e?.message || 'file_stat 失败' }))
+      return response.status(500).json({ code: 500, message: e?.message || 'file_stat 失败' })
     }
   }
 
@@ -484,7 +466,7 @@ export default class P2PServeController {
 
       if (!fs.existsSync(file)) {
         console.warn(`[p2p-serve] file 404 文件不存在 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
-        return response.status(404).json({ code: 1, message: `file not found: ${file}` })
+        return response.status(404).json({ code: 404, message: `file not found: ${file}` })
       }
 
       const st = fs.statSync(file)
@@ -513,7 +495,7 @@ export default class P2PServeController {
 
         if (start < 0 || start >= totalSize || end < start) {
           response.header('Content-Range', `bytes */${totalSize}`)
-          return response.status(416).json({ code: 1, message: `invalid range: ${rangeHeader}` })
+          return response.status(416).json({ code: 416, message: `invalid range: ${rangeHeader}` })
         }
 
         const chunkSize = end - start + 1
@@ -533,7 +515,7 @@ export default class P2PServeController {
       response.stream(fs.createReadStream(file))
     } catch (e: any) {
       log_p2p_error('serve.file', e)
-      return response.status(500).json({ code: 1, message: e?.message || 'file 流式下载失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'file 流式下载失败' })
     }
   }
 }

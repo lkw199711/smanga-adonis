@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { create_scan_cron } from '#services/cron_service'
@@ -17,9 +16,7 @@ export default class PathsController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -45,13 +42,7 @@ export default class PathsController {
       prisma.path.count({ where: queryParams.where }),
     ])
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: count,
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count })
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -59,8 +50,7 @@ export default class PathsController {
 
     const { pathId } = await idParamPathValidator.validate(params)
     const path = await prisma.path.findUnique({ where: { pathId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: path })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: path })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -71,8 +61,7 @@ export default class PathsController {
 
     // 检查路径是否存在
     if (!fs.existsSync(insertData.pathContent)) {
-      const saveResponse = new SResponse({ code: 1, message: '路径不存在', data: null })
-      return response.json(saveResponse)
+      return response.status(400).json({ code: 400, message: '路径不存在', data: null })
     }
 
     path = await prisma.path.findFirst({
@@ -92,8 +81,7 @@ export default class PathsController {
         data: { deleteFlag: 0 },
       })
     } else {
-      const saveResponse = new SResponse({ code: 1, message: '路径已存在', data: path })
-      return response.json(saveResponse)
+      return response.status(400).json({ code: 400, message: '路径已存在', data: path })
     }
 
     // 添加自动扫描任务
@@ -109,9 +97,7 @@ export default class PathsController {
       priority: TaskPriority.scan,
     })
 
-    const saveResponse = new SResponse({ code: 0, message: '新增成功,扫描任务已提交', data: path })
-
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功,扫描任务已提交', data: path })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -129,8 +115,7 @@ export default class PathsController {
       create_scan_cron()
     }
 
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: path })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: path })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -146,8 +131,7 @@ export default class PathsController {
       priority: TaskPriority.delete,
     })
 
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: path })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: path })
   }
 
   public async destroy_batch({ params, request, response }: HttpContext) {
@@ -168,8 +152,7 @@ export default class PathsController {
       })
     }
 
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: paths })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: paths })
   }
 
   public async scan({ params, request, response }: HttpContext) {
@@ -184,8 +167,7 @@ export default class PathsController {
       priority: TaskPriority.scan,
     })
 
-    const scanResponse = new SResponse({ code: 0, message: '扫描任务已提交', data: { pathId } })
-    return response.json(scanResponse)
+    return response.json({ code: 200, message: '扫描任务已提交', data: { pathId } })
   }
 
   public async re_scan({ params, request, response }: HttpContext) {
@@ -211,7 +193,6 @@ export default class PathsController {
       priority: TaskPriority.scan,
     })
 
-    const scanResponse = new SResponse({ code: 0, message: '重新扫描任务已提交', data: pathId })
-    return response.json(scanResponse)
+    return response.json({ code: 200, message: '重新扫描任务已提交', data: pathId })
   }
 }

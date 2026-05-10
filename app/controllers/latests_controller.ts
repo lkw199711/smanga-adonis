@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import { get_config } from '#utils/index'
 import {
   listLatestValidator,
@@ -55,13 +54,7 @@ export default class LatestsController {
       manga.unWatched = Math.max(total - watched, 0)
     })
 
-    const listResponse = new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: Number(countResult[0]?.count || 0),
-    })
-    return response.json(listResponse)
+    return response.json({ code: 200, message: '', list, count: Number(countResult[0]?.count || 0) })
   }
 
   private async raw_sql_select_postgres({ userId, page, pageSize }: any) {
@@ -156,8 +149,7 @@ export default class LatestsController {
       latest.nextChapter = chapters[latestChapterIndex + 1]
     }
 
-    const showResponse = new SResponse({ code: 0, message: '', data: latest })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: latest })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -175,8 +167,7 @@ export default class LatestsController {
       update: { page, count, chapterId, mangaId, finish, userId },
       create: { page, count, chapterId, mangaId, finish, userId },
     })
-    const saveResponse = new SResponse({ code: 0, message: '', data: latest })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '', data: latest })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -187,15 +178,13 @@ export default class LatestsController {
       where: { chapterId, userId },
       data: modifyData,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: latest })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: latest })
   }
 
   public async destroy({ request, params, response }: HttpContext) {
     const { userId } = request as any
     const { chapterId } = await chapterIdParamValidator.validate(params)
     const latest = await prisma.latest.deleteMany({ where: { chapterId, userId } })
-    const destroyResponse = new SResponse({ code: 0, message: '', data: latest })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '', data: latest })
   }
 }

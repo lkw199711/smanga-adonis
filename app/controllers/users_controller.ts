@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import md5 from '../utils/md5.js'
 import { sql_parse_json } from '#utils/index'
 import {
@@ -14,9 +13,7 @@ export default class UsersController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
-      response
-        .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+      response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
     return true
@@ -45,8 +42,8 @@ export default class UsersController {
       prisma.user.count({ where: queryParams.where }),
     ])
 
-    const listResponse = new ListResponse({
-      code: 0,
+    return response.json({
+      code: 200,
       message: '',
       list: list.map((item: any) => {
         item.mediaPermissons = item.mediaPermissons.map((item: any) => item.mediaId)
@@ -54,7 +51,6 @@ export default class UsersController {
       }),
       count,
     })
-    return response.json(listResponse)
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -62,8 +58,7 @@ export default class UsersController {
 
     const { userId } = await idParamUserValidator.validate(params)
     const user = await prisma.user.findUnique({ where: { userId } })
-    const showResponse = new SResponse({ code: 0, message: '', data: user })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: user })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -79,7 +74,7 @@ export default class UsersController {
 
     // 新增失败报错
     if (!user) {
-      return response.json(new SResponse({ code: 1, message: '新增失败' }))
+      return response.status(500).json({ code: 500, message: '新增失败' })
     }
 
     // 新增用户权限
@@ -93,8 +88,7 @@ export default class UsersController {
       }
     }
 
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: user })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: user })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -116,7 +110,7 @@ export default class UsersController {
 
     // 更新失败报错
     if (!user) {
-      return response.json(new SResponse({ code: 1, message: '更新失败' }))
+      return response.status(500).json({ code: 500, message: '更新失败' })
     }
 
     // 更新用户权限
@@ -141,8 +135,7 @@ export default class UsersController {
       }
     }
 
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: user })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -166,15 +159,10 @@ export default class UsersController {
         return await prisma.user.delete({ where: { userId } })
       })
 
-      const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: user })
-      return response.json(destroyResponse)
+      return response.json({ code: 200, message: '删除成功', data: user })
     } catch (error) {
       console.error('删除用户失败:', error)
-      const errorResponse = new SResponse({
-        code: 1,
-        message: '删除用户失败，请检查用户是否存在或有其他关联记录',
-      })
-      return response.json(errorResponse)
+      return response.status(500).json({ code: 500, message: '删除用户失败，请检查用户是否存在或有其他关联记录' })
     }
   }
 
@@ -183,10 +171,10 @@ export default class UsersController {
     const user = await prisma.user.findFirst({ where: { userId } })
 
     if (!user) {
-      return response.json(new SResponse({ code: 1, message: '获取用户信息错误' }))
+      return response.status(404).json({ code: 404, message: '获取用户信息错误' })
     }
 
     const config = sql_parse_json(user?.userConfig || {})
-    return response.json(new SResponse({ code: 0, message: '', data: config }))
+    return response.json({ code: 200, message: '', data: config })
   }
 }

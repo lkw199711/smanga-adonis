@@ -1,7 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import path from 'node:path'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse } from '../interfaces/response.js'
 import { compressImageToSize } from '../utils/sharp.js'
 import { path_bookmark, get_config, s_delete } from '../utils/index.js'
 import {
@@ -58,12 +57,7 @@ export default class BookmarksController {
 
     const list = await prisma.bookmark.findMany({ where, orderBy })
 
-    return new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
+    return { code: 200, message: '', list, count: list.length }
   }
 
   // 分页
@@ -111,8 +105,8 @@ export default class BookmarksController {
     const latestMap = new Map<number, any>()
     for (const lt of latests) latestMap.set(Number(lt.chapterId), lt)
 
-    return new ListResponse({
-      code: 0,
+    return {
+      code: 200,
       message: '',
       list: list.map((item: any) => {
         const latest = latestMap.get(Number(item.chapterId)) || null
@@ -125,7 +119,7 @@ export default class BookmarksController {
         }
       }),
       count,
-    })
+    }
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -137,10 +131,10 @@ export default class BookmarksController {
       where: { bookmarkId, userId },
     })
     if (!bookmark) {
-      return response.json(new SResponse({ code: 1, message: '书签不存在或无权访问' }))
+      return response.status(404).json({ code: 404, message: '书签不存在或无权访问' })
     }
 
-    return response.json(new SResponse({ code: 0, message: '', data: bookmark }))
+    return response.json({ code: 200, message: '', data: bookmark })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -155,7 +149,7 @@ export default class BookmarksController {
       where: { userId, chapterId, page: pageNum },
     })
     if (exist) {
-      return response.json(new SResponse({ code: 1, message: '当前页已存在书签' }))
+      return response.status(400).json({ code: 400, message: '当前页已存在书签' })
     }
 
     // 生成封面: 文件名按 chapterId + page 避免相互覆盖
@@ -190,14 +184,14 @@ export default class BookmarksController {
           userId,
         },
       })
-      return response.json(new SResponse({ code: 0, message: '新增成功', data: bookmark }))
+      return response.json({ code: 200, message: '新增成功', data: bookmark })
     } catch (err: any) {
       if (outputFile) s_delete(outputFile)
       // P2002: 唯一键冲突 (并发下前置检查与 create 之间的竞态)
       if (err?.code === 'P2002') {
-        return response.json(new SResponse({ code: 1, message: '当前页已存在书签' }))
+        return response.status(400).json({ code: 400, message: '当前页已存在书签' })
       }
-      return response.json(new SResponse({ code: 1, message: '新增失败', error: err?.message }))
+      return response.status(500).json({ code: 500, message: '新增失败', error: err?.message })
     }
   }
 
@@ -208,7 +202,7 @@ export default class BookmarksController {
     // 归属校验
     const origin = await prisma.bookmark.findFirst({ where: { bookmarkId, userId } })
     if (!origin) {
-      return response.json(new SResponse({ code: 1, message: '书签不存在或无权访问' }))
+      return response.status(404).json({ code: 404, message: '书签不存在或无权访问' })
     }
 
     // 字段白名单: 只允许更新 page / browseType, vine 已处理类型与可选项
@@ -221,7 +215,7 @@ export default class BookmarksController {
       where: { bookmarkId },
       data,
     })
-    return response.json(new SResponse({ code: 0, message: '更新成功', data: bookmark }))
+    return response.json({ code: 200, message: '更新成功', data: bookmark })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -231,7 +225,7 @@ export default class BookmarksController {
     // 归属校验
     const bookmark = await prisma.bookmark.findFirst({ where: { bookmarkId, userId } })
     if (!bookmark) {
-      return response.json(new SResponse({ code: 1, message: '书签不存在或无权访问' }))
+      return response.status(404).json({ code: 404, message: '书签不存在或无权访问' })
     }
 
     // 删除书签封面文件
@@ -240,7 +234,7 @@ export default class BookmarksController {
     }
 
     const bookmarkDelete = await prisma.bookmark.delete({ where: { bookmarkId } })
-    return response.json(new SResponse({ code: 0, message: '删除成功', data: bookmarkDelete }))
+    return response.json({ code: 200, message: '删除成功', data: bookmarkDelete })
   }
 
   public async destroy_batch({ params, request, response }: HttpContext) {
@@ -249,7 +243,7 @@ export default class BookmarksController {
     const { bookmarkIds: ids } = await batchIdsParamBookmarkValidator.validate(params)
 
     if (!ids.length) {
-      return response.json(new SResponse({ code: 1, message: '未指定书签' }))
+      return response.status(400).json({ code: 400, message: '未指定书签' })
     }
 
     // 仅操作当前用户的书签
@@ -257,7 +251,7 @@ export default class BookmarksController {
       where: { bookmarkId: { in: ids }, userId },
     })
     if (!bookmarks.length) {
-      return response.json(new SResponse({ code: 1, message: '无可删除书签' }))
+      return response.status(404).json({ code: 404, message: '无可删除书签' })
     }
 
     // 删除书签封面文件
@@ -272,6 +266,6 @@ export default class BookmarksController {
       where: { bookmarkId: { in: ownedIds } },
     })
 
-    return response.json(new SResponse({ code: 0, message: '删除成功', data: deleteResponse }))
+    return response.json({ code: 200, message: '删除成功', data: deleteResponse })
   }
 }

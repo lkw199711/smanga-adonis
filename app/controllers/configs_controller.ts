@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { SResponse } from '../interfaces/response.js'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { path_config, get_config, sql_parse_json } from '#utils/index'
@@ -27,11 +26,10 @@ export default class ConfigsController {
         compress: config.compress,
         scan: { auto: config.scan?.auto, interval: config.scan?.interval },
       }
-      return response.json(new SResponse({ code: 0, message: '', data: safeConfig }))
+      return response.json({ code: 200, message: '', data: safeConfig })
     }
 
-    const configResponse = new SResponse({ code: 0, message: '', data: config })
-    return response.json(configResponse)
+    return response.json({ code: 200, message: '', data: config })
   }
 
   public async set({ request, response }: HttpContext) {
@@ -39,7 +37,7 @@ export default class ConfigsController {
     if (user?.role !== 'admin') {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '无权限', status: 'no permission' }))
+        .json({ code: 403, message: '无权限', status: 'no permission' })
     }
     const { key, value } = await setConfigValidator.validate(request.all())
     let config = get_config()
@@ -243,9 +241,9 @@ export default class ConfigsController {
     try {
       await fs.writeFile(configFile, JSON.stringify(config, null, 2))
     } catch (err: any) {
-      return response.json(
-        new SResponse({ code: 1, message: `配置写入失败: ${err?.message || err}`, status: 'error' })
-      )
+      return response
+        .status(500)
+        .json({ code: 500, message: `配置写入失败: ${err?.message || err}`, status: 'error' })
     }
 
     // 更改扫描相关设置后 重新创建扫描任务
@@ -280,8 +278,7 @@ export default class ConfigsController {
         })
     }
 
-    const configResponse = new SResponse({ code: 0, message: '设置成功', data: config })
-    return response.json(configResponse)
+    return response.json({ code: 200, message: '设置成功', data: config })
   }
 
   /**
@@ -297,50 +294,28 @@ export default class ConfigsController {
   public async register_node_now({ request, response }: HttpContext) {
     const user = (request as any).user
     if (user?.role !== 'admin') {
-      return response
-        .status(403)
-        .json(new SResponse({ code: 1, message: '无权限', status: 'error' }))
+      return response.status(403).json({ code: 403, message: '无权限', status: 'error' })
     }
 
     const cfg = get_config()?.p2p
     if (!cfg?.enable) {
-      return response.json(
-        new SResponse({ code: 1, message: '请先开启 P2P(启用 P2P 开关)', status: 'error' })
-      )
+      return response.status(400).json({ code: 400, message: '请先开启 P2P(启用 P2P 开关)', status: 'error' })
     }
     if (!cfg?.role?.node) {
-      return response.json(
-        new SResponse({
-          code: 1,
-          message: '请先开启"作为节点(Node)"角色',
-          status: 'error',
-        })
-      )
+      return response.status(400).json({ code: 400, message: '请先开启"作为节点(Node)"角色', status: 'error' })
     }
 
     try {
       // 手动注册:若 tracker 已存在该节点则复用并更新信息,否则才生成新 nodeId
       const { identity, reused } = await p2pIdentityService.manualRegister()
-      return response.json(
-        new SResponse({
-          code: 0,
-          message: reused ? '节点信息已更新到 tracker' : '节点注册成功',
-          data: {
-            nodeId: identity?.nodeId,
-            nodeName: identity?.nodeName,
-            reused,
-          },
-        })
-      )
+      return response.json({
+        code: 200,
+        message: reused ? '节点信息已更新到 tracker' : '节点注册成功',
+        data: { nodeId: identity?.nodeId, nodeName: identity?.nodeName, reused },
+      })
     } catch (err: any) {
       const reason = err?.message || String(err) || '未知错误'
-      return response.json(
-        new SResponse({
-          code: 1,
-          message: reason,
-          status: 'error',
-        })
-      )
+      return response.status(500).json({ code: 500, message: reason, status: 'error' })
     }
   }
 
@@ -356,10 +331,9 @@ export default class ConfigsController {
           userConfig: sql_parse_json(userConfig),
         },
       })
-      const updateResponse = new SResponse({ code: 0, message: '更新成功', data: user })
-      return response.json(updateResponse)
+      return response.json({ code: 200, message: '更新成功', data: user })
     } catch (_error) {
-      return response.json(new SResponse({ code: 1, message: '更新失败，用户不存在' }))
+      return response.status(404).json({ code: 404, message: '更新失败，用户不存在' })
     }
   }
 }

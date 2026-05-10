@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
-import { ListResponse, SResponse, SResponseCode } from '#interfaces/response'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
@@ -37,7 +36,7 @@ export default class MangaController {
     if (!user) {
       return response
         .status(401)
-        .json(new SResponse({ code: 401, message: '用户不存在', status: 'token error' }))
+        .json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons = await prisma.mediaPermisson.findMany({
@@ -51,7 +50,7 @@ export default class MangaController {
       if (mediaId !== undefined && !mediaIds.includes(mediaId)) {
         return response
           .status(403)
-          .json(new SResponse({ code: 403, message: '无权限操作', status: 'no permission' }))
+          .json({ code: 403, message: '无权限操作', status: 'no permission' })
       }
     }
 
@@ -77,12 +76,7 @@ export default class MangaController {
 
     const list = await prisma.manga.findMany(queryParams)
 
-    return new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count: list.length,
-    })
+    return { code: 200, message: '', list, count: list.length }
   }
 
   // 分页
@@ -134,12 +128,7 @@ export default class MangaController {
       manga.unWatched = total - watched
     })
 
-    return new ListResponse({
-      code: 0,
-      message: '',
-      list,
-      count,
-    })
+    return { code: 200, message: '', list, count }
   }
 
   public async show({ params, request, response }: HttpContext) {
@@ -164,14 +153,14 @@ export default class MangaController {
     if (!manga) {
       return response
         .status(404)
-        .json(new SResponse({ code: 404, message: '漫画不存在', status: 'not found' }))
+        .json({ code: 404, message: '漫画不存在', status: 'not found' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     // 处理返回的数据 将mangaTags中的tag提取出来
@@ -180,8 +169,7 @@ export default class MangaController {
       tags: manga.mangaTags.map((mangaTag) => mangaTag.tag),
       mangaTags: undefined,
     }
-    const showResponse = new SResponse({ code: 0, message: '', data: result })
-    return response.json(showResponse)
+    return response.json({ code: 200, message: '', data: result })
   }
 
   public async create({ request, response }: HttpContext) {
@@ -189,22 +177,21 @@ export default class MangaController {
     const manga = await prisma.manga.create({
       data: insertData as any,
     })
-    const saveResponse = new SResponse({ code: 0, message: '新增成功', data: manga })
-    return response.json(saveResponse)
+    return response.json({ code: 200, message: '新增成功', data: manga })
   }
 
   public async update({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
     const existManga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!existManga) {
-      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+      return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, existManga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     const modifyData = await updateMangaValidator.validate(request.all())
@@ -212,22 +199,21 @@ export default class MangaController {
       where: { mangaId },
       data: modifyData,
     })
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: manga })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: manga })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
     const existManga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!existManga) {
-      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+      return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, existManga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
@@ -240,8 +226,7 @@ export default class MangaController {
       timeout: 1000 * 60 * 10,
     })
 
-    const destroyResponse = new SResponse({ code: 0, message: '删除成功', data: manga })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: manga })
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
@@ -254,7 +239,7 @@ export default class MangaController {
       if (!(await this.checkMediaPermission(userId, existManga.mediaId))) {
         return response
           .status(403)
-          .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+          .json({ code: 403, message: '没有权限访问', status: 'no permission' })
       }
 
       await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
@@ -267,12 +252,7 @@ export default class MangaController {
       })
     }
 
-    const destroyResponse = new SResponse({
-      code: SResponseCode.Success,
-      message: '删除成功',
-      data: mangaIds,
-    })
-    return response.json(destroyResponse)
+    return response.json({ code: 200, message: '删除成功', data: mangaIds })
   }
 
   public async scan({ params, request, response }: HttpContext) {
@@ -281,14 +261,14 @@ export default class MangaController {
     if (!manga) {
       return response
         .status(404)
-        .json(new SResponse({ code: 404, message: '漫画不存在', status: 'not found' }))
+        .json({ code: 404, message: '漫画不存在', status: 'not found' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     const pathInfo = await prisma.path.findUnique({
@@ -305,7 +285,7 @@ export default class MangaController {
     if (!pathInfo) {
       return response
         .status(404)
-        .json(new SResponse({ code: 404, message: '路径不存在', status: 'not found' }))
+        .json({ code: 404, message: '路径不存在', status: 'not found' })
     }
 
     await addTask({
@@ -322,8 +302,7 @@ export default class MangaController {
       timeout: 1000 * 60 * 60 * 2,
     })
 
-    const scanResponse = new SResponse({ code: 0, message: '扫描任务添加成功', data: manga })
-    return response.json(scanResponse)
+    return response.json({ code: 200, message: '扫描任务添加成功', data: manga })
   }
 
   public async edit_meta({ params, request, response }: HttpContext) {
@@ -331,14 +310,14 @@ export default class MangaController {
 
     const manga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!manga) {
-      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+      return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     const { title, author, publishDate, mangaCover, star, describe, tags, wirteMetaJson } =
@@ -377,8 +356,7 @@ export default class MangaController {
       }
     }
 
-    const updateResponse = new SResponse({ code: 0, message: '更新成功', data: res })
-    return response.json(updateResponse)
+    return response.json({ code: 200, message: '更新成功', data: res })
   }
 
   private async meta_update(mangaId: number, metaName: string, metaContent: any) {
@@ -412,25 +390,19 @@ export default class MangaController {
 
     const manga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!manga) {
-      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+      return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     const res = await new ReloadMangaMetaJob({ mangaId }).run()
 
-    const reloadMetaResponse = new SResponse({
-      code: 0,
-      message: '元数据更新成功',
-      data: res,
-    })
-
-    return response.json(reloadMetaResponse)
+    return response.json({ code: 200, message: '元数据更新成功', data: res })
   }
 
   public async add_tags({ params, request, response }: HttpContext) {
@@ -438,14 +410,14 @@ export default class MangaController {
 
     const manga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!manga) {
-      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+      return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     const { tags, metaWriteJson } = await addTagsMangaValidator.validate(request.all())
@@ -460,12 +432,6 @@ export default class MangaController {
     }))
     const createdTags = await prisma.mangaTag.createMany({
       data: mangaTags,
-    })
-
-    const addTagsResponse = new SResponse({
-      code: 0,
-      message: '标签添加成功',
-      data: createdTags,
     })
 
     if (metaWriteJson) {
@@ -487,7 +453,7 @@ export default class MangaController {
       }
     }
 
-    return response.json(addTagsResponse)
+    return response.json({ code: 200, message: '标签添加成功', data: createdTags })
   }
 
   public async compress_all({ params, request, response }: HttpContext) {
@@ -495,14 +461,14 @@ export default class MangaController {
 
     const manga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!manga) {
-      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+      return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     // 获取漫画所有章节
@@ -521,8 +487,7 @@ export default class MangaController {
     )
 
     if (!haveNotCompressChapters.length) {
-      const compressResponse = new SResponse({ code: 1, message: '此漫画章节已全部压缩' })
-      return response.json(compressResponse)
+      return response.json({ code: 200, message: '此漫画章节已全部压缩' })
     }
 
     for (const chapter of haveNotCompressChapters) {
@@ -541,8 +506,7 @@ export default class MangaController {
       })
     }
 
-    const compressResponse = new SResponse({ code: 0, message: '压缩任务已添加' })
-    return response.json(compressResponse)
+    return response.json({ code: 200, message: '压缩任务已添加' })
   }
 
   public async compress_delete({ params, request, response }: HttpContext) {
@@ -550,14 +514,14 @@ export default class MangaController {
 
     const manga = await prisma.manga.findUnique({ where: { mangaId } })
     if (!manga) {
-      return response.status(404).json(new SResponse({ code: 404, message: '漫画不存在' }))
+      return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
 
     const userId = (request as any).userId
     if (!(await this.checkMediaPermission(userId, manga.mediaId))) {
       return response
         .status(403)
-        .json(new SResponse({ code: 403, message: '没有权限访问', status: 'no permission' }))
+        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
     // 获取漫画所有章节的压缩记录
@@ -577,7 +541,6 @@ export default class MangaController {
     // 删除漫画所有章节的压缩记录
     await prisma.compress.deleteMany({ where: { mangaId } })
 
-    const compressResponse = new SResponse({ code: 0, message: '压缩记录删除成功' })
-    return response.json(compressResponse)
+    return response.json({ code: 200, message: '压缩记录删除成功' })
   }
 }
