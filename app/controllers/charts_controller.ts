@@ -3,6 +3,46 @@ import prisma from '#start/prisma'
 import { sliceChartValidator } from '#validators/chart'
 
 export default class ChartsController {
+  public async count({ request, response }: HttpContext) {
+    const userId = (request as any).userId as number | undefined
+    const user = userId ? await prisma.user.findUnique({ where: { userId } }) : null
+    if (!user) {
+      return response.status(401).json({ code: 401, message: '用户不存在', status: 'token error' })
+    }
+
+    const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
+    const mediaPermissons = isAdmin
+      ? []
+      : await prisma.mediaPermisson.findMany({ where: { userId }, select: { mediaId: true } })
+    const mediaWhere = isAdmin ? {} : { mediaId: { in: mediaPermissons.map((m) => m.mediaId) } }
+
+    const now = new Date()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+    const weekStart = new Date(todayStart)
+    weekStart.setDate(weekStart.getDate() - 6)
+
+    const [mangaCount, chapterCount, mangaWeekAdd, chapterWeekAdd, readToday, readThisWeek] =
+      await Promise.all([
+        prisma.manga.count({ where: { deleteFlag: 0, ...(mediaWhere as any) } }),
+        prisma.chapter.count({ where: { deleteFlag: 0, ...(mediaWhere as any) } }),
+        prisma.manga.count({
+          where: { deleteFlag: 0, createTime: { gte: weekStart }, ...(mediaWhere as any) },
+        }),
+        prisma.chapter.count({
+          where: { deleteFlag: 0, createTime: { gte: weekStart }, ...(mediaWhere as any) },
+        }),
+        prisma.history.count({ where: { userId, createTime: { gte: todayStart } } }),
+        prisma.history.count({ where: { userId, createTime: { gte: weekStart } } }),
+      ])
+
+    return response.json({
+      code: 200,
+      data: { mangaCount, chapterCount, mangaWeekAdd, chapterWeekAdd, readToday, readThisWeek },
+      message: '',
+    })
+  }
+
   public async browse({ response }: HttpContext) {
     // 根据浏览类型分类漫画
     // 条漫 单页 双叶 裁剪

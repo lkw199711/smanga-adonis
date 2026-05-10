@@ -211,6 +211,7 @@ router.put('/user/:userId', [UsersController, 'update'])
 router.delete('/user/:userId', [UsersController, 'destroy'])
 
 // 图表
+router.get('chart-count', [ChartsController, 'count'])
 router.get('chart-browse', [ChartsController, 'browse'])
 router.get('chart-tag', [ChartsController, 'tag'])
 router.get('chart-ranking', [ChartsController, 'ranking'])
