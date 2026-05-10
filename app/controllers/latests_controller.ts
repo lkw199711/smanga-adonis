@@ -66,6 +66,7 @@ export default class LatestsController {
           MAX("manga"."mediaId") AS "mediaId",
           MAX("manga"."mangaName") AS "mangaName",
           MAX("manga"."mangaCover") AS "mangaCover",
+          MAX("manga"."chapterCount") AS "chapterCount",
           MAX("manga"."browseType") AS "browseType"
       FROM 
           "latest"
@@ -93,6 +94,7 @@ export default class LatestsController {
           MAX(manga.mediaId) AS mediaId,
           MAX(manga.mangaName) AS mangaName,
           MAX(manga.mangaCover) AS mangaCover,
+          MAX(manga.chapterCount) AS chapterCount,
           MAX(manga.browseType) AS browseType
       FROM 
           latest
