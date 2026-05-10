@@ -1,37 +1,14 @@
-import { is_img, path_poster, path_compress } from '#utils/index'
+import { is_img, path_poster } from '#utils/index'
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 import path from 'path'
 import { imageFileBodyValidator, uploadImageBodyValidator } from '#validators/image'
-import prisma from '#start/prisma'
-
-// 获取所有媒体库允许的路径前缀
-async function getAllowedPaths(): Promise<string[]> {
-  const paths = await prisma.path.findMany({ select: { pathContent: true } })
-  const allowedPaths = paths.map((p) => p.pathContent)
-  allowedPaths.push(path_compress())
-  allowedPaths.push(path_poster())
-  return allowedPaths
-}
-
-function isPathAllowed(filePath: string, allowedPaths: string[]): boolean {
-  const normalizedFile = path.resolve(filePath)
-  return allowedPaths.some((allowed) => normalizedFile.startsWith(path.resolve(allowed)))
-}
 
 export default class ImagesController {
   public async index({ request, response }: HttpContext) {
     const { file } = await imageFileBodyValidator.validate(request.all())
 
-    // 路径安全校验
-    const allowedPaths = await getAllowedPaths()
-    if (!isPathAllowed(file, allowedPaths)) {
-      return response.status(403).json({
-        message: '无权访问该路径',
-        error: 'path not allowed.',
-      })
-    }
-
+    // 由于书签等图片可能为不规则路径,因此不进行路径权限校验
     // 检查文件是否存在
     if (!fs.existsSync(file)) {
       return response.status(400).json({
