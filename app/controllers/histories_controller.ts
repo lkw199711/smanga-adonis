@@ -53,6 +53,7 @@ export default class HistoriesController {
           MAX("history"."chapterId") AS "chapterId",
           MAX("history"."userId") AS "userId",
           MAX("chapter"."chapterName") AS "chapterName",
+          MAX("manga"."mangaName") AS "mangaName",
           MAX("manga"."mangaCover") AS "chapterCover",
           MAX("manga"."browseType") AS "browseType"
       FROM 
@@ -91,6 +92,7 @@ export default class HistoriesController {
           MAX(history.chapterId) AS chapterId,
           MAX(history.userId) AS userId,
           MAX(chapter.chapterName) AS chapterName,
+          MAX(manga.mangaName) AS mangaName,
           MAX(manga.mangaCover) AS chapterCover,
           MAX(manga.browseType) AS browseType
       FROM 
