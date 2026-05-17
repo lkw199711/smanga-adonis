@@ -66,12 +66,16 @@ export default class ScanMangaJob {
     this.pathId = pathId
     this.mangaPath = mangaPath
     this.mangaName = mangaName
-    this.parentPath = parentPath
+    this.parentPath = parentPath || path.dirname(mangaPath)
     this.isCloudMedia = isCloudMedia
 
     const config = get_config()
     this.ignoreHiddenFiles = config.scan?.ignoreHiddenFiles === 1
     this.tagColor = config.scan?.defaultTagColor || '#a0d911'
+  }
+
+  private normalize_scan_path(filePath: string | null | undefined) {
+    return filePath ? path.normalize(filePath) : ''
   }
 
   async run() {
@@ -144,7 +148,7 @@ export default class ScanMangaJob {
     // 检查库中是否存在此漫画
     this.mangaRecord = await prisma.manga.findFirst({
       where: {
-        AND: [{ mangaName }, { mediaId: this.pathInfo.mediaId }],
+        AND: [{ mangaPath }, { mediaId: this.pathInfo.mediaId }],
       },
     })
 
@@ -260,92 +264,104 @@ export default class ScanMangaJob {
         })
       }
 
-      /** 漫画已存在 更新漫画信息
-       * // 实际目录扫描多于数据库章节 (说明新增了章节)
-       * // 实际目录扫描等于数据库章节 (说明没有变更)
-       * // 实际目录扫描少于数据库章节 (说明删除了章节)
-       */
-      if (chapterList.length > chapterListSql.length) {
-        // 新增章节
-        const newChapterList = chapterList.filter((item: any) => {
-          return !chapterListSql.some((sqlItem: any) => sqlItem.chapterName === item.chapterName)
-        })
-        for (let index = 0; index < newChapterList.length; index++) {
-          const item = newChapterList[index]
-          // 检测有无中文 将标题繁简体转换后写入副标题,用于检索
-          let subTitle = item.chapterName
-          if (/[\u4e00-\u9fa5]/.test(item.chapterName)) {
-            const sName = S.t2s(item.chapterName)
-            const tName = S.s2t(item.chapterName)
-            subTitle = `${sName}/${tName}`
-          }
+      const newChapterList = chapterList.filter((item: any) => {
+        return !chapterListSql.some(
+          (sqlItem: any) =>
+            this.normalize_scan_path(sqlItem.chapterPath) ===
+            this.normalize_scan_path(item.chapterPath)
+        )
+      })
+      const delChapterList = chapterListSql.filter((item: any) => {
+        return !chapterList.some(
+          (scanItem: any) =>
+            this.normalize_scan_path(scanItem.chapterPath) ===
+            this.normalize_scan_path(item.chapterPath)
+        )
+      })
 
-          const chapterInsert: Prisma.chapterCreateInput = {
-            manga: {
-              connect: {
-                mangaId: this.mangaRecord.mangaId,
-              },
-            },
-            media: {
-              connect: {
-                mediaId: this.mediaRecord.mediaId,
-              },
-            },
-            pathId,
-            chapterName: item.chapterName,
-            chapterPath: item.chapterPath,
-            browseType: this.mediaRecord.browseType,
-            subTitle: subTitle,
-            chapterType: this.compress_type(item.chapterPath),
-            chapterNumber: this.chapter_index(item.chapterName),
-          }
-
-          try {
-            this.chapterRecord = await prisma.chapter.create({ data: chapterInsert })
-          } catch (e) {
-            console.log('章节插入失败', item.chapterName)
-            console.log(e)
-
-            return
-          }
-
-          // 获取封面图
-          if (!this.chapterRecord.chapterCover || reloadCover) {
-            await this.chapter_poster(item.chapterPath)
-          }
-
-          // 扫描元数据
-          await this.meta_scan_comicinfo()
+      for (let index = 0; index < newChapterList.length; index++) {
+        const item = newChapterList[index]
+        // 检测有无中文 将标题繁简体转换后写入副标题,用于检索
+        let subTitle = item.chapterName
+        if (/[\u4e00-\u9fa5]/.test(item.chapterName)) {
+          const sName = S.t2s(item.chapterName)
+          const tName = S.s2t(item.chapterName)
+          subTitle = `${sName}/${tName}`
         }
 
+        const chapterInsert: Prisma.chapterCreateInput = {
+          manga: {
+            connect: {
+              mangaId: this.mangaRecord.mangaId,
+            },
+          },
+          media: {
+            connect: {
+              mediaId: this.mediaRecord.mediaId,
+            },
+          },
+          pathId,
+          chapterName: item.chapterName,
+          chapterPath: item.chapterPath,
+          browseType: this.mediaRecord.browseType,
+          subTitle: subTitle,
+          chapterType: this.compress_type(item.chapterPath),
+          chapterNumber: this.chapter_index(item.chapterName),
+        }
+
+        try {
+          this.chapterRecord = await prisma.chapter.create({ data: chapterInsert })
+        } catch (e) {
+          console.log('章节插入失败', item.chapterName)
+          console.log(e)
+
+          return
+        }
+
+        // 获取封面图
+        if (!this.chapterRecord.chapterCover || reloadCover) {
+          await this.chapter_poster(item.chapterPath)
+        }
+
+        // 扫描元数据
+        await this.meta_scan_comicinfo()
+      }
+
+      for (let index = 0; index < delChapterList.length; index++) {
+        const element = delChapterList[index]
+        await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
+      }
+
+      if (newChapterList.length || delChapterList.length) {
         // 更新漫画更新时间
         await prisma.manga.update({
           data: { updateTime: new Date() },
           where: { mangaId: this.mangaRecord.mangaId },
         })
+      }
 
-        // 讲漫画扫描成果写入日志
+      // 讲漫画扫描成果写入日志
+      if (newChapterList.length) {
         await insert_manga_scan_log({
           mangaId: this.mangaRecord.mangaId,
           mangaName: this.mangaRecord.mangaName,
           newChapters: newChapterList.length,
         })
-      } else {
-        // 删除章节
-        const delChapterList = chapterListSql.filter((item: any) => {
-          return !chapterList.some((sqlItem: any) => sqlItem.chapterPath === item.chapterPath)
-        })
+      }
 
-        for (let index = 0; index < delChapterList.length; index++) {
-          const element = delChapterList[index]
-          await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
-        }
-
-        // 讲漫画扫描成果写入日志
+      if (delChapterList.length) {
         await insert_manga_scan_log({
           mangaId: this.mangaRecord.mangaId,
           mangaName: this.mangaRecord.mangaName,
           newChapters: delChapterList.length * -1,
+        })
+      }
+
+      if (!newChapterList.length && !delChapterList.length) {
+        await insert_manga_scan_log({
+          mangaId: this.mangaRecord.mangaId,
+          mangaName: this.mangaRecord.mangaName,
+          newChapters: 0,
         })
       }
       // 更新章节数量
@@ -751,18 +767,8 @@ export default class ScanMangaJob {
       }
 
       // 排除隐藏文件
-      if (/^\./.test(item)) {
+      if (this.ignoreHiddenFiles && /^\./.test(item)) {
         return false
-      }
-
-      // 包含匹配
-      if (this.pathInfo?.include) {
-        return new RegExp(this.pathInfo.include).test(item)
-      }
-
-      // 排除匹配
-      if (this.pathInfo?.exclude) {
-        return !new RegExp(this.pathInfo.exclude).test(item)
       }
 
       return true
