@@ -12,6 +12,8 @@ export function get_os() {
     return 'Windows'
   } else if (platform === 'linux') {
     return 'Linux'
+  } else if (platform === 'darwin') {
+    return 'MacOS'
   } else {
     return 'Other'
   }
@@ -32,7 +34,7 @@ export function get_env() {
 }
 
 export function path_meta(): string {
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     return path.join(rootDir, 'data', 'meta')
   } else if (platform === 'linux') {
     return '/data/meta'
@@ -42,7 +44,7 @@ export function path_meta(): string {
 }
 
 export function path_poster(): string {
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     return path.join(rootDir, 'data', 'poster')
   } else if (platform === 'linux') {
     return '/data/poster'
@@ -52,7 +54,7 @@ export function path_poster(): string {
 }
 
 export function path_bookmark() {
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     return path.join(rootDir, 'data', 'bookmark')
   } else if (platform === 'linux') {
     return '/data/bookmark'
@@ -62,7 +64,7 @@ export function path_bookmark() {
 }
 
 export function path_cache() {
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     return path.join(rootDir, 'data', 'cache')
   } else if (platform === 'linux') {
     return '/data/cache'
@@ -72,7 +74,7 @@ export function path_cache() {
 }
 
 export function path_compress() {
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     return path.join(rootDir, 'data', 'compress')
   } else if (platform === 'linux') {
     return '/data/compress'
@@ -82,7 +84,7 @@ export function path_compress() {
 }
 
 export function path_config() {
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     return path.join(rootDir, 'data', 'config')
   } else if (platform === 'linux') {
     return path.join('/', 'data', 'config')
@@ -93,7 +95,7 @@ export function path_config() {
 
 export function get_config() {
   let rawData = ''
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     rawData = fs.readFileSync('./data/config/smanga.json', 'utf-8')
   } else if (platform === 'linux') {
     rawData = fs.readFileSync('/data/config/smanga.json', 'utf-8')
@@ -105,7 +107,7 @@ export function get_config() {
 }
 
 export function set_config(config: object) {
-  if (platform === 'win32') {
+  if (platform === 'win32' || platform === 'darwin') {
     fs.writeFileSync('./data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')
   } else if (platform === 'linux') {
     fs.writeFileSync('/data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')

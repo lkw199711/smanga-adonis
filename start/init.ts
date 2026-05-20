@@ -106,7 +106,7 @@ const defaultConfig = {
 export default async function boot() {
   const os = get_os()
 
-  if (os === 'Windows') {
+  if (['Windows','MacOS'].includes(os)) {
     await create_dir_win()
   } else {
     await create_dir_linux()
