@@ -1,4 +1,4 @@
-/**
+﻿/**
  * P2P 多源并行下载池(支持大文件切片下载)
  *
  * 两层并行:
@@ -20,6 +20,7 @@
 import axios from 'axios'
 import fs from 'fs'
 import path from 'path'
+import log from '#services/log_service'
 
 export type Seed = {
   nodeId: string
@@ -182,10 +183,21 @@ export class P2PDownloadPool {
     }
 
     const sliceCount = this.state.queue.filter((t) => !!t.slice).length
-    console.log(
-      `[${tag}] 启动 ${seeds.length} 个 worker, 队列任务=${this.state.queue.length} ` +
-      `(其中分片任务=${sliceCount}, 切片阈值=${this.opts.sliceThresholdBytes}B)`
-    )
+    void log.info({
+      type: 'p2p',
+      module: 'p2p.download_pool',
+      action: 'pool.started',
+      message:
+        `[${tag}] 启动 ${seeds.length} 个 worker, 队列任务=${this.state.queue.length} ` +
+        `(其中分片任务=${sliceCount}, 切片阈值=${this.opts.sliceThresholdBytes}B)`,
+      context: {
+        tag,
+        seeds: seeds.length,
+        queueSize: this.state.queue.length,
+        sliceCount,
+        sliceThresholdBytes: this.opts.sliceThresholdBytes,
+      },
+    })
 
     const workers = seeds.map((seed) => this.runWorker(seed))
     await Promise.all(workers)
@@ -210,7 +222,13 @@ export class P2PDownloadPool {
       )
     }
 
-    console.log(`[${tag}] 全部完成, 累计下载字节=${this.state.totalDownloadedBytes}`)
+    void log.info({
+      type: 'p2p',
+      module: 'p2p.download_pool',
+      action: 'pool.completed',
+      message: `[${tag}] 全部完成, 累计下载字节=${this.state.totalDownloadedBytes}`,
+      context: { tag, totalDownloadedBytes: this.state.totalDownloadedBytes },
+    })
   }
 
   /**
@@ -304,7 +322,13 @@ export class P2PDownloadPool {
       rt.disabledUntil = 0
       rt.failures = 0
       const tag = this.opts.logTag || 'p2p-pool'
-      console.log(`[${tag}] seed ${seed.nodeName || seed.nodeId} 冷静期结束,重新启用`)
+      void log.info({
+        type: 'p2p',
+        module: 'p2p.download_pool',
+        action: 'seed.cooldown.completed',
+        message: `[${tag}] seed ${seed.nodeName || seed.nodeId} 冷静期结束,重新启用`,
+        context: { tag, seedId: seed.nodeId, seedName: seed.nodeName },
+      })
       return true
     }
     return false
@@ -316,10 +340,21 @@ export class P2PDownloadPool {
     if (rt.failures >= this.opts.maxFailurePerSeed && rt.disabledUntil === 0) {
       rt.disabledUntil = Date.now() + this.opts.seedCooldownMs
       const tag = this.opts.logTag || 'p2p-pool'
-      console.warn(
-        `[${tag}] seed ${seed.nodeName || seed.nodeId} 累计失败 ${rt.failures} 次, ` +
-        `进入冷静期 ${this.opts.seedCooldownMs}ms`
-      )
+      void log.warn({
+        type: 'p2p',
+        module: 'p2p.download_pool',
+        action: 'seed.cooldown.started',
+        message:
+          `[${tag}] seed ${seed.nodeName || seed.nodeId} 累计失败 ${rt.failures} 次, ` +
+          `进入冷静期 ${this.opts.seedCooldownMs}ms`,
+        context: {
+          tag,
+          seedId: seed.nodeId,
+          seedName: seed.nodeName,
+          failures: rt.failures,
+          seedCooldownMs: this.opts.seedCooldownMs,
+        },
+      })
     }
   }
 
@@ -367,11 +402,26 @@ export class P2PDownloadPool {
         task.attempts += 1
         task.lastError = err?.message || String(err)
         const sliceInfo = task.slice ? ` slice=${task.slice.index}/${task.slice.ctx.totalSlices}` : ''
-        console.warn(
-          `[${tag}] 下载失败 file=${path.basename(task.remoteAbsPath)}${sliceInfo} ` +
-          `seed=${seed.nodeName || seed.nodeId} attempts=${task.attempts}/${this.opts.maxAttemptsPerTask} ` +
-          `err=${task.lastError}`
-        )
+        void log.warn({
+          type: 'p2p',
+          module: 'p2p.download_pool',
+          action: 'task.download.failed',
+          message:
+            `[${tag}] 下载失败 file=${path.basename(task.remoteAbsPath)}${sliceInfo} ` +
+            `seed=${seed.nodeName || seed.nodeId} attempts=${task.attempts}/${this.opts.maxAttemptsPerTask} ` +
+            `err=${task.lastError}`,
+          context: {
+            tag,
+            remoteAbsPath: task.remoteAbsPath,
+            localPath: task.localPath,
+            seedId: seed.nodeId,
+            seedName: seed.nodeName,
+            attempts: task.attempts,
+            maxAttempts: this.opts.maxAttemptsPerTask,
+            sliceInfo,
+            error: task.lastError,
+          },
+        })
 
         if (task.attempts >= this.opts.maxAttemptsPerTask) {
           this.state.fatalErrors.push({ task, error: task.lastError || 'unknown' })
@@ -465,10 +515,20 @@ export class P2PDownloadPool {
       try {
         const st = fs.statSync(slicePath)
         if (st.size === expectBytes) {
-          console.log(
-            `[${this.opts.logTag || 'p2p-pool'}] 复用已下载分片 ` +
-            `${path.basename(ctx.localPath)} slice=${slice.index}/${ctx.totalSlices}`
-          )
+          void log.info({
+            type: 'p2p',
+            module: 'p2p.download_pool',
+            action: 'slice.reused',
+            message:
+              `[${this.opts.logTag || 'p2p-pool'}] 复用已下载分片 ` +
+              `${path.basename(ctx.localPath)} slice=${slice.index}/${ctx.totalSlices}`,
+            context: {
+              tag: this.opts.logTag || 'p2p-pool',
+              localPath: ctx.localPath,
+              sliceIndex: slice.index,
+              totalSlices: ctx.totalSlices,
+            },
+          })
           // 跳过下载,直接视为该分片完成
           written = 0
         } else {
@@ -559,7 +619,13 @@ export class P2PDownloadPool {
     this.atomicRename(tmpPath, ctx.localPath)
     // 清理分片
     this.cleanupSlices(ctx)
-    console.log(`[${tag}] 合并完成 ${ctx.localPath} (${ctx.totalSlices} 片)`)
+    void log.info({
+      type: 'p2p',
+      module: 'p2p.download_pool',
+      action: 'slice.merge.completed',
+      message: `[${tag}] 合并完成 ${ctx.localPath} (${ctx.totalSlices} 片)`,
+      context: { tag, localPath: ctx.localPath, totalSlices: ctx.totalSlices },
+    })
   }
 
   private cleanupSlices(ctx: SliceContext) {

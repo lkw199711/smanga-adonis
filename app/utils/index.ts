@@ -1,6 +1,7 @@
 import * as os from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
+import logger from '@adonisjs/core/services/logger'
 // import { SortOrder } from
 const platform = os.platform()
 // 获取当前运行路径作为根目录
@@ -188,7 +189,7 @@ export function s_delete(file: string) {
   try {
     fs.rmSync(file, { force: true, recursive: true })
   } catch (err) {
-    console.error(err.message)
+    logger.error({ err, file }, 'delete file failed')
   }
 }
 
@@ -198,9 +199,9 @@ export function write_log(logMessage: string) {
   // 将日志内容同步写入文件，使用 '\n' 换行符
   try {
     fs.appendFileSync(logFile, logMessage + '\n')
-    console.log('日志已成功写入')
+    logger.info('日志已成功写入')
   } catch (err) {
-    console.error('写入日志时发生错误:', err)
+    logger.error({ err }, '写入日志时发生错误')
   }
 }
 
@@ -301,7 +302,6 @@ export function is_directory(filePath: string) {
     return stats.isDirectory()
   } catch (err) {
     // 如果路径不存在或其他错误，返回 false
-    // console.error('Error:', err)
     return false
   }
 }

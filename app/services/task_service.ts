@@ -9,6 +9,7 @@ import delete_media_job from './delete_media_job.js'
 import copy_poster_job from './copy_poster_job.js'
 import { sql_parse_json } from '../utils/index.js'
 import { Mutex } from 'async-mutex'
+import log from '#services/log_service'
 const mutex = new Mutex()
 
 type TaskType = Prisma.taskWhereUniqueInput & Prisma.taskUpdateInput
@@ -74,7 +75,14 @@ export default class TaskProcess {
     try {
       await this.process(task as TaskType)
     } catch (err) {
-      console.log(err.message)
+      void log.error({
+        type: 'task',
+        module: 'task',
+        action: 'task.process.failed',
+        message: `task process failed: ${(err as any)?.message || err}`,
+        error: err,
+        context: { taskId: task.taskId, taskName: task.taskName, command: task.command },
+      })
       release()
     } finally {
       release()
@@ -95,32 +103,68 @@ export default class TaskProcess {
       switch (task.command) {
         case 'taskScanPath':
           //扫描任务调用
-          console.log('执行扫描任务')
+          void log.info({
+            type: 'task',
+            module: 'task',
+            action: 'task.scan_path.started',
+            message: '执行扫描任务',
+            context: { taskId: task.taskId, taskName: task.taskName },
+          })
           await new scan_job(argsVal).run()
           break
         case 'taskScanManga':
-          console.log('执行扫描漫画任务')
+          void log.info({
+            type: 'task',
+            module: 'task',
+            action: 'task.scan_manga.started',
+            message: '执行扫描漫画任务',
+            context: { taskId: task.taskId, taskName: task.taskName },
+          })
           //扫描漫画任务调用
           await new scan_manga_job(argsVal).run()
           break
         case 'deleteMedia':
           //删除媒体库
-          console.log('删除媒体库')
+          void log.info({
+            type: 'task',
+            module: 'task',
+            action: 'task.delete_media.started',
+            message: '删除媒体库',
+            context: { taskId: task.taskId, taskName: task.taskName },
+          })
           await new delete_media_job(argsVal).run()
           break
         case 'deletePath':
           //删除路径
-          console.log('删除路径')
+          void log.info({
+            type: 'task',
+            module: 'task',
+            action: 'task.delete_path.started',
+            message: '删除路径',
+            context: { taskId: task.taskId, taskName: task.taskName },
+          })
           await new delete_path_job(argsVal).run()
           break
         case 'deleteManga':
           //删除漫画
-          console.log('删除漫画')
+          void log.info({
+            type: 'task',
+            module: 'task',
+            action: 'task.delete_manga.started',
+            message: '删除漫画',
+            context: { taskId: task.taskId, taskName: task.taskName },
+          })
           await new delete_manga_job(argsVal).run()
           break
         case 'deleteChapter':
           //删除章节
-          console.log('删除章节')
+          void log.info({
+            type: 'task',
+            module: 'task',
+            action: 'task.delete_chapter.started',
+            message: '删除章节',
+            context: { taskId: task.taskId, taskName: task.taskName },
+          })
           await new delete_chapter_job(argsVal).run()
           break
         case 'copyPoster':

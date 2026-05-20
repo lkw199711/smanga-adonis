@@ -10,6 +10,7 @@ import {
   updateBookmarkValidator,
   batchIdsParamBookmarkValidator,
 } from '#validators/bookmark'
+import log from '#services/log_service'
 
 // 书签封面文件名前缀,用于识别可删除的生成文件
 const BOOKMARK_FILE_PREFIX = 'smanga_bookmark_'
@@ -164,7 +165,14 @@ export default class BookmarksController {
         )
         await compressImageToSize(pageImage, outputFile, config.compress.bookmark)
       } catch (err: any) {
-        console.error('书签封面生成失败:', err?.message || err)
+        void log.error({
+          type: 'media',
+          module: 'bookmark',
+          action: 'bookmark.cover.generate.failed',
+          message: `书签封面生成失败: ${err?.message || err}`,
+          error: err,
+          context: { chapterId, mangaId, mediaId, page: pageNum },
+        })
         // 封面失败不阻断书签创建, 清理半成品文件
         if (outputFile) s_delete(outputFile)
         outputFile = ''

@@ -7,6 +7,7 @@
  */
 // timer.js
 import TaskProcess from '#services/task_service'
+import log from '#services/log_service'
 
 let timerId: any = null
 
@@ -21,7 +22,13 @@ function startTimer(interval = 1000) {
       taskProcess.handleTaskQueue()
       period++
     }, interval)
-    console.log(`定时器已启动，ID: ${timerId}`)
+    void log.info({
+      type: 'task',
+      module: 'timer',
+      action: 'timer.started',
+      message: `定时器已启动，ID: ${timerId}`,
+      context: { timerId: String(timerId), interval },
+    })
   }
 }
 
@@ -32,7 +39,13 @@ setInterval(() => {
 function stopTimer() {
   if (timerId) {
     clearInterval(timerId)
-    console.log(`定时器已停止，ID: ${timerId}`)
+    void log.info({
+      type: 'task',
+      module: 'timer',
+      action: 'timer.stopped',
+      message: `定时器已停止，ID: ${timerId}`,
+      context: { timerId: String(timerId) },
+    })
     timerId = null
   }
 }

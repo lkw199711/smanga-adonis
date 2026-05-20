@@ -237,7 +237,6 @@ export default class TestsController {
     await parseStringPromise(ComicInfo)
 
     zip.getEntries()
-    console.log(ComicInfo)
 
     const json = await extract_metadata(rarFilePath1)
 

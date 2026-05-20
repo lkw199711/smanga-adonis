@@ -20,7 +20,7 @@ import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
 import p2pIdentityService from './p2p_identity_service.js'
 import { get_config } from '#utils/index'
-import { log_p2p_error } from '#utils/p2p_log'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 
 /** 移除报告:列出在本次对账中被清理掉的群组 */
 export type RemovedGroupInfo = {
@@ -203,15 +203,24 @@ export async function reconcileGroupsWithTracker(): Promise<ReconcileResult> {
           removedPeers: r.removedPeers,
           removedTransfers: r.removedTransfers,
         })
-        console.log(
-          `[p2p] 对账清理孤儿群: ${orphan.groupName}(${orphan.groupNo}) ` +
-          `共享=${r.removedShares} peer=${r.removedPeers} transfer=${r.removedTransfers}`
-        )
+        log_p2p_info('group.reconcile.purged', {
+          groupNo: orphan.groupNo,
+          groupName: r.groupName || orphan.groupName,
+          removedShares: r.removedShares,
+          removedPeers: r.removedPeers,
+          removedTransfers: r.removedTransfers,
+        })
       }
     } catch (e: any) {
       log_p2p_error(`group.reconcile.purge(${orphan.groupNo})`, e)
     }
   }
+
+  log_p2p_info('group.reconcile.completed', {
+    remoteCount: remoteGroups.length,
+    upserted,
+    removedCount: removed.length,
+  })
 
   return {
     remoteCount: remoteGroups.length,
@@ -236,10 +245,13 @@ export async function reconcileSingleGroupIfMissing(groupNo: string): Promise<bo
     if (stillExist) return false
     const r = await purgeLocalGroupByGroupNo(groupNo)
     if (r.groupExisted) {
-      console.log(
-        `[p2p] 单群对账清理: ${r.groupName}(${groupNo}) ` +
-        `共享=${r.removedShares} peer=${r.removedPeers} transfer=${r.removedTransfers}`
-      )
+      log_p2p_info('group.reconcile.single.purged', {
+        groupNo,
+        groupName: r.groupName,
+        removedShares: r.removedShares,
+        removedPeers: r.removedPeers,
+        removedTransfers: r.removedTransfers,
+      })
       return true
     }
     return false

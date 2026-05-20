@@ -3,6 +3,7 @@ const require = createRequire(import.meta.url)
 import * as path from 'path'
 import { is_img } from './index.js'
 const unrar = require('node-unrar-js')
+import log from '#services/log_service'
 
 export async function extractRar(rarFilePath: string, outputDir: string) {
   const extractor = await unrar.createExtractorFromFile({
@@ -34,7 +35,13 @@ export async function extractFirstImageFromRAROrder(
   let first = false
   const extractored: any = extractor.extract({
     files: (fileHeader: any) => {
-      console.log('fileHeader:', fileHeader)
+      void log.debug({
+        type: 'media',
+        module: 'unrar',
+        action: 'first_image.file_header',
+        message: `fileHeader: ${fileHeader?.name || ''}`,
+        context: { rarFilePath, outputFile, fileName: fileHeader?.name },
+      })
 
       if (first) return false
 

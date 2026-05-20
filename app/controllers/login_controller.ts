@@ -8,6 +8,17 @@ import {
   createLoginValidator,
   updateLoginValidator,
 } from '#validators/login'
+import log from '#services/log_service'
+
+function buildDevice(request: HttpContext['request']) {
+  return {
+    requestId: request.id?.(),
+    ip: request.ip(),
+    userAgent: request.header('user-agent'),
+    method: request.method(),
+    url: request.url(),
+  }
+}
 
 export default class LoginController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
@@ -53,8 +64,22 @@ export default class LoginController {
           userAgent: request.header('user-agent'),
         },
       })
+
+      await log.warn({
+        type: 'auth',
+        module: 'auth',
+        action: 'auth.login.failed',
+        message: 'login failed: user not found',
+        context: {
+          userName,
+          reason: 'user_not_found',
+        },
+        device: buildDevice(request),
+      })
+
       return response.status(401).json({ code: 401, message: '用户不存在', data: login })
     }
+
     if (user.passWord !== md5(passWord)) {
       login = await prisma.login.create({
         data: {
@@ -65,10 +90,23 @@ export default class LoginController {
           userAgent: request.header('user-agent'),
         },
       })
+
+      await log.warn({
+        type: 'auth',
+        module: 'auth',
+        action: 'auth.login.failed',
+        message: 'login failed: password mismatch',
+        userId: user.userId,
+        context: {
+          userName,
+          reason: 'password_mismatch',
+        },
+        device: buildDevice(request),
+      })
+
       return response.status(401).json({ code: 401, message: '密码错误', data: login })
     }
 
-    // 生成token
     const token = await prisma.token.create({
       data: {
         token: uuidv4(),
@@ -76,7 +114,6 @@ export default class LoginController {
       },
     })
 
-    // 生成登录记录
     login = await prisma.login.create({
       data: {
         user: { connect: { userId: user.userId } },
@@ -87,6 +124,21 @@ export default class LoginController {
         userAgent: request.header('user-agent'),
       },
     })
+
+    await log.info({
+      type: 'auth',
+      module: 'auth',
+      action: 'auth.login.success',
+      message: 'login success',
+      userId: user.userId,
+      context: {
+        userName,
+        loginId: login.loginId,
+      },
+      device: buildDevice(request),
+      awaitPersist: true,
+    })
+
     return response.json({
       code: 200,
       message: '登录成功',

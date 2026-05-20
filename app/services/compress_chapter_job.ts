@@ -2,6 +2,7 @@ import { unzipFile } from '#utils/unzip'
 import { extractRar } from '#utils/unrar'
 import { extract7z } from '#utils/un7z'
 import prisma from '#start/prisma'
+import log from '#services/log_service'
 
 export default class CompressChapterJob {
   chapterId: number
@@ -9,6 +10,7 @@ export default class CompressChapterJob {
   chapterType: string
   chapterPath: string
   compressPath: string
+
   constructor({
     chapterId,
     chapterInfo,
@@ -28,43 +30,96 @@ export default class CompressChapterJob {
     this.chapterPath = chapterPath
     this.compressPath = compressPath
   }
-  public async run() {
-    switch (this.chapterType) {
-      case 'zip':
-        await unzipFile(this.chapterPath, this.compressPath)
-        break
-      case 'rar':
-        await extractRar(this.chapterPath, this.compressPath)
-        break
-      case '7z':
-        await extract7z(this.chapterPath, this.compressPath)
-        break
-      default:
-        console.log('未知的压缩类型:', this.chapterType)
-    }
 
-    await prisma.compress.upsert({
-      where: {
+  public async run() {
+    const start = Date.now()
+
+    await log.info({
+      type: 'compress',
+      module: 'compress',
+      action: 'chapter.compress.started',
+      message: `chapter compress started: ${this.chapterPath}`,
+      context: {
         chapterId: this.chapterId,
-      },
-      update: {
-        compressStatus: 'compressed',
-      },
-      create: {
-        chapterId: this.chapterId,
-        mangaId: this.chapterInfo.mangaId,
-        mediaId: this.chapterInfo.mediaId,
+        chapterType: this.chapterType,
         chapterPath: this.chapterPath,
         compressPath: this.compressPath,
-        compressType: this.chapterType,
-        compressStatus: 'compressed',
       },
     })
 
-    console.log(this.chapterPath, '解压完成')
-  }
-  catch(error: any) {
-    console.error('解压失败:', this.chapterPath, error)
-    throw error // 重新抛出错误，让Bull.js知道任务失败
+    try {
+      switch (this.chapterType) {
+        case 'zip':
+          await unzipFile(this.chapterPath, this.compressPath)
+          break
+        case 'rar':
+          await extractRar(this.chapterPath, this.compressPath)
+          break
+        case '7z':
+          await extract7z(this.chapterPath, this.compressPath)
+          break
+        default:
+          await log.warn({
+            type: 'compress',
+            module: 'compress',
+            action: 'chapter.compress.unknown_type',
+            message: `unknown compress type: ${this.chapterType}`,
+            context: {
+              chapterId: this.chapterId,
+              chapterType: this.chapterType,
+              chapterPath: this.chapterPath,
+            },
+          })
+      }
+
+      await prisma.compress.upsert({
+        where: {
+          chapterId: this.chapterId,
+        },
+        update: {
+          compressStatus: 'compressed',
+        },
+        create: {
+          chapterId: this.chapterId,
+          mangaId: this.chapterInfo.mangaId,
+          mediaId: this.chapterInfo.mediaId,
+          chapterPath: this.chapterPath,
+          compressPath: this.compressPath,
+          compressType: this.chapterType,
+          compressStatus: 'compressed',
+        },
+      })
+
+      await log.info({
+        type: 'compress',
+        module: 'compress',
+        action: 'chapter.compress.completed',
+        message: `chapter compress completed: ${this.chapterPath}`,
+        context: {
+          chapterId: this.chapterId,
+          chapterType: this.chapterType,
+          chapterPath: this.chapterPath,
+          compressPath: this.compressPath,
+          durationMs: Date.now() - start,
+        },
+      })
+    } catch (error: any) {
+      await log.error({
+        type: 'compress',
+        module: 'compress',
+        action: 'chapter.compress.failed',
+        message: `chapter compress failed: ${this.chapterPath}`,
+        error,
+        awaitPersist: true,
+        context: {
+          chapterId: this.chapterId,
+          chapterType: this.chapterType,
+          chapterPath: this.chapterPath,
+          compressPath: this.compressPath,
+          durationMs: Date.now() - start,
+        },
+      })
+      throw error
+    }
   }
 }

@@ -8,6 +8,7 @@ import {
   createUserValidator,
   updateUserValidator,
 } from '#validators/user'
+import log from '#services/log_service'
 
 export default class UsersController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
@@ -161,7 +162,14 @@ export default class UsersController {
 
       return response.json({ code: 200, message: '删除成功', data: user })
     } catch (error) {
-      console.error('删除用户失败:', error)
+      void log.error({
+        type: 'system',
+        module: 'user',
+        action: 'user.delete.failed',
+        message: '删除用户失败',
+        error,
+        context: { userId },
+      })
       return response.status(500).json({ code: 500, message: '删除用户失败，请检查用户是否存在或有其他关联记录' })
     }
   }

@@ -14,7 +14,7 @@ import { addTask } from '#services/queue_service'
 import { TaskPriority } from '#type/index'
 import path from 'path'
 import { get_config } from '#utils/index'
-import { log_p2p_error } from '#utils/p2p_log'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import TrackerClient from '#services/p2p/tracker_client'
 import {
@@ -195,6 +195,13 @@ export default class P2PTransfersController {
         priority,
       })
 
+      log_p2p_info('transfer.pull', {
+        transferId: transfer.p2pTransferId,
+        groupNo: transfer.groupNo,
+        transferType: transfer.transferType,
+        priority,
+        status: transfer.status,
+      })
       return response.json({ code: 200, message: '已加入队列', data: transfer })
     } catch (e: any) {
       log_p2p_error('transfer.pull', e)
@@ -216,6 +223,7 @@ export default class P2PTransfersController {
         where: { p2pTransferId: id },
         data: { status: 'canceled', endTime: new Date() },
       })
+      log_p2p_info('transfer.cancel', { transferId: id })
       return response.json({ code: 200, message: '已取消' })
     } catch (e: any) {
       log_p2p_error('transfer.cancel', e)
@@ -245,6 +253,11 @@ export default class P2PTransfersController {
         })
       }
       await prisma.p2p_transfer.delete({ where: { p2pTransferId: id } })
+      log_p2p_info('transfer.destroy', {
+        transferId: id,
+        previousStatus: item.status,
+        transferType: item.transferType,
+      })
       return response.json({ code: 200, message: '已删除' })
     } catch (e: any) {
       log_p2p_error('transfer.destroy', e)
@@ -268,6 +281,7 @@ export default class P2PTransfersController {
       const result = await prisma.p2p_transfer.deleteMany({
         where: { status: { in: targetStatus } },
       })
+      log_p2p_info('transfer.clear', { statuses: targetStatus, count: result.count })
       return response.json(
         { code: 200, message: `已清理 ${result.count} 条记录`, data: { count: result.count } }
       )
@@ -309,6 +323,11 @@ export default class P2PTransfersController {
         priority,
       })
 
+      log_p2p_info('transfer.retry', {
+        transferId: id,
+        transferType: item.transferType,
+        priority,
+      })
       return response.json({ code: 200, message: '已重新入队' })
     } catch (e: any) {
       log_p2p_error('transfer.retry', e)

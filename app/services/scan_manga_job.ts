@@ -23,6 +23,7 @@ import { error_log, insert_manga_scan_log } from '#utils/log'
 import { path as sqlPathType, media as sqlMediaType } from '@prisma/client'
 import { metaKeyType } from '../type/index.js'
 import { comicinfo_transform } from '#utils/meta'
+import log from '#services/log_service'
 type pathType = sqlPathType & { media: sqlMediaType }
 const logModule = '[manga scan]'
 
@@ -38,7 +39,7 @@ export default class ScanMangaJob {
   private cachePath: string = ''
   private nonNumericChapterCounter: number | null = null
   private meta: any = null
-  // @ts-ignore - 保留以便后续扫描忽略隐藏文件特性使用
+  // @ts-ignore - 淇濈暀浠ヤ究鍚庣画鎵弿蹇界暐闅愯棌鏂囦欢鐗规€т娇鐢?
   private ignoreHiddenFiles: boolean
   private tagColor: string
   private isCloudMedia: boolean = false
@@ -80,6 +81,19 @@ export default class ScanMangaJob {
 
   async run() {
     const pathId = this.pathId
+    await log.info({
+      type: 'scan',
+      module: 'scan',
+      action: 'manga.run.started',
+      message: `scan manga started: ${this.mangaName}`,
+      context: {
+        pathId,
+        mangaPath: this.mangaPath,
+        mangaName: this.mangaName,
+        parentPath: this.parentPath,
+      },
+    })
+
     this.pathInfo = await prisma.path
       .findUnique({ where: { pathId }, include: { media: true } })
       .catch(async (e) => {
@@ -92,21 +106,45 @@ export default class ScanMangaJob {
     const reloadCover = get_config()?.scan?.reloadCover ?? 0
 
     if (!this.pathInfo) {
-      await error_log(logModule, `pathId ${pathId}路径不存在`)
+      await log.warn({
+        type: 'scan',
+        module: 'scan',
+        action: 'manga.run.failed',
+        message: `scan manga failed: path missing (${pathId})`,
+        context: {
+          pathId,
+          mangaPath,
+          mangaName,
+          reason: 'path_not_found',
+        },
+      })
+      await error_log(logModule, `pathId ${pathId} 路径不存在`)
       return
     }
 
     if (!this.mediaRecord) {
-      error_log(logModule, `pathId ${pathId}媒体库不存在`)
+      await log.warn({
+        type: 'scan',
+        module: 'scan',
+        action: 'manga.run.failed',
+        message: `scan manga failed: media missing (${pathId})`,
+        context: {
+          pathId,
+          mangaPath,
+          mangaName,
+          reason: 'media_not_found',
+        },
+      })
+      error_log(logModule, `pathId ${pathId}濯掍綋搴撲笉瀛樺湪`)
       return
     }
 
     this.cachePath = path_cache()
 
-    // 检查漫画是否有 smanga 元数据文件夹
+    // 妫€鏌ユ极鐢绘槸鍚︽湁 smanga 鍏冩暟鎹枃浠跺す
     this.smangaMetaFolder = this.smanga_meta_folder()
 
-    // 更新路径扫描时间
+    // 鏇存柊璺緞鎵弿鏃堕棿
     await prisma.path
       .update({ where: { pathId }, data: { lastScanTime: new Date() } })
       .catch(async (e) => {
@@ -115,7 +153,7 @@ export default class ScanMangaJob {
 
     let mangaInsert: Prisma.mangaCreateInput
 
-    // 判断名称是否有中文 将标题繁简体转换后写入副标题,用于检索
+    // 鍒ゆ柇鍚嶇О鏄惁鏈変腑鏂?灏嗘爣棰樼箒绠€浣撹浆鎹㈠悗鍐欏叆鍓爣棰?鐢ㄤ簬妫€绱?
     let subTitle = mangaName
     if (/[\u4e00-\u9fa5]/.test(mangaName)) {
       const sName = S.t2s(mangaName)
@@ -123,7 +161,7 @@ export default class ScanMangaJob {
       subTitle = `${sName}/${tName}`
     }
 
-    // 漫画插入数据
+    // 婕敾鎻掑叆鏁版嵁
     mangaInsert = {
       media: {
         connect: {
@@ -145,7 +183,7 @@ export default class ScanMangaJob {
       mangaNumber: this.manga_number(mangaName),
     }
 
-    // 检查库中是否存在此漫画
+    // 妫€鏌ュ簱涓槸鍚﹀瓨鍦ㄦ婕敾
     this.mangaRecord = await prisma.manga.findFirst({
       where: {
         AND: [{ mangaPath }, { mediaId: this.pathInfo.mediaId }],
@@ -160,12 +198,12 @@ export default class ScanMangaJob {
 
     if (this.mediaRecord.mediaType == 1) {
       /**
-       * 当漫画类型为单本漫画
+       * 褰撴极鐢荤被鍨嬩负鍗曟湰婕敾
        */
 
-      // 漫画已存在 跳过此漫画
+      // 婕敾宸插瓨鍦?璺宠繃姝ゆ极鐢?
       if (this.mangaRecord) {
-        // 如果漫画已被标记为删除,则恢复漫画
+        // 濡傛灉婕敾宸茶鏍囪涓哄垹闄?鍒欐仮澶嶆极鐢?
         if (this.mangaRecord.deleteFlag) {
           await prisma.manga.update({
             where: { mangaId: this.mangaRecord.mangaId },
@@ -179,11 +217,11 @@ export default class ScanMangaJob {
 
       this.mangaRecord = await prisma.manga.create({ data: mangaInsert })
 
-      // 扫描元数据
+      // 鎵弿鍏冩暟鎹?
       await this.meta_scan()
       await this.meta_scan_series()
 
-      // 更新漫画封面
+      // 鏇存柊婕敾灏侀潰
       if (!this.mangaRecord.mangaCover || this.shouldSmangaMetaUpdate || reloadCover) {
         await this.manga_poster(mangaPath)
       }
@@ -209,19 +247,25 @@ export default class ScanMangaJob {
 
       this.chapterRecord = await prisma.chapter.create({ data: chapterInsert })
       if (!this.chapterRecord) {
-        console.log('章节插入失败', mangaName)
+        void log.warn({
+          type: 'scan',
+          module: 'scan',
+          action: 'chapter.insert.empty_result',
+          message: '绔犺妭鎻掑叆澶辫触',
+          context: { mangaName, mangaPath, pathId },
+        })
         return
       }
 
-      // 获取封面图
+      // 鑾峰彇灏侀潰鍥?
       if (!this.chapterRecord.chapterCover || reloadCover) {
         await this.chapter_poster(mangaPath)
       }
 
-      // 扫描元数据
+      // 鎵弿鍏冩暟鎹?
       await this.meta_scan_comicinfo()
 
-      // 讲漫画扫描成果写入日志
+      // 璁叉极鐢绘壂鎻忔垚鏋滃啓鍏ユ棩蹇?
       await insert_manga_scan_log({
         mangaId: this.mangaRecord.mangaId,
         mangaName: this.mangaRecord.mangaName,
@@ -229,15 +273,15 @@ export default class ScanMangaJob {
       })
     } else {
       /**
-       * 当漫画类型为连载漫画
+       * 褰撴极鐢荤被鍨嬩负杩炶浇婕敾
        */
 
-      // 库中不存在则新增
+      // 搴撲腑涓嶅瓨鍦ㄥ垯鏂板
       if (!this.mangaRecord) {
         this.mangaRecord = await prisma.manga.create({ data: mangaInsert })
       }
 
-      // 扫描元数据
+      // 鎵弿鍏冩暟鎹?
       await this.meta_scan()
       await this.meta_scan_series()
       
@@ -245,18 +289,18 @@ export default class ScanMangaJob {
          await this.manga_poster(mangaPath)
        }
 
-      // 漫画未更新
+      // 婕敾鏈洿鏂?
       if (!this.shouldChapterUpdate) {
         return
       }
 
-      // 扫描目录结构获取章节列表
+      // 鎵弿鐩綍缁撴瀯鑾峰彇绔犺妭鍒楄〃
       let chapterList = await this.scan_path(mangaPath)
       let chapterListSql: any = await prisma.chapter.findMany({
         where: { mangaId: this.mangaRecord.mangaId },
       })
 
-      // 如果漫画已被标记为删除,则恢复漫画
+      // 濡傛灉婕敾宸茶鏍囪涓哄垹闄?鍒欐仮澶嶆极鐢?
       if (this.mangaRecord.deleteFlag) {
         await prisma.manga.update({
           where: { mangaId: this.mangaRecord.mangaId },
@@ -281,7 +325,7 @@ export default class ScanMangaJob {
 
       for (let index = 0; index < newChapterList.length; index++) {
         const item = newChapterList[index]
-        // 检测有无中文 将标题繁简体转换后写入副标题,用于检索
+        // 妫€娴嬫湁鏃犱腑鏂?灏嗘爣棰樼箒绠€浣撹浆鎹㈠悗鍐欏叆鍓爣棰?鐢ㄤ簬妫€绱?
         let subTitle = item.chapterName
         if (/[\u4e00-\u9fa5]/.test(item.chapterName)) {
           const sName = S.t2s(item.chapterName)
@@ -312,18 +356,24 @@ export default class ScanMangaJob {
         try {
           this.chapterRecord = await prisma.chapter.create({ data: chapterInsert })
         } catch (e) {
-          console.log('章节插入失败', item.chapterName)
-          console.log(e)
+          void log.error({
+            type: 'scan',
+            module: 'scan',
+            action: 'chapter.insert.failed',
+            message: `绔犺妭鎻掑叆澶辫触: ${item.chapterName}`,
+            error: e,
+            context: { chapterName: item.chapterName, chapterPath: item.chapterPath, pathId },
+          })
 
           return
         }
 
-        // 获取封面图
+        // 鑾峰彇灏侀潰鍥?
         if (!this.chapterRecord.chapterCover || reloadCover) {
           await this.chapter_poster(item.chapterPath)
         }
 
-        // 扫描元数据
+        // 鎵弿鍏冩暟鎹?
         await this.meta_scan_comicinfo()
       }
 
@@ -333,14 +383,14 @@ export default class ScanMangaJob {
       }
 
       if (newChapterList.length || delChapterList.length) {
-        // 更新漫画更新时间
+        // 鏇存柊婕敾鏇存柊鏃堕棿
         await prisma.manga.update({
           data: { updateTime: new Date() },
           where: { mangaId: this.mangaRecord.mangaId },
         })
       }
 
-      // 讲漫画扫描成果写入日志
+      // 璁叉极鐢绘壂鎻忔垚鏋滃啓鍏ユ棩蹇?
       if (newChapterList.length) {
         await insert_manga_scan_log({
           mangaId: this.mangaRecord.mangaId,
@@ -364,13 +414,13 @@ export default class ScanMangaJob {
           newChapters: 0,
         })
       }
-      // 更新章节数量
+      // 鏇存柊绔犺妭鏁伴噺
       await prisma.manga.update({
         where: { mangaId: this.mangaRecord.mangaId },
         data: { chapterCount: chapterList.length },
       })
 
-      // 更新漫画更新时间 当且仅当章节数量增加时
+      // 鏇存柊婕敾鏇存柊鏃堕棿 褰撲笖浠呭綋绔犺妭鏁伴噺澧炲姞鏃?
       if (this.mangaRecord?.chapterCount && chapterList.length > this.mangaRecord.chapterCount) {
         await prisma.manga.update({
           where: { mangaId: this.mangaRecord.mangaId },
@@ -381,14 +431,14 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 判断是否需要更新元数据
-   * @returns 是否需要更新元数据
+   * 鍒ゆ柇鏄惁闇€瑕佹洿鏂板厓鏁版嵁
+   * @returns 鏄惁闇€瑕佹洿鏂板厓鏁版嵁
    */
   async should_smanga_meta_update() {
-    // 没有元数据文件夹 则不需要更新元数据
+    // 娌℃湁鍏冩暟鎹枃浠跺す 鍒欎笉闇€瑕佹洿鏂板厓鏁版嵁
     if (!this.smangaMetaFolder) return false
 
-    // 获取最新meta的更新时间
+    // 鑾峰彇鏈€鏂癿eta鐨勬洿鏂版椂闂?
     const latestMeta = await prisma.meta.findFirst({
       where: {
         mangaId: this.mangaRecord.mangaId,
@@ -398,26 +448,26 @@ export default class ScanMangaJob {
       },
     })
 
-    // 没有最新meta 则需要重新扫描
+    // 娌℃湁鏈€鏂癿eta 鍒欓渶瑕侀噸鏂版壂鎻?
     if (!latestMeta) return true
 
-    // 如果最新meta的更新时间 大于 meta文件夹更新时间 则不需要重新扫描
+    // 濡傛灉鏈€鏂癿eta鐨勬洿鏂版椂闂?澶т簬 meta鏂囦欢澶规洿鏂版椂闂?鍒欎笉闇€瑕侀噸鏂版壂鎻?
     if (latestMeta) {
       const latestMetaUpdateTime = latestMeta.updateTime
       const smangaMetaFolderUpdateTime = fs.statSync(this.smangaMetaFolder).mtime
       return smangaMetaFolderUpdateTime > latestMetaUpdateTime
     }
 
-    // 没有最新meta 则需要重新扫描
+    // 娌℃湁鏈€鏂癿eta 鍒欓渶瑕侀噸鏂版壂鎻?
     return true
   }
 
   /**
-   * 判断是否需要更新章节
-   * @returns 是否需要更新章节
+   * 鍒ゆ柇鏄惁闇€瑕佹洿鏂扮珷鑺?
+   * @returns 鏄惁闇€瑕佹洿鏂扮珷鑺?
    */
   async should_chapter_update() {
-    // 获取最新章节的更新时间
+    // 鑾峰彇鏈€鏂扮珷鑺傜殑鏇存柊鏃堕棿
     const latestChapter = await prisma.chapter.findFirst({
       where: {
         mangaId: this.mangaRecord.mangaId,
@@ -427,7 +477,7 @@ export default class ScanMangaJob {
       },
     })
 
-    // 如果最新章节的更新时间 大于 章节文件夹更新时间 则不需要重新扫描
+    // 濡傛灉鏈€鏂扮珷鑺傜殑鏇存柊鏃堕棿 澶т簬 绔犺妭鏂囦欢澶规洿鏂版椂闂?鍒欎笉闇€瑕侀噸鏂版壂鎻?
     if (latestChapter) {
       const latestChapterUpdateTime = latestChapter.updateTime
       if (!fs.existsSync(this.mangaRecord.mangaPath)) {
@@ -437,33 +487,33 @@ export default class ScanMangaJob {
       return mangaFolderUpdateTime > latestChapterUpdateTime
     }
 
-    // 没有最新章节 则需要重新扫描
+    // 娌℃湁鏈€鏂扮珷鑺?鍒欓渶瑕侀噸鏂版壂鎻?
     return true
   }
 
   /**
    *
-   * @param recasn 是否重新扫描元数据
+   * @param recasn 鏄惁閲嶆柊鎵弿鍏冩暟鎹?
    * @returns
    */
   async meta_scan() {
-    // 云盘库必须扫描既有缓存元数据 否则不执行
+    // 浜戠洏搴撳繀椤绘壂鎻忔棦鏈夌紦瀛樺厓鏁版嵁 鍚﹀垯涓嶆墽琛?
     if (this.alreadyExistManga && this.isCloudMedia && !this.hasDataMeta) return false
 
-    // 没有元数据文件
+    // 娌℃湁鍏冩暟鎹枃浠?
     if (!this.smangaMetaFolder) return false
 
-    // 判断是否需要更新元数据
+    // 鍒ゆ柇鏄惁闇€瑕佹洿鏂板厓鏁版嵁
     if (!this.shouldSmangaMetaUpdate) return false
 
     const dirMeta = this.smangaMetaFolder
 
-    // 删除原有的元数据
+    // 鍒犻櫎鍘熸湁鐨勫厓鏁版嵁
     await this.clear_manga_meta()
 
     const infoFile = path.join(dirMeta, 'info.json')
     const metaFile = path.join(dirMeta, 'meta.json')
-    // 为兼容老的元数据文件 允许文件名为info
+    // 涓哄吋瀹硅€佺殑鍏冩暟鎹枃浠?鍏佽鏂囦欢鍚嶄负info
     let targetMetaFile = ''
     if (fs.existsSync(infoFile)) {
       targetMetaFile = infoFile
@@ -475,7 +525,7 @@ export default class ScanMangaJob {
       const rawData = fs.readFileSync(targetMetaFile, 'utf-8')
       const info = JSON.parse(rawData)
       this.meta = info
-      // 一般性元数据
+      // 涓€鑸€у厓鏁版嵁
       const keys = Object.keys(info)
       for (let index = 0; index < keys.length; index++) {
         const key = keys[index]
@@ -494,12 +544,19 @@ export default class ScanMangaJob {
               },
             })
           } catch (e) {
-            console.log(e)
+            void log.warn({
+              type: 'scan',
+              module: 'scan',
+              action: 'meta.insert.failed',
+              message: 'insert manga metadata failed',
+              error: e,
+              context: { mangaId: this.mangaRecord?.mangaId, metaName: key },
+            })
           }
         }
       }
 
-      // 插入标签
+      // 鎻掑叆鏍囩
       const tags: string[] = info?.tags || []
       await this.tag_insert(tags)
 
@@ -512,7 +569,7 @@ export default class ScanMangaJob {
         const filePath = path.join(dirMeta, file)
         if (!is_img(file)) continue
 
-        // 获取不带扩展名的基础名称
+        // 鑾峰彇涓嶅甫鎵╁睍鍚嶇殑鍩虹鍚嶇О
         const baseName = path.basename(file, path.extname(file))
         let metaName = baseName.replace(/\d/g, '')
         let metaContent = null
@@ -540,7 +597,7 @@ export default class ScanMangaJob {
         })
       }
 
-      // 更新章节顺序
+      // 鏇存柊绔犺妭椤哄簭
       const chapters = info?.chapters || []
       for (let index = 0; index < chapters.length; index++) {
         const chapter: any = chapters[index]
@@ -559,7 +616,7 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 检查漫画是否有 smanga 元数据文件夹
+   * 妫€鏌ユ极鐢绘槸鍚︽湁 smanga 鍏冩暟鎹枃浠跺す
    * @returns
    */
   smanga_meta_folder() {
@@ -588,13 +645,13 @@ export default class ScanMangaJob {
       return dataMeta
     }
 
-    // 检查隐藏文件夹
+    // 妫€鏌ラ殣钘忔枃浠跺す
     const hiddenFolder = path.join(this.mangaPath, '.smanga')
     if (fs.existsSync(hiddenFolder)) {
       return hiddenFolder
     }
 
-    // 检查 smanga-info 文件夹
+    // 妫€鏌?smanga-info 鏂囦欢澶?
     const dirMeta = dirOutExt + '-smanga-info'
     if (fs.existsSync(dirMeta)) {
       return dirMeta
@@ -604,13 +661,13 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 扫描 series.json 元数据
+   * 鎵弿 series.json 鍏冩暟鎹?
    * @returns
    */
   async meta_scan_series() {
-    // 漫画为smanga定制格式 不扫描 series.json
+    // 婕敾涓簊manga瀹氬埗鏍煎紡 涓嶆壂鎻?series.json
     if (this.smangaMetaFolder) return false
-    // 云漫画不扫描 series.json
+    // 浜戞极鐢讳笉鎵弿 series.json
     if (this.isCloudMedia) return
     const mangaPath = this.mangaRecord.mangaPath
     if (!is_directory(mangaPath)) return
@@ -619,7 +676,7 @@ export default class ScanMangaJob {
     const series = fils.find((file) => file === 'series.json')
     if (!series) return
 
-    // 删除原有的元数据
+    // 鍒犻櫎鍘熸湁鐨勫厓鏁版嵁
     await this.clear_manga_meta()
 
     const seriesFile = path.join(mangaPath, series)
@@ -663,7 +720,7 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 清除漫画元数据
+   * 娓呴櫎婕敾鍏冩暟鎹?
    */
   async clear_manga_meta() {
     await prisma.meta.deleteMany({
@@ -675,7 +732,7 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 清除章节元数据
+   * 娓呴櫎绔犺妭鍏冩暟鎹?
    */
   async clear_chapter_meta() {
     await prisma.meta.deleteMany({
@@ -688,8 +745,8 @@ export default class ScanMangaJob {
 
   async tag_insert(tags: any[]) {
     for (let tag of tags) {
-      // 系统标签保持唯一性,用户标签不做唯一性限制
-      // 扫描时确认没有同名系统标签,没有则创建
+      // 绯荤粺鏍囩淇濇寔鍞竴鎬?鐢ㄦ埛鏍囩涓嶅仛鍞竴鎬ч檺鍒?
+      // 鎵弿鏃剁‘璁ゆ病鏈夊悓鍚嶇郴缁熸爣绛?娌℃湁鍒欏垱寤?
       const tagName = typeof tag === 'object' ? tag.name : tag
       let tagRecord = await prisma.tag.findFirst({
         where: { tagName: tagName, userId: 0 },
@@ -720,16 +777,27 @@ export default class ScanMangaJob {
             },
           })
           .catch((e) => {
-            console.log('标签插入失败', e)
+            void log.warn({
+              type: 'scan',
+              module: 'scan',
+              action: 'tag.insert.failed',
+              message: '鏍囩鎻掑叆澶辫触',
+              error: e,
+              context: {
+                mangaId: this.mangaRecord?.mangaId,
+                tagId: tagRecord?.tagId,
+                tagName: tag,
+              },
+            })
           })
       }
     }
   }
 
   /**
-   * 向数据库中插入元数据
-   * @param key 元数据名称
-   * @param value 元数据值
+   * 鍚戞暟鎹簱涓彃鍏ュ厓鏁版嵁
+   * @param key 鍏冩暟鎹悕绉?
+   * @param value 鍏冩暟鎹€?
    */
   async prisma_meta_insert(key: string, value: string) {
     await prisma.meta.create({
@@ -746,14 +814,20 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 扫描目录获取章节列表
-   * @param dir 目录路径
-   * @returns 章节列表
+   * 鎵弿鐩綍鑾峰彇绔犺妭鍒楄〃
+   * @param dir 鐩綍璺緞
+   * @returns 绔犺妭鍒楄〃
    */
   async scan_path(dir: string) {
-    // 检查是否为文件夹
+    // 检查是否为目录
     if (!fs.statSync(dir).isDirectory()) {
-      console.log('指定非目录文件,请检查 媒体库类型 设置')
+      void log.warn({
+        type: 'scan',
+        module: 'scan',
+        action: 'scan_path.invalid_directory',
+        message: '鎸囧畾闈炵洰褰曟枃浠?璇锋鏌?濯掍綋搴撶被鍨?璁剧疆',
+        context: { dir },
+      })
       return []
     }
 
@@ -761,12 +835,12 @@ export default class ScanMangaJob {
     let chapterList: any = []
 
     folderList = folderList.filter((item) => {
-      // 排除. .. 文件夹
+      // 鎺掗櫎. .. 鏂囦欢澶?
       if (item === '.' || item === '..') {
         return false
       }
 
-      // 排除隐藏文件
+      // 鎺掗櫎闅愯棌鏂囦欢
       if (this.ignoreHiddenFiles && /^\./.test(item)) {
         return false
       }
@@ -777,14 +851,14 @@ export default class ScanMangaJob {
     folderList.forEach((item) => {
       const itemPath = path.join(dir, item)
       const fileName = item
-      // 文件夹章节 全名作为章节名
+      // 鏂囦欢澶圭珷鑺?鍏ㄥ悕浣滀负绔犺妭鍚?
       let chapterName = fileName
       const chapterPath = itemPath
 
-      // 如果不是目录
+      // 濡傛灉涓嶆槸鐩綍
       let type = 'img'
       if (!fs.statSync(itemPath).isDirectory()) {
-        // 文件章节 获取其基础名称作为章节名
+        // 鏂囦欢绔犺妭 鑾峰彇鍏跺熀纭€鍚嶇О浣滀负绔犺妭鍚?
         chapterName = path.basename(item, path.extname(item))
         if (/(.cbr|.cbz|.zip|.epub)$/.test(itemPath)) {
           type = 'zip'
@@ -806,22 +880,22 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 扫描章节封面
-   * @param dir 章节目录
-   * @returns 封面路径
+   * 鎵弿绔犺妭灏侀潰
+   * @param dir 绔犺妭鐩綍
+   * @returns 灏侀潰璺緞
    */
   async chapter_poster(dir: string) {
     const posterPath = path_poster()
-    // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
+    // 涓洪槻姝ar鍖呭唴榛樿鐨勬枃浠跺悕涓巆hapterId閲嶅悕,鍔犲叆鐗瑰畾鍓嶇紑
     let posterName = `${posterPath}/smanga_chapter_${this.chapterRecord.chapterId}.jpg`
-    // 压缩目标图片大小
+    // 鍘嬬缉鐩爣鍥剧墖澶у皬
     const maxSizeKB = get_config()?.compress?.poster || 300
-    // 是否在压缩包内找到封面
+    // 鏄惁鍦ㄥ帇缂╁寘鍐呮壘鍒板皝闈?
     let hasPosterInZip = false
     let hasMetaChapterCover = false
-    // 源封面
+    // 婧愬皝闈?
     let sourcePoster = ''
-    // 检索平级目录封面图片
+    // 妫€绱㈠钩绾х洰褰曞皝闈㈠浘鐗?
     const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
 
     if (this.isCloudMedia) {
@@ -835,9 +909,9 @@ export default class ScanMangaJob {
         this.smangaMetaFolder,
         'chapter-cover.jpg'
       )
-      // 同级别目录封面
+      // 鍚岀骇鍒洰褰曞皝闈?
       const sidePoster = dirOutExt + '.jpg'
-      // 漫画文件夹内部封面
+      // 婕敾鏂囦欢澶瑰唴閮ㄥ皝闈?
       const picPath = path.join(dir, 'cover.jpg')
 
       if (fs.existsSync(metaChapterCover)) {
@@ -851,7 +925,7 @@ export default class ScanMangaJob {
       } else if (fs.existsSync(picPath)) {
         sourcePoster = picPath
       } else {
-        // 这几种都没有,网盘库不再检测其他封面
+        // 杩欏嚑绉嶉兘娌℃湁,缃戠洏搴撲笉鍐嶆娴嬪叾浠栧皝闈?
         return ''
       }
     }
@@ -867,7 +941,7 @@ export default class ScanMangaJob {
       })
     }
 
-    // 都没有找到返回空
+    // 閮芥病鏈夋壘鍒拌繑鍥炵┖
     if (!this.isCloudMedia && !sourcePoster && this.chapterRecord.chapterType === 'img') {
       sourcePoster = first_image(dir)
     }
@@ -877,7 +951,7 @@ export default class ScanMangaJob {
       !sourcePoster &&
       ['zip', 'rar', '7z'].includes(this.chapterRecord.chapterType)
     ) {
-      // 解压缩获取封面
+      // 瑙ｅ帇缂╄幏鍙栧皝闈?
       const cachePoster = `${this.cachePath}/smanga_cache_${this.chapterRecord.chapterId}.jpg`
 
       if (this.chapterRecord.chapterType === 'zip') {
@@ -901,19 +975,19 @@ export default class ScanMangaJob {
       }
     }
 
-    // 未找到封面
+    // 鏈壘鍒板皝闈?
     if (!sourcePoster) return ''
 
-    // 不复制封面,直接使用源文件 网盘库必须copy封面
+    // 涓嶅鍒跺皝闈?鐩存帴浣跨敤婧愭枃浠?缃戠洏搴撳繀椤籧opy灏侀潰
     const copyPoster =
-      // 压缩包内有封面
+      // 鍘嬬缉鍖呭唴鏈夊皝闈?
       hasPosterInZip ||
-      // 云盘库 且没有移植元数据
+      // 浜戠洏搴?涓旀病鏈夌Щ妞嶅厓鏁版嵁
       (this.isCloudMedia && !hasMetaChapterCover) ||
-      // 封面过大需要压缩
+      // 灏侀潰杩囧ぇ闇€瑕佸帇缂?
       fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
-    // 写入漫画与章节封面
+    // 鍐欏叆婕敾涓庣珷鑺傚皝闈?
     await prisma.chapter.update({
       where: { chapterId: this.chapterRecord.chapterId },
       data: { chapterCover: copyPoster ? posterName : sourcePoster },
@@ -921,7 +995,7 @@ export default class ScanMangaJob {
     this.chapterRecord.chapterCover = copyPoster ? posterName : sourcePoster
 
     if (!this.mangaRecord.mangaCover) {
-      // 直接使用update的返回值会丢失id 才用补充赋值的形式补全数据
+      // 鐩存帴浣跨敤update鐨勮繑鍥炲€间細涓㈠けid 鎵嶇敤琛ュ厖璧嬪€肩殑褰㈠紡琛ュ叏鏁版嵁
       await prisma.manga.update({
         where: { mangaId: this.mangaRecord.mangaId },
         data: { mangaCover: copyPoster ? posterName : sourcePoster },
@@ -929,7 +1003,7 @@ export default class ScanMangaJob {
       this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
     }
 
-    // 复制封面到poster目录 使用单独任务队列
+    // 澶嶅埗灏侀潰鍒皃oster鐩綍 浣跨敤鍗曠嫭浠诲姟闃熷垪
     if (copyPoster) {
       this.copy_poster(sourcePoster, posterName, maxSizeKB)
     }
@@ -938,42 +1012,42 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 扫描漫画封面
-   * @param dir 漫画目录
-   * @returns 封面路径
+   * 鎵弿婕敾灏侀潰
+   * @param dir 婕敾鐩綍
+   * @returns 灏侀潰璺緞
    */
   async manga_poster(dir: string) {
     const posterPath = path_poster()
-    // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
+    // 涓洪槻姝ar鍖呭唴榛樿鐨勬枃浠跺悕涓巆hapterId閲嶅悕,鍔犲叆鐗瑰畾鍓嶇紑
     const posterName = `${posterPath}/smanga_manga_${this.mangaRecord.mangaId}.jpg`
-    // 压缩目标图片大小
+    // 鍘嬬缉鐩爣鍥剧墖澶у皬
     const maxSizeKB = get_config()?.compress?.poster ?? 300
-    // 源封面
+    // 婧愬皝闈?
     let sourcePoster = ''
     const dirOutExt = dir.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
 
-    // 如果是网盘库 简化封面检索逻辑
+    // 濡傛灉鏄綉鐩樺簱 绠€鍖栧皝闈㈡绱㈤€昏緫
     if (this.isCloudMedia) {
-      // 元数据封面
+      // 鍏冩暟鎹皝闈?
       const metaMangaCover = path.join(this.smangaMetaFolder, 'cover.jpg')
-      // 同级别目录封面
+      // 鍚岀骇鍒洰褰曞皝闈?
       const sidePoster = dirOutExt + '.jpg'
-      // 漫画文件夹内部封面
+      // 婕敾鏂囦欢澶瑰唴閮ㄥ皝闈?
       const picPath = path.join(dir, 'cover.jpg')
       if (fs.existsSync(metaMangaCover)) {
         sourcePoster = metaMangaCover
       } else if (fs.existsSync(sidePoster)) {
         sourcePoster = sidePoster
       } else if (fs.existsSync(picPath)) {
-        // 漫画文件夹内部封面
+        // 婕敾鏂囦欢澶瑰唴閮ㄥ皝闈?
         sourcePoster = picPath
       } else {
-        // 这几样都没有 网盘库不再检测其他类型的封面
+        // 杩欏嚑鏍烽兘娌℃湁 缃戠洏搴撲笉鍐嶆娴嬪叾浠栫被鍨嬬殑灏侀潰
         return ''
       }
     }
 
-    // 检索元数据目录封面图片
+    // 妫€绱㈠厓鏁版嵁鐩綍灏侀潰鍥剧墖
     if (!sourcePoster && fs.existsSync(this.smangaMetaFolder)) {
       extensions.some((ext) => {
         const picPath = path.join(this.smangaMetaFolder, 'cover' + ext)
@@ -984,7 +1058,7 @@ export default class ScanMangaJob {
       })
     }
 
-    // 检索平级目录封面图片
+    // 妫€绱㈠钩绾х洰褰曞皝闈㈠浘鐗?
     if (!sourcePoster) {
       extensions.some((ext) => {
         const picPath = dirOutExt + ext
@@ -995,7 +1069,7 @@ export default class ScanMangaJob {
       })
     }
 
-    // 检索漫画文件夹内的封面图片
+    // 妫€绱㈡极鐢绘枃浠跺す鍐呯殑灏侀潰鍥剧墖
     if (
       !sourcePoster &&
       fs.existsSync(dir) &&
@@ -1012,9 +1086,9 @@ export default class ScanMangaJob {
 
     if (!sourcePoster) return ''
 
-    // 不复制封面,直接使用源文件
-    // 网盘库必须copy封面
-    // 或者封面太大需要压缩
+    // 涓嶅鍒跺皝闈?鐩存帴浣跨敤婧愭枃浠?
+    // 缃戠洏搴撳繀椤籧opy灏侀潰
+    // 鎴栬€呭皝闈㈠お澶ч渶瑕佸帇缂?
     const copyPoster =
       (this.isCloudMedia && !this.hasDataMeta) || fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
@@ -1024,7 +1098,7 @@ export default class ScanMangaJob {
     })
     this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
 
-    // 复制封面到poster目录 使用单独任务队列
+    // 澶嶅埗灏侀潰鍒皃oster鐩綍 浣跨敤鍗曠嫭浠诲姟闃熷垪
     if (copyPoster) {
       this.copy_poster(sourcePoster, posterName, maxSizeKB)
     }
@@ -1033,10 +1107,10 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 复制封面到poster目录 使用单独任务队列
-   * @param inputPath 源封面路径
-   * @param outputPath 目标封面路径
-   * @param maxSizeKB 压缩目标图片大小
+   * 澶嶅埗灏侀潰鍒皃oster鐩綍 浣跨敤鍗曠嫭浠诲姟闃熷垪
+   * @param inputPath 婧愬皝闈㈣矾寰?
+   * @param outputPath 鐩爣灏侀潰璺緞
+   * @param maxSizeKB 鍘嬬缉鐩爣鍥剧墖澶у皬
    */
   copy_poster(inputPath: string, outputPath: string, maxSizeKB: number) {
     addTask({
@@ -1053,13 +1127,13 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 扫描comicinfo元数据
+   * 鎵弿comicinfo鍏冩暟鎹?
    * @returns
    */
   async meta_scan_comicinfo() {
-    // 漫画为smanga定制格式 不扫描 comicinfo
+    // 婕敾涓簊manga瀹氬埗鏍煎紡 涓嶆壂鎻?comicinfo
     if (this.smangaMetaFolder) return false
-    // 云漫画不扫描 comicinfo
+    // 浜戞极鐢讳笉鎵弿 comicinfo
     if (this.isCloudMedia) return
     if (this.chapterRecord.chapterType !== 'zip') {
       return
@@ -1069,7 +1143,7 @@ export default class ScanMangaJob {
 
     if (!comicinfo) return
 
-    // 删除原有的元数据
+    // 鍒犻櫎鍘熸湁鐨勫厓鏁版嵁
     await this.clear_chapter_meta()
 
     const metaData = comicinfo_transform(comicinfo)
@@ -1078,7 +1152,7 @@ export default class ScanMangaJob {
   }
 
   /**
-   * 插入元数据
+   * 鎻掑叆鍏冩暟鎹?
    * @param meta
    * @param insertChapter
    */
@@ -1101,13 +1175,13 @@ export default class ScanMangaJob {
   }
 
   compress_type(filePath: string) {
-    // 检查是否为目录
+    // 妫€鏌ユ槸鍚︿负鐩綍
     if (fs.statSync(filePath).isDirectory()) return 'img'
 
-    // 获取小写的文件扩展名
+    // 鑾峰彇灏忓啓鐨勬枃浠舵墿灞曞悕
     const ext = path.extname(filePath).toLowerCase()
 
-    // 使用对象映射扩展名到类型
+    // 浣跨敤瀵硅薄鏄犲皠鎵╁睍鍚嶅埌绫诲瀷
     const typeMapping: any = {
       '.cbr': 'zip',
       '.cbz': 'zip',
@@ -1118,18 +1192,18 @@ export default class ScanMangaJob {
       '.pdf': 'pdf',
     }
 
-    // 返回对应类型，如果没有匹配，默认返回 'img'
+    // 杩斿洖瀵瑰簲绫诲瀷锛屽鏋滄病鏈夊尮閰嶏紝榛樿杩斿洖 'img'
     return typeMapping[ext] || 'img'
   }
 
   chapter_number(chapterName: string, width: number = 5) {
-    // 使用正则表达式匹配数字部分及其后面可能的符号 (., -, _)
+    // 浣跨敤姝ｅ垯琛ㄨ揪寮忓尮閰嶆暟瀛楅儴鍒嗗強鍏跺悗闈㈠彲鑳界殑绗﹀彿 (., -, _)
     const match = chapterName.match(/(\d+[\.\-_]*\d*)/)
 
     if (!match) {
-      // 如果没有匹配到数字部分，为非数字章节分配一个递增的值
+      // 濡傛灉娌℃湁鍖归厤鍒版暟瀛楅儴鍒嗭紝涓洪潪鏁板瓧绔犺妭鍒嗛厤涓€涓€掑鐨勫€?
       if (this.nonNumericChapterCounter === null) {
-        // 生成初始值 (90, 900, 9000, ...)
+        // 鐢熸垚鍒濆鍊?(90, 900, 9000, ...)
         this.nonNumericChapterCounter = parseInt('9'.padEnd(width, '0'))
       }
       const nonNumericValue = (this.nonNumericChapterCounter++).toString()
@@ -1139,14 +1213,14 @@ export default class ScanMangaJob {
 
     const [_, numPart] = match
 
-    // 将数字部分进行补位，保留符号部分
+    // 灏嗘暟瀛楅儴鍒嗚繘琛岃ˉ浣嶏紝淇濈暀绗﹀彿閮ㄥ垎
     const paddedNumPart = numPart.replace(/^(\d+)/, (match) => match.padStart(width, '0'))
 
     return paddedNumPart
   }
 
   manga_number(mangaName: string, width: number = 3) {
-    // 使用正则表达式匹配数字部分及其后面可能的符号 (., -, _)
+    // 浣跨敤姝ｅ垯琛ㄨ揪寮忓尮閰嶆暟瀛楅儴鍒嗗強鍏跺悗闈㈠彲鑳界殑绗﹀彿 (., -, _)
     const match = mangaName.match(/(\d+[\.\-_]*\d*)/)
 
     if (!match) {
@@ -1155,7 +1229,7 @@ export default class ScanMangaJob {
 
     const [_, numPart] = match
 
-    // 将数字部分进行补位，保留符号部分
+    // 灏嗘暟瀛楅儴鍒嗚繘琛岃ˉ浣嶏紝淇濈暀绗﹀彿閮ㄥ垎
     const paddedNumPart = numPart.replace(/^(\d+)/, (match) => match.padStart(width, '0'))
 
     return paddedNumPart
@@ -1166,8 +1240,7 @@ export default class ScanMangaJob {
       const stats = fs.statSync(filePath)
       return stats.isDirectory()
     } catch (err) {
-      // 如果路径不存在或其他错误，返回 false
-      // console.error('Error:', err)
+      // 濡傛灉璺緞涓嶅瓨鍦ㄦ垨鍏朵粬閿欒锛岃繑鍥?false
       return false
     }
   }
@@ -1184,3 +1257,4 @@ export default class ScanMangaJob {
       : chapterIndex.toString().padStart(5, '0')
   }
 }
+

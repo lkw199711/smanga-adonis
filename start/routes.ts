@@ -124,6 +124,8 @@ router.delete('/latest/:chapterId', [LatestsController, 'destroy'])
 
 // 日志模块 log
 router.get('/log', [LogsController, 'index'])
+router.get('/log/summary', [LogsController, 'summary'])
+router.delete('/log/cleanup', [LogsController, 'cleanup'])
 router.get('/log/:logId', [LogsController, 'show'])
 router.post('/log', [LogsController, 'create'])
 router.put('/log/:logId', [LogsController, 'update'])

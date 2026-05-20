@@ -15,7 +15,7 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import { get_config } from '#utils/index'
-import { log_p2p_error } from '#utils/p2p_log'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 import { p2pVerifyEchoValidator } from '#validators/p2p'
 
 export default class P2PVerifyController {
@@ -42,6 +42,10 @@ export default class P2PVerifyController {
       const { challenge } = await p2pVerifyEchoValidator.validate(request.qs())
 
       const localNodeId: string = p2p?.node?.nodeId || ''
+      log_p2p_info('verify.echo', {
+        nodeId: localNodeId || null,
+        challengeLength: String(challenge || '').length,
+      })
 
       return response.json({
         code: 200,

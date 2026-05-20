@@ -9,6 +9,7 @@ import prisma from '#start/prisma'
 import { get_config, path_compress, s_delete } from '#utils/index'
 import * as fs from 'fs'
 import * as path from 'path'
+import log from '#services/log_service'
 
 export default class ClearCompressCacheJob {
   async run() {
@@ -19,7 +20,13 @@ export default class ClearCompressCacheJob {
 
     // Check if the directory exists
     if (!fs.existsSync(compressDir)) {
-      console.log('Compress directory does not exist, skipping cleanup')
+      void log.info({
+        type: 'compress',
+        module: 'compress',
+        action: 'cleanup.skipped_directory_missing',
+        message: 'Compress directory does not exist, skipping cleanup',
+        context: { compressDir },
+      })
       return
     }
 

@@ -1,12 +1,12 @@
 import Seven from 'node-7z'
 import { is_img } from './index.js'
 import * as path from 'path'
+import log from '#services/log_service'
 
 // async function extract7z(filePath: string, outputDir: string) {
 //   const myStream = Seven.extractFull(filePath, outputDir)
-
-//   myStream.on('end', () => console.log('Extraction complete'))
-//   myStream.on('error', (err: any) => console.error('Error:', err))
+//   myStream.on('end', () => {})
+//   myStream.on('error', (_err: any) => {})
 // }
 
 export async function extract7z(filePath: string, outputDir: string) {
@@ -14,12 +14,25 @@ export async function extract7z(filePath: string, outputDir: string) {
     const myStream = Seven.extractFull(filePath, outputDir)
 
     myStream.on('end', () => {
-      console.log('Extraction complete')
+      void log.info({
+        type: 'media',
+        module: 'un7z',
+        action: 'extract.full.completed',
+        message: 'Extraction complete',
+        context: { filePath, outputDir },
+      })
       resolve(true)
     })
 
     myStream.on('error', (err: any) => {
-      console.error('Error:', err)
+      void log.error({
+        type: 'media',
+        module: 'un7z',
+        action: 'extract.full.failed',
+        message: '7z extract failed',
+        error: err,
+        context: { filePath, outputDir },
+      })
       reject(err)
     })
   })
@@ -42,19 +55,38 @@ export async function list7zContents(filePath: string): Promise<string[]> {
     })
 
     myStream.on('end', () => {
-      console.log('Listing complete')
+      void log.info({
+        type: 'media',
+        module: 'un7z',
+        action: 'list.completed',
+        message: 'Listing complete',
+        context: { filePath, count: fileList.length },
+      })
       resolve(fileList)
     })
 
     myStream.on('error', (err: any) => {
-      console.error('Error:', err)
+      void log.error({
+        type: 'media',
+        module: 'un7z',
+        action: 'list.failed',
+        message: '7z list failed',
+        error: err,
+        context: { filePath },
+      })
       reject(err)
     })
   })
 }
 
 export async function first_image_7z(filePath: string, outputDir: string) {
-  console.log('first_image_7z', filePath, outputDir)
+  void log.info({
+    type: 'media',
+    module: 'un7z',
+    action: 'first_image.started',
+    message: 'first_image_7z',
+    context: { filePath, outputDir },
+  })
 
   const fileList = await list7zContents(filePath)
   let image = fileList.find((file: string) => is_img(file))
@@ -74,12 +106,25 @@ export async function first_image_7z(filePath: string, outputDir: string) {
     })
 
     myStream.on('end', () => {
-      console.log('Extraction complete')
+      void log.info({
+        type: 'media',
+        module: 'un7z',
+        action: 'first_image.extract.completed',
+        message: 'Extraction complete',
+        context: { filePath, outputDir, image },
+      })
       resolve(image)
     })
 
     myStream.on('error', (err: any) => {
-      console.error('Error:', err)
+      void log.error({
+        type: 'media',
+        module: 'un7z',
+        action: 'first_image.extract.failed',
+        message: 'first image extract failed',
+        error: err,
+        context: { filePath, outputDir, image },
+      })
       reject(err)
     })
   })
@@ -98,7 +143,13 @@ export class Un7z {
     filePath: string = this.filePath,
     outputDir: string = this.outputDir
   ) {
-    console.log('first_image_7z', filePath, outputDir)
+    void log.info({
+      type: 'media',
+      module: 'un7z',
+      action: 'first_image.class.started',
+      message: 'first_image_7z',
+      context: { filePath, outputDir },
+    })
 
     let fileList = await list7zContents(filePath)
 
@@ -125,12 +176,25 @@ export class Un7z {
       })
 
       myStream.on('end', () => {
-        console.log('Extraction complete')
+        void log.info({
+          type: 'media',
+          module: 'un7z',
+          action: 'first_image.class.extract.completed',
+          message: 'Extraction complete',
+          context: { filePath, outputDir, image },
+        })
         resolve(image)
       })
 
       myStream.on('error', (err: any) => {
-        console.error('Error:', err)
+        void log.error({
+          type: 'media',
+          module: 'un7z',
+          action: 'first_image.class.extract.failed',
+          message: 'first image extract failed',
+          error: err,
+          context: { filePath, outputDir, image },
+        })
         reject(err)
       })
     })

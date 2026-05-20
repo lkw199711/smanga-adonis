@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { addTask } from './queue_service.js'
 import { get_config } from '#utils/index'
+import log from '#services/log_service'
 
 type mangaItem = {
   mangaPath: string
@@ -14,9 +15,7 @@ type mangaItem = {
 
 export default class ScanPathJob {
   private pathId: number = 0
-  // 路径信息
   private pathInfo: any = null
-  // 媒体库信息
   private mediaInfo: any = null
   private ignoreHiddenFiles: boolean
 
@@ -35,31 +34,21 @@ export default class ScanPathJob {
 
     try {
       return new RegExp(rule).test(target)
-    } catch (e: any) {
-      throw new Error(`路径 ${this.pathId} 的扫描匹配规则无效: ${rule} (${e?.message || e})`)
+    } catch (error: any) {
+      throw new Error(`scan rule invalid for path ${this.pathId}: ${rule} (${error?.message || error})`)
     }
   }
 
   private should_include_manga(item: mangaItem) {
-    // 排除元数据文件夹
-    if (/smanga-info/.test(item.mangaName)) {
-      return false
-    }
+    if (/smanga-info/.test(item.mangaName)) return false
+    if (item.mangaType === 'other') return false
 
-    // 非漫画文件夹
-    if (item.mangaType === 'other') {
-      return false
-    }
-
-    // 同时匹配漫画名与完整路径，双层目录时可以用上层目录做规则。
     const target = `${item.mangaName}\n${item.mangaPath}`
 
-    // 包含匹配
     if (this.pathInfo.include) {
       return this.match_rule(this.pathInfo.include, target)
     }
 
-    // 排除匹配
     if (this.pathInfo.exclude) {
       return !this.match_rule(this.pathInfo.exclude, target)
     }
@@ -68,49 +57,56 @@ export default class ScanPathJob {
   }
 
   async run() {
+    await log.info({
+      type: 'scan',
+      module: 'scan',
+      action: 'path.run.started',
+      message: `scan path ${this.pathId} started`,
+      context: { pathId: this.pathId },
+    })
+
     this.pathInfo = await prisma.path.findFirst({
       where: { pathId: this.pathId },
-      include: {
-        media: true,
-      },
+      include: { media: true },
     })
 
     this.mediaInfo = this.pathInfo?.media
 
-    // 不存在路径 结束扫面任务
     if (!this.pathInfo || !this.mediaInfo) {
-      console.log('不存在路径或媒体库');
+      await log.warn({
+        type: 'scan',
+        module: 'scan',
+        action: 'path.run.skipped',
+        message: `scan path ${this.pathId} skipped: path or media missing`,
+        context: {
+          pathId: this.pathId,
+          hasPath: !!this.pathInfo,
+          hasMedia: !!this.mediaInfo,
+        },
+      })
       return
     }
 
-    // 目录中的漫画
     let mangaList: mangaItem[] = []
-    // 数据库中的漫画
-    let mangaListSql = []
 
-    // 根据否扫描二级目录的设置 执行扫描任务
     if (this.mediaInfo.directoryFormat === 1) {
-      // 扫描所有目录
       mangaList = await this.scan_path_parent()
     } else {
-      // 扫描目录下的所有文件
       mangaList = await this.scan_path(this.pathInfo.pathContent)
     }
 
-    mangaListSql = await prisma.manga.findMany({ where: { pathId: this.pathId } })
+    const mangaListSql = await prisma.manga.findMany({ where: { pathId: this.pathId } })
     const delMangaList = mangaListSql.filter((manga) => {
       return !mangaList.some((item) => {
         return this.normalize_scan_path(item.mangaPath) === this.normalize_scan_path(manga.mangaPath)
       })
     })
 
-    // 删除目录中不存在的漫画
     for (let index = 0; index < delMangaList.length; index++) {
       const item = delMangaList[index]
-      // 生成参数
       const args = {
         pathId: this.pathId,
-        mangaId: item.mangaId
+        mangaId: item.mangaId,
       }
 
       await addTask({
@@ -123,14 +119,22 @@ export default class ScanPathJob {
     }
 
     if (!mangaList.length) {
-      // 漫画目录为空，仍需清理数据库中已不存在的漫画。
+      await log.info({
+        type: 'scan',
+        module: 'scan',
+        action: 'path.run.completed',
+        message: `scan path ${this.pathId} completed with no manga`,
+        context: {
+          pathId: this.pathId,
+          discoveredCount: 0,
+          deleteMangaCount: delMangaList.length,
+        },
+      })
       return
     }
 
-    // 扫描现有目录漫画
     for (let index = 0; index < mangaList.length; index++) {
-      const item = mangaList[index];
-      // 生成参数
+      const item = mangaList[index]
       const args = {
         pathId: this.pathId,
         mangaCount: mangaList.length,
@@ -148,8 +152,7 @@ export default class ScanPathJob {
       })
     }
 
-    // 生成媒体库封面
-    if(get_config().scan?.createMediaPoster) {
+    if (get_config().scan?.createMediaPoster) {
       await addTask({
         taskName: `create_media_poster_${this.pathInfo.mediaId}`,
         command: 'createMediaPoster',
@@ -157,27 +160,29 @@ export default class ScanPathJob {
         priority: TaskPriority.createMediaPoster,
       })
     }
+
+    await log.info({
+      type: 'scan',
+      module: 'scan',
+      action: 'path.run.completed',
+      message: `scan path ${this.pathId} completed`,
+      context: {
+        pathId: this.pathId,
+        discoveredCount: mangaList.length,
+        deleteMangaCount: delMangaList.length,
+        mediaId: this.pathInfo.mediaId,
+        directoryFormat: this.mediaInfo.directoryFormat,
+      },
+    })
   }
 
-  /**
-   * 扫描目录
-   * @param dir
-   * @returns
-   */
   scan_path(dir: string) {
     let folderList = fs.readdirSync(dir)
-    let mangaList = []
+    let mangaList: mangaItem[] = []
 
-    // 在列表中去除. .. 文件夹
     folderList = folderList.filter((item) => {
-      if( item === '.' || item === '..') {
-        return false
-      }
-      // 隐藏文件夹
-      if(this.ignoreHiddenFiles && /^\./.test(item)) {
-        return false
-      }
-
+      if (item === '.' || item === '..') return false
+      if (this.ignoreHiddenFiles && /^\./.test(item)) return false
       return true
     })
 
@@ -185,9 +190,7 @@ export default class ScanPathJob {
       const itemPath = path.join(dir, item)
 
       let mangaType = 'img'
-      // 检查是否为文件夹
       if (!fs.statSync(itemPath).isDirectory()) {
-        // 获取文件扩展名
         const ext = path.extname(item).toLowerCase()
         if (['.zip', '.cbz', '.cbr', '.epub'].includes(ext)) {
           mangaType = 'zip'
@@ -201,7 +204,7 @@ export default class ScanPathJob {
           mangaType = 'other'
         }
       }
-      
+
       return {
         mangaPath: itemPath,
         mangaName: item,
@@ -210,47 +213,27 @@ export default class ScanPathJob {
       }
     })
 
-    // 根据正则规则过滤出漫画目录
     mangaList = mangaList.filter((item) => this.should_include_manga(item))
 
     return mangaList
   }
 
-  /**
-   * 扫描二级目录
-   * @returns 漫画列表平铺
-   */
   scan_path_parent() {
     let mangaList: mangaItem[] = []
     let folderList = fs.readdirSync(this.pathInfo.pathContent)
 
     folderList = folderList.filter((item) => {
-      if( item === '.' || item === '..') {
-        return false
-      }
-
-      // 隐藏文件夹
-      if (this.ignoreHiddenFiles && /^\./.test(item)) {
-        return false
-      }
+      if (item === '.' || item === '..') return false
+      if (this.ignoreHiddenFiles && /^\./.test(item)) return false
 
       const itemPath = path.join(this.pathInfo.pathContent, item)
-
-      // 检查是否为文件夹
-      if (!fs.statSync(itemPath).isDirectory()) {
-        return false
-      }
-
-      // 排除元数据文件夹
-      if (/smanga-info/.test(itemPath)) {
-        return false
-      }
+      if (!fs.statSync(itemPath).isDirectory()) return false
+      if (/smanga-info/.test(itemPath)) return false
 
       return true
     })
 
     folderList.forEach((item) => {
-      // 二级目录扫描
       const itemPath = path.join(this.pathInfo.pathContent, item)
       mangaList = mangaList.concat(this.scan_path(itemPath))
     })
@@ -258,5 +241,3 @@ export default class ScanPathJob {
     return mangaList
   }
 }
-
-

@@ -1,6 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import trackerNodeService from '#services/tracker/tracker_node_service'
-import { log_tracker_error } from '#utils/p2p_log'
+import { log_tracker_error, log_tracker_info } from '#utils/p2p_log'
 import { resolve_client_ip } from '#utils/ip_resolver'
 import {
   registerTrackerNodeValidator,
@@ -29,6 +29,11 @@ export default class TrackerNodesController {
       const userAgent = request.header('user-agent')
 
       const result = await trackerNodeService.register(payload, clientIp, userAgent)
+      log_tracker_info('node.register', {
+        nodeId: result.nodeId,
+        nodeName: payload.nodeName || null,
+        ip: clientIp.ip,
+      })
 
       return response.json({ code: 200, message: '节点注册成功', data: result })
     } catch (err: any) {
@@ -50,6 +55,13 @@ export default class TrackerNodesController {
       const clientIp = resolve_client_ip(ctx)
 
       const result = await trackerNodeService.heartbeat(nodeId, payload, clientIp)
+      log_tracker_info('node.heartbeat', {
+        nodeId,
+        ip: clientIp.ip,
+        notifications: Array.isArray(result.pendingNotifications)
+          ? result.pendingNotifications.length
+          : 0,
+      })
 
       return response.json({ code: 200, message: '', data: result })
     } catch (err: any) {
@@ -66,6 +78,7 @@ export default class TrackerNodesController {
       const nodeId = (request as any).trackerNodeId as string
       const data = await updateTrackerNodeValidator.validate(request.all())
       const node = await trackerNodeService.update(nodeId, data)
+      log_tracker_info('node.update', { nodeId, nodeName: node.nodeName })
       return response.json({ code: 200, message: '更新成功', data: node })
     } catch (err: any) {
       log_tracker_error('node.update', err)
@@ -80,6 +93,7 @@ export default class TrackerNodesController {
     try {
       const nodeId = (request as any).trackerNodeId as string
       await trackerNodeService.deregister(nodeId)
+      log_tracker_info('node.deregister', { nodeId })
       return response.json({ code: 200, message: '节点已注销' })
     } catch (err: any) {
       log_tracker_error('node.deregister', err)
@@ -99,6 +113,11 @@ export default class TrackerNodesController {
    */
   async whoami(ctx: HttpContext) {
     const clientIp = resolve_client_ip(ctx)
+    log_tracker_info('node.whoami', {
+      ip: clientIp.ip,
+      category: clientIp.category,
+      source: clientIp.source,
+    })
     return ctx.response.json(
       {
         code: 200,

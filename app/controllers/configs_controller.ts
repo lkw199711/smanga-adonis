@@ -7,6 +7,7 @@ import prisma from '#start/prisma'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import p2pHeartbeatService from '#services/p2p/p2p_heartbeat_service'
 import { setConfigValidator, userConfigValidator } from '#validators/config'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 
 /**
  * 将各种语义的真假值统一为布尔型(P2P 配置字段更习惯 true/false)
@@ -259,22 +260,23 @@ export default class ConfigsController {
       p2pIdentityService
         .manualRegister()
         .then(({ identity, reused }) => {
-          console.log(
-            `[p2p] 配置变更,${reused ? '已更新' : '已重新注册'}节点 nodeId=${identity?.nodeId}`
-          )
+          log_p2p_info('config.changed.node_registered', {
+            reused,
+            nodeId: identity?.nodeId,
+          })
         })
         .catch((err: any) => {
-          console.warn(`[p2p] 配置变更后同步到 tracker 失败: ${err?.message || err}`)
+          log_p2p_error('config.changed.tracker_sync', err)
         })
     }
     if (needHeartbeatRestart) {
       p2pHeartbeatService
         .restart()
         .then(() => {
-          console.log('[p2p] 配置变更,心跳服务已重启')
+          log_p2p_info('config.changed.heartbeat_restarted')
         })
         .catch((err: any) => {
-          console.warn(`[p2p] 心跳服务重启失败: ${err?.message || err}`)
+          log_p2p_error('config.changed.heartbeat_restart', err)
         })
     }
 

@@ -20,6 +20,7 @@ import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
 import { metaKeyType } from '../type/index.js'
 import { comicinfo_transform } from '#utils/meta'
+import log from '#services/log_service'
 
 export default class ReloadMangaMetaJob {
   private mangaId: number
@@ -40,6 +41,16 @@ export default class ReloadMangaMetaJob {
   }
 
   async run() {
+    await log.info({
+      type: 'scan',
+      module: 'scan',
+      action: 'manga.meta_reload.started',
+      message: `reload manga meta started: mangaId=${this.mangaId}`,
+      context: {
+        mangaId: this.mangaId,
+      },
+    })
+
     this.cachePath = path_cache()
     this.mangaRecord = await prisma.manga
       .findUnique({ where: { mangaId: this.mangaId } })
@@ -52,6 +63,16 @@ export default class ReloadMangaMetaJob {
       })
 
     if (!this.mangaRecord) {
+      await log.warn({
+        type: 'scan',
+        module: 'scan',
+        action: 'manga.meta_reload.failed',
+        message: `reload manga meta failed: manga not found (${this.mangaId})`,
+        context: {
+          mangaId: this.mangaId,
+          reason: 'manga_not_found',
+        },
+      })
       return
     } else {
       this.alreadyExistManga = true
@@ -66,6 +87,21 @@ export default class ReloadMangaMetaJob {
         )
         return null
       })
+
+    if (!this.mediaRecord) {
+      await log.warn({
+        type: 'scan',
+        module: 'scan',
+        action: 'manga.meta_reload.failed',
+        message: `reload manga meta failed: media not found (${this.mangaRecord.mediaId})`,
+        context: {
+          mangaId: this.mangaId,
+          mediaId: this.mangaRecord.mediaId,
+          reason: 'media_not_found',
+        },
+      })
+      return
+    }
 
     this.isCloudMedia = this.mediaRecord.isCloudMedia
 
@@ -86,6 +122,19 @@ export default class ReloadMangaMetaJob {
       this.chapterRecord = chapter
       await this.chapter_poster(this.chapterRecord.chapterPath)
       await this.meta_scan_comicinfo()
+    })
+
+    await log.info({
+      type: 'scan',
+      module: 'scan',
+      action: 'manga.meta_reload.completed',
+      message: `reload manga meta completed: mangaId=${this.mangaId}`,
+      context: {
+        mangaId: this.mangaId,
+        chapterCount: sqlChapters.length,
+        isCloudMedia: this.isCloudMedia,
+        hasDataMeta: this.hasDataMeta,
+      },
     })
 
     return true
@@ -141,7 +190,14 @@ export default class ReloadMangaMetaJob {
               },
             })
           } catch (e) {
-            console.log(e)
+            void log.warn({
+              type: 'scan',
+              module: 'reload_manga_meta',
+              action: 'meta.insert.failed',
+              message: 'insert manga metadata failed',
+              error: e,
+              context: { mangaId: this.mangaRecord?.mangaId, metaName: key },
+            })
           }
         }
       }
@@ -616,7 +672,18 @@ export default class ReloadMangaMetaJob {
             },
           })
           .catch((e) => {
-            console.log('标签插入失败', e)
+            void log.warn({
+              type: 'scan',
+              module: 'reload_manga_meta',
+              action: 'tag.insert.failed',
+              message: '标签插入失败',
+              error: e,
+              context: {
+                mangaId: this.mangaRecord?.mangaId,
+                tagId: tagRecord?.tagId,
+                tagName: tag,
+              },
+            })
           })
       }
     }

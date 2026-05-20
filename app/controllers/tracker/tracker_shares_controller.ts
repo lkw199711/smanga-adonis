@@ -1,6 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import trackerShareService from '#services/tracker/tracker_share_service'
-import { log_tracker_error } from '#utils/p2p_log'
+import { log_tracker_error, log_tracker_info } from '#utils/p2p_log'
 import {
   announceTrackerShareValidator,
   seedsTrackerShareValidator,
@@ -28,6 +28,11 @@ export default class TrackerSharesController {
         groupNo,
         payload as any
       )
+      log_tracker_info('share.announce', {
+        nodeId,
+        groupNo,
+        shareCount: Array.isArray((payload as any)?.shares) ? (payload as any).shares.length : 0,
+      })
       return response.json({ code: 200, message: '上报成功', data: result })
     } catch (err: any) {
       log_tracker_error('share.announce', err)
@@ -48,6 +53,13 @@ export default class TrackerSharesController {
         shareType: shareType as any,
         remoteMediaId: remoteMediaId ? Number(remoteMediaId) : undefined,
         remoteMangaId: remoteMangaId ? Number(remoteMangaId) : undefined,
+      })
+      log_tracker_info('share.seeds', {
+        groupNo,
+        shareType,
+        remoteMediaId: remoteMediaId ? Number(remoteMediaId) : undefined,
+        remoteMangaId: remoteMangaId ? Number(remoteMangaId) : undefined,
+        count,
       })
       return response.json(
         { code: 200, message: '', list: list as any, count }
@@ -75,6 +87,12 @@ export default class TrackerSharesController {
           nodeId: nodeId || undefined,
         }
       )
+      log_tracker_info('manifest.list', {
+        groupNo,
+        since: since ? Number(since) : undefined,
+        nodeId: nodeId || undefined,
+        count: Array.isArray(data?.list) ? data.list.length : undefined,
+      })
       return response.json({ code: 200, message: '', data })
     } catch (err: any) {
       log_tracker_error('manifest.list', err)
@@ -99,6 +117,13 @@ export default class TrackerSharesController {
         remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
         remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
       })
+      log_tracker_info('manifest.detail', {
+        groupNo,
+        nodeId,
+        shareType,
+        remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
+        remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
+      })
       return response.json({ code: 200, message: '', data })
     } catch (err: any) {
       log_tracker_error('manifest.detail', err)
@@ -117,6 +142,13 @@ export default class TrackerSharesController {
         page: page ? Number(page) : undefined,
         pageSize: pageSize ? Number(pageSize) : undefined,
         keyword,
+      })
+      log_tracker_info('share.list', {
+        groupNo,
+        page: page ? Number(page) : undefined,
+        pageSize: pageSize ? Number(pageSize) : undefined,
+        keyword: keyword || undefined,
+        count,
       })
       return response.json(
         { code: 200, message: '', list: list as any, count }

@@ -11,7 +11,7 @@
  */
 import type { HttpContext } from '@adonisjs/core/http'
 import trackerGroupService from '#services/tracker/tracker_group_service'
-import { log_tracker_error } from '#utils/p2p_log'
+import { log_tracker_error, log_tracker_info } from '#utils/p2p_log'
 import { get_config } from '#utils/index'
 import {
   listTrackerAdminGroupValidator,
@@ -57,6 +57,13 @@ export default class TrackerAdminGroupsController {
         keyword,
         enable: enableNum,
       })
+      log_tracker_info('admin.group.index', {
+        page: page ? Number(page) : 1,
+        pageSize: pageSize ? Number(pageSize) : 20,
+        keyword: keyword || undefined,
+        enable: enableNum,
+        count,
+      })
       return response.json({ code: 200, message: '', list: list as any, count })
     } catch (err: any) {
       log_tracker_error('admin.group.index', err)
@@ -73,6 +80,7 @@ export default class TrackerAdminGroupsController {
     try {
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const data = await trackerGroupService.adminDetail(groupNo)
+      log_tracker_info('admin.group.show', { groupNo })
       return response.json({ code: 200, message: '', data })
     } catch (err: any) {
       log_tracker_error('admin.group.show', err)
@@ -89,6 +97,7 @@ export default class TrackerAdminGroupsController {
     try {
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const list = await trackerGroupService.listMembers(groupNo)
+      log_tracker_info('admin.group.members', { groupNo, count: list.length })
       return response.json(
         { code: 200, message: '', list: list as any, count: list.length }
       )
@@ -107,6 +116,7 @@ export default class TrackerAdminGroupsController {
     try {
       const { groupNo, nodeId } = await trackerGroupKickParamValidator.validate(params)
       await trackerGroupService.adminKick(groupNo, nodeId)
+      log_tracker_info('admin.group.kick', { groupNo, nodeId })
       return response.json({ code: 200, message: '已移出群组' })
     } catch (err: any) {
       log_tracker_error('admin.group.kick', err)
@@ -124,6 +134,7 @@ export default class TrackerAdminGroupsController {
     try {
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const data = await trackerGroupService.adminDismiss(groupNo)
+      log_tracker_info('admin.group.dismiss', { groupNo })
       return response.json({ code: 200, message: '已解散群组', data })
     } catch (err: any) {
       log_tracker_error('admin.group.dismiss', err)

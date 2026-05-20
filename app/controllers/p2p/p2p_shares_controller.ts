@@ -12,7 +12,7 @@ import prisma from '#start/prisma'
 import { get_config } from '#utils/index'
 import TrackerClient from '#services/p2p/tracker_client'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
-import { log_p2p_error } from '#utils/p2p_log'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 import type { AnnouncePayload, AnnounceResult } from '#type/p2p'
 import { buildShareManifest } from '#services/p2p/manifest/manifest_builder'
 import {
@@ -313,6 +313,14 @@ export default class P2PSharesController {
       // 异步上报
       announce_group(group.groupNo)
 
+      log_p2p_info('share.create', {
+        p2pLocalShareId: item.p2pLocalShareId,
+        groupNo: group.groupNo,
+        shareType: item.shareType,
+        mediaId: item.mediaId,
+        mangaId: item.mangaId,
+        enable: item.enable,
+      })
       return response.json({ code: 200, message: '创建成功', data: item })
     } catch (e: any) {
       log_p2p_error('share.create', e)
@@ -343,6 +351,12 @@ export default class P2PSharesController {
       const group = await prisma.p2p_group.findUnique({ where: { p2pGroupId: existed.p2pGroupId } })
       if (group) announce_group(group.groupNo)
 
+      log_p2p_info('share.update', {
+        p2pLocalShareId: item.p2pLocalShareId,
+        groupNo: group?.groupNo,
+        enable: item.enable,
+        shareName: item.shareName,
+      })
       return response.json({ code: 200, message: '更新成功', data: item })
     } catch (e: any) {
       log_p2p_error('share.update', e)
@@ -369,6 +383,13 @@ export default class P2PSharesController {
       const group = await prisma.p2p_group.findUnique({ where: { p2pGroupId: existed.p2pGroupId } })
       if (group) announce_group(group.groupNo)
 
+      log_p2p_info('share.destroy', {
+        p2pLocalShareId: id,
+        groupNo: group?.groupNo,
+        shareType: existed.shareType,
+        mediaId: existed.mediaId,
+        mangaId: existed.mangaId,
+      })
       return response.json({ code: 200, message: '删除成功' })
     } catch (e: any) {
       log_p2p_error('share.destroy', e)
@@ -384,6 +405,7 @@ export default class P2PSharesController {
   async announce({ request, response }: HttpContext) {
     const { groupNo } = await announceP2PShareValidator.validate(request.all())
     await announce_group(groupNo)
+    log_p2p_info('share.announce', { groupNo, trigger: 'manual' })
     return response.json({ code: 200, message: '已触发上报' })
   }
 }

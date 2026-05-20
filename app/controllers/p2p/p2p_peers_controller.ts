@@ -9,7 +9,7 @@ import prisma from '#start/prisma'
 import { get_config } from '#utils/index'
 import TrackerClient from '#services/p2p/tracker_client'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
-import { log_p2p_error } from '#utils/p2p_log'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 import { buildHeaders, discoverSeeds } from '#services/p2p/pull/pull_shared'
 import { fetchMangaTree, fetchChapterTree } from '#services/p2p/pull/pull_tree_fetcher'
 import {
@@ -76,6 +76,7 @@ export default class P2PPeersController {
         }
       }
 
+      log_p2p_info('peer.members', { groupNo, count: members.length, cached: !!group })
       return response.json({ code: 200, message: '', list: members, count: members.length })
     } catch (e: any) {
       log_p2p_error('peer.members', e)
@@ -95,6 +96,7 @@ export default class P2PPeersController {
     const { groupNo } = await groupNoParamValidator.validate(params)
     try {
       const list: any[] = await client.listShares(groupNo)
+      log_p2p_info('peer.shares', { groupNo, count: list.length })
       return response.json({ code: 200, message: '', list, count: list.length })
     } catch (e: any) {
       log_p2p_error('peer.shares', e)
@@ -110,12 +112,14 @@ export default class P2PPeersController {
     const { groupNo } = await groupNoParamValidator.validate(params)
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) {
+      log_p2p_info('peer.cache', { groupNo, count: 0 })
       return response.json({ code: 200, message: '', list: [], count: 0 })
     }
     const list = await prisma.p2p_peer_cache.findMany({
       where: { p2pGroupId: group.p2pGroupId },
       orderBy: { lastSeen: 'desc' },
     })
+    log_p2p_info('peer.cache', { groupNo, count: list.length })
     return response.json({ code: 200, message: '', list, count: list.length })
   }
 
@@ -134,6 +138,7 @@ export default class P2PPeersController {
 
     if (!client) {
       // P2P 未启用 → 直接走本地缓存
+      log_p2p_info('peer.manifests.local_only', { groupNo, nodeId: nodeId || undefined })
       return response.json({ code: 200, message: '', data: await this._readLocalManifests(groupNo, nodeId, since) })
     }
 
@@ -148,12 +153,18 @@ export default class P2PPeersController {
         await this._writeLocalManifests(groupNo, result.list || [])
       }
 
+      log_p2p_info('peer.manifests', {
+        groupNo,
+        count: Array.isArray(result.list) ? result.list.length : 0,
+        sync: sync !== '0' && sync !== false,
+      })
       return response.json({ code: 200, message: '', data: result })
     } catch (e: any) {
       log_p2p_error('peer.manifests', e)
 
       // tracker 不可达且开启 fallback → 走本地缓存
       if (fallback) {
+        log_p2p_info('peer.manifests.fallback_local', { groupNo, nodeId: nodeId || undefined })
         return response.json({
           code: 200,
           message: 'fallback to local cache',
@@ -282,6 +293,13 @@ export default class P2PPeersController {
         remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
         remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
       })
+      log_p2p_info('peer.manifest', {
+        groupNo,
+        nodeId,
+        shareType,
+        remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
+        remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
+      })
       return response.json({ code: 200, message: '', data })
     } catch (e: any) {
       log_p2p_error('peer.manifest', e)
@@ -312,6 +330,12 @@ export default class P2PPeersController {
 
       const headers = buildHeaders(groupNo)
       const data = await fetchMangaTree(seeds, headers, 'peer.manga-tree', remoteMangaId)
+      log_p2p_info('peer.manga-tree', {
+        groupNo,
+        remoteMangaId,
+        seedCount: seeds.length,
+        fileCount: Array.isArray((data as any)?.files) ? (data as any).files.length : undefined,
+      })
       return response.json({ code: 200, message: '', data })
     } catch (e: any) {
       log_p2p_error('peer.manga-tree', e)
@@ -344,6 +368,13 @@ export default class P2PPeersController {
 
       const headers = buildHeaders(groupNo)
       const data = await fetchChapterTree(seeds, headers, 'peer.chapter-tree', remoteChapterId)
+      log_p2p_info('peer.chapter-tree', {
+        groupNo,
+        remoteMangaId,
+        remoteChapterId,
+        seedCount: seeds.length,
+        fileCount: Array.isArray((data as any)?.files) ? (data as any).files.length : undefined,
+      })
       return response.json({ code: 200, message: '', data })
     } catch (e: any) {
       log_p2p_error('peer.chapter-tree', e)

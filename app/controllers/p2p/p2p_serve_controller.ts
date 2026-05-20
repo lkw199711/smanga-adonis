@@ -1,12 +1,12 @@
-/**
- * P2P 对外服务控制器
+﻿/**
+ * P2P 瀵瑰鏈嶅姟鎺у埗鍣?
  *
- * 部署在 /p2p/serve/* 路由,供群组内其他节点拉取本机资源信息与文件。
+ * 閮ㄧ讲鍦?/p2p/serve/* 璺敱,渚涚兢缁勫唴鍏朵粬鑺傜偣鎷夊彇鏈満璧勬簮淇℃伅涓庢枃浠躲€?
  *
- * 设计前提:
- *  - 共享授权由 Tracker 统一管理,本控制器不做本地共享/群组校验
- *  - 调用方能进入此控制器,说明已经通过 p2p_peer_auth_middleware 的握手与时间戳校验
- *  - 后续如需更细粒度安全,可在 p2p_peer_auth_middleware 中接入 Tracker 下发的 groupSecret + HMAC 签名
+ * 璁捐鍓嶆彁:
+ *  - 鍏变韩鎺堟潈鐢?Tracker 缁熶竴绠＄悊,鏈帶鍒跺櫒涓嶅仛鏈湴鍏变韩/缇ょ粍鏍￠獙
+ *  - 璋冪敤鏂硅兘杩涘叆姝ゆ帶鍒跺櫒,璇存槑宸茬粡閫氳繃 p2p_peer_auth_middleware 鐨勬彙鎵嬩笌鏃堕棿鎴虫牎楠?
+ *  - 鍚庣画濡傞渶鏇寸粏绮掑害瀹夊叏,鍙湪 p2p_peer_auth_middleware 涓帴鍏?Tracker 涓嬪彂鐨?groupSecret + HMAC 绛惧悕
  */
 
 import type { HttpContext } from '@adonisjs/core/http'
@@ -14,7 +14,7 @@ import prisma from '#start/prisma'
 import fs from 'fs'
 import path from 'path'
 import { image_files, is_img } from '#utils/index'
-import { log_p2p_error } from '#utils/p2p_log'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 import {
   mediaIdParamValidator,
   mangaIdParamValidator,
@@ -22,15 +22,15 @@ import {
   fileBodyValidator,
 } from '#validators/p2p'
 
-/** 图片扩展名(与 scan_manga_job 的外置封面检索保持一致) */
+/** 鍥剧墖鎵╁睍鍚?涓?scan_manga_job 鐨勫缃皝闈㈡绱繚鎸佷竴鑷? */
 const SIDE_COVER_EXTS = ['.png', '.PNG', '.jpg', '.jpeg', '.JPG', '.webp', '.WEBP', '.gif', '.bmp']
 
 /**
- * 列出\"与基名相关的外置文件\":
+ * 鍒楀嚭\"涓庡熀鍚嶇浉鍏崇殑澶栫疆鏂囦欢\":
  *  - <baseName>.<ext>
- *  - <baseName>-<任意>.<ext>   (典型: cover-1.jpg、mangaName-fanart.jpg 等同名递增)
- * 匹配范围只在给定目录下的直接子项(不递归),用于 mangaPath/chapterPath 的 *同级目录*
- * 仅匹配文件(目录不计入,目录级别的 smanga-info 由上层单独处理)
+ *  - <baseName>-<浠绘剰>.<ext>   (鍏稿瀷: cover-1.jpg銆乵angaName-fanart.jpg 绛夊悓鍚嶉€掑)
+ * 鍖归厤鑼冨洿鍙湪缁欏畾鐩綍涓嬬殑鐩存帴瀛愰」(涓嶉€掑綊),鐢ㄤ簬 mangaPath/chapterPath 鐨?*鍚岀骇鐩綍*
+ * 浠呭尮閰嶆枃浠?鐩綍涓嶈鍏?鐩綍绾у埆鐨?smanga-info 鐢变笂灞傚崟鐙鐞?
  */
 function list_side_cover_files(
   siblingDir: string,
@@ -52,7 +52,7 @@ function list_side_cover_files(
     const ext = path.extname(name)
     if (!SIDE_COVER_EXTS.includes(ext)) continue
     const stem = name.slice(0, name.length - ext.length)
-    // 精确同名 或 同名-xxx 前缀(-后允许任意内容,覆盖 -1/-01/-fanart 等)
+    // 绮剧‘鍚屽悕 鎴?鍚屽悕-xxx 鍓嶇紑(-鍚庡厑璁镐换鎰忓唴瀹?瑕嗙洊 -1/-01/-fanart 绛?
     const matched = stem === baseName || stem.startsWith(`${baseName}-`)
     if (!matched) continue
     const abs = path.join(siblingDir, name)
@@ -68,8 +68,8 @@ function list_side_cover_files(
 }
 
 /**
- * 递归扫描一个目录下的所有文件(含子目录),返回相对路径清单
- * 注意:会跟随符号链接以外的普通文件/目录;跳过常见的系统隐藏项(Thumbs.db 等)
+ * 閫掑綊鎵弿涓€涓洰褰曚笅鐨勬墍鏈夋枃浠?鍚瓙鐩綍),杩斿洖鐩稿璺緞娓呭崟
+ * 娉ㄦ剰:浼氳窡闅忕鍙烽摼鎺ヤ互澶栫殑鏅€氭枃浠?鐩綍;璺宠繃甯歌鐨勭郴缁熼殣钘忛」(Thumbs.db 绛?
  */
 function walk_dir_files(
   rootDir: string,
@@ -87,7 +87,7 @@ function walk_dir_files(
     try {
       entries = fs.readdirSync(cur, { withFileTypes: true })
     } catch (e) {
-      // 无权限或读取失败,跳过该目录
+      // 鏃犳潈闄愭垨璇诲彇澶辫触,璺宠繃璇ョ洰褰?
       continue
     }
 
@@ -126,14 +126,14 @@ export default class P2PServeController {
       return response.json({ code: 200, message: 'pong', data: { time: Date.now() } })
     } catch (e: any) {
       log_p2p_error('serve.ping', e)
-      return response.status(500).json({ code: 500, message: e?.message || 'ping 失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'ping 澶辫触' })
     }
   }
 
   /**
    * GET /p2p/serve/shares
-   * 已废弃:共享列表统一从 Tracker 获取,节点本地不再维护
-   * 保留路由以兼容旧客户端,直接返回空列表
+   * 宸插簾寮?鍏变韩鍒楄〃缁熶竴浠?Tracker 鑾峰彇,鑺傜偣鏈湴涓嶅啀缁存姢
+   * 淇濈暀璺敱浠ュ吋瀹规棫瀹㈡埛绔?鐩存帴杩斿洖绌哄垪琛?
    */
   async shares({ response }: HttpContext) {
     return response.json({ code: 200, message: '', list: [], count: 0 })
@@ -151,13 +151,11 @@ export default class P2PServeController {
         where: { mediaId },
         orderBy: { mangaName: 'asc' },
       })
-      console.log(
-        `[p2p-serve] mangas 200 | caller=${callerNodeId} groupNo=${groupNo} mediaId=${mediaId} count=${mangas.length}`
-      )
+      log_p2p_info('serve.mangas', { groupNo, callerNodeId, mediaId, count: mangas.length })
       return response.json({ code: 200, message: '', list: mangas, count: mangas.length })
     } catch (e: any) {
       log_p2p_error('serve.mangas', e)
-      return response.status(500).json({ code: 500, message: e?.message || 'mangas 查询失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'mangas 鏌ヨ澶辫触' })
     }
   }
 
@@ -171,7 +169,7 @@ export default class P2PServeController {
 
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
       if (!manga) {
-        console.warn(`[p2p-serve] chapters 404 漫画不存在 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId}`)
+        log_p2p_info('serve.chapters.not_found', { groupNo, callerNodeId, mangaId })
         return response
           .status(404)
           .json({ code: 404, message: `manga not found (mangaId=${mangaId})`, status: 'not found' })
@@ -181,13 +179,11 @@ export default class P2PServeController {
         where: { mangaId },
         orderBy: { chapterNumber: 'asc' },
       })
-      console.log(
-        `[p2p-serve] chapters 200 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId} count=${chapters.length}`
-      )
+      log_p2p_info('serve.chapters', { groupNo, callerNodeId, mangaId, count: chapters.length })
       return response.json({ code: 200, message: '', list: chapters, count: chapters.length })
     } catch (e: any) {
       log_p2p_error('serve.chapters', e)
-      return response.status(500).json({ code: 500, message: e?.message || 'chapters 查询失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'chapters 鏌ヨ澶辫触' })
     }
   }
 
@@ -201,33 +197,36 @@ export default class P2PServeController {
 
       const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
       if (!chapter) {
-        console.warn(`[p2p-serve] images 404 章节不存在 | caller=${callerNodeId} groupNo=${groupNo} chapterId=${chapterId}`)
+        log_p2p_info('serve.images.not_found', { groupNo, callerNodeId, chapterId })
         return response
           .status(404)
           .json({ code: 404, message: `chapter not found (chapterId=${chapterId})`, status: 'not found' })
       }
 
       const images = image_files(chapter.chapterPath)
-      console.log(
-        `[p2p-serve] images 200 | caller=${callerNodeId} groupNo=${groupNo} ` +
-        `chapterId=${chapterId} path=${chapter.chapterPath} count=${images.length}`
-      )
+      log_p2p_info('serve.images', {
+        groupNo,
+        callerNodeId,
+        chapterId,
+        path: chapter.chapterPath,
+        count: images.length,
+      })
       return response.json({ code: 200, message: '', list: images, count: images.length })
     } catch (e: any) {
       log_p2p_error('serve.images', e)
-      return response.status(500).json({ code: 500, message: e?.message || 'images 查询失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'images 鏌ヨ澶辫触' })
     }
   }
 
   /**
    * GET /p2p/serve/manga/:mangaId/tree
-   * 返回漫画下所有文件的清单(含子目录),客户端按 relPath 在本地重建目录结构。
+   * 杩斿洖婕敾涓嬫墍鏈夋枃浠剁殑娓呭崟(鍚瓙鐩綍),瀹㈡埛绔寜 relPath 鍦ㄦ湰鍦伴噸寤虹洰褰曠粨鏋勩€?
    *
-   * 响应:
-   *   - isSingleFile=true  : mangaPath 本身是单个文件(如 xxx.zip),files 只含它自身,relPath=basename
-   *   - isSingleFile=false : mangaPath 是目录,files 是该目录下递归全部文件
+   * 鍝嶅簲:
+   *   - isSingleFile=true  : mangaPath 鏈韩鏄崟涓枃浠?濡?xxx.zip),files 鍙惈瀹冭嚜韬?relPath=basename
+   *   - isSingleFile=false : mangaPath 鏄洰褰?files 鏄鐩綍涓嬮€掑綊鍏ㄩ儴鏂囦欢
    *
-   * 说明:不在此做文件类型过滤,"漫画文件夹内有什么就复制什么",保证 zip/rar/cbz/cbr/pdf/epub/散图/series.json/.smanga/ 等全部覆盖
+   * 璇存槑:涓嶅湪姝ゅ仛鏂囦欢绫诲瀷杩囨护,"婕敾鏂囦欢澶瑰唴鏈変粈涔堝氨澶嶅埗浠€涔?,淇濊瘉 zip/rar/cbz/cbr/pdf/epub/鏁ｅ浘/series.json/.smanga/ 绛夊叏閮ㄨ鐩?
    */
   async tree({ request, params, response }: HttpContext) {
     try {
@@ -236,7 +235,7 @@ export default class P2PServeController {
 
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
       if (!manga) {
-        console.warn(`[p2p-serve] tree 404 漫画不存在 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId}`)
+        log_p2p_info('serve.tree.not_found_manga', { groupNo, callerNodeId, mangaId })
         return response
           .status(404)
           .json({ code: 404, message: `manga not found (mangaId=${mangaId})`, status: 'not found' })
@@ -244,7 +243,7 @@ export default class P2PServeController {
 
       const mangaPath = manga.mangaPath
       if (!fs.existsSync(mangaPath)) {
-        console.warn(`[p2p-serve] tree 404 漫画路径不存在 | mangaId=${mangaId} path=${mangaPath}`)
+        log_p2p_info('serve.tree.not_found_path', { groupNo, callerNodeId, mangaId, mangaPath })
         return response
           .status(404)
           .json({ code: 404, message: `manga path not found: ${mangaPath}`, status: 'not found' })
@@ -255,18 +254,18 @@ export default class P2PServeController {
       let rootDir: string
       let isSingleFile: boolean
       let files: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
-      // sideFiles: 漫画同级目录下、与本漫画相关的外置文件(外置封面、smanga-info 目录等)
-      //   relPath 以 \"漫画父目录\" 为根,客户端按 path.join(parentDir, relPath) 落盘
+      // sideFiles: 婕敾鍚岀骇鐩綍涓嬨€佷笌鏈极鐢荤浉鍏崇殑澶栫疆鏂囦欢(澶栫疆灏侀潰銆乻manga-info 鐩綍绛?
+      //   relPath 浠?\"婕敾鐖剁洰褰昞" 涓烘牴,瀹㈡埛绔寜 path.join(parentDir, relPath) 钀界洏
       const sideFiles: Array<{ absPath: string; relPath: string; size: number; mtime: number }> = []
 
-      // 漫画名(不含扩展名),供外置封面匹配与章节外置封面聚合使用
+      // 婕敾鍚?涓嶅惈鎵╁睍鍚?,渚涘缃皝闈㈠尮閰嶄笌绔犺妭澶栫疆灏侀潰鑱氬悎浣跨敤
       const mangaBaseName = stat.isFile()
         ? path.basename(mangaPath).replace(/\.(cbr|cbz|zip|7z|epub|rar|pdf)$/i, '')
         : path.basename(mangaPath)
       const mangaParentDir = path.dirname(mangaPath)
 
       if (stat.isFile()) {
-        // 单本漫画:mangaPath 是一个文件(zip/pdf/...)
+        // 鍗曟湰婕敾:mangaPath 鏄竴涓枃浠?zip/pdf/...)
         isSingleFile = true
         rootDir = mangaParentDir
         files = [
@@ -278,16 +277,16 @@ export default class P2PServeController {
           },
         ]
       } else {
-        // 章节漫画:mangaPath 是目录,递归列出所有文件
+        // 绔犺妭婕敾:mangaPath 鏄洰褰?閫掑綊鍒楀嚭鎵€鏈夋枃浠?
         isSingleFile = false
         rootDir = mangaPath
         files = walk_dir_files(mangaPath)
       }
 
-      // 1) 漫画同级外置封面: <mangaBaseName>.ext / <mangaBaseName>-*.ext
+      // 1) 婕敾鍚岀骇澶栫疆灏侀潰: <mangaBaseName>.ext / <mangaBaseName>-*.ext
       list_side_cover_files(mangaParentDir, mangaBaseName, sideFiles)
 
-      // 2) 漫画同级 smanga-info 目录(<mangaBaseName>-smanga-info)
+      // 2) 婕敾鍚岀骇 smanga-info 鐩綍(<mangaBaseName>-smanga-info)
       const smangaInfoDir = path.join(mangaParentDir, `${mangaBaseName}-smanga-info`)
       if (fs.existsSync(smangaInfoDir) && fs.statSync(smangaInfoDir).isDirectory()) {
         const infoFiles = walk_dir_files(smangaInfoDir)
@@ -301,19 +300,23 @@ export default class P2PServeController {
         }
       }
 
-      // 3) 章节同级外置封面(位于 mangaPath 内部)已由 walk_dir_files 收录到 files 中,
-      //    客户端 MangaJob 会从 tree.files 里筛"非章节内部文件"统一下载,
-      //    sideFiles 仅承载 mangaPath *外部* 的文件(漫画同级外置封面 / smanga-info 目录)
+      // 3) 绔犺妭鍚岀骇澶栫疆灏侀潰(浣嶄簬 mangaPath 鍐呴儴)宸茬敱 walk_dir_files 鏀跺綍鍒?files 涓?
+      //    瀹㈡埛绔?MangaJob 浼氫粠 tree.files 閲岀瓫"闈炵珷鑺傚唴閮ㄦ枃浠?缁熶竴涓嬭浇,
+      //    sideFiles 浠呮壙杞?mangaPath *澶栭儴* 鐨勬枃浠?婕敾鍚岀骇澶栫疆灏侀潰 / smanga-info 鐩綍)
 
       const totalBytes =
         files.reduce((acc, f) => acc + (f.size || 0), 0) +
         sideFiles.reduce((acc, f) => acc + (f.size || 0), 0)
+      log_p2p_info('serve.tree', {
+        groupNo,
+        callerNodeId,
+        mangaId,
+        isSingleFile,
+        fileCount: files.length,
+        sideFileCount: sideFiles.length,
+        totalBytes,
+      })
 
-      console.log(
-        `[p2p-serve] tree 200 | caller=${callerNodeId} groupNo=${groupNo} ` +
-        `mangaId=${mangaId} isSingleFile=${isSingleFile} fileCount=${files.length} ` +
-        `sideFileCount=${sideFiles.length} totalBytes=${totalBytes}`
-      )
 
       return response.json({
         code: 200,
@@ -333,13 +336,13 @@ export default class P2PServeController {
       })
     } catch (e: any) {
       log_p2p_error('serve.tree', e)
-      return response.status(500).json({ code: 500, message: e?.message || 'tree 查询失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'tree 鏌ヨ澶辫触' })
     }
   }
 
   /**
    * GET /p2p/serve/chapter/:chapterId/tree
-   * 返回章节下所有文件清单(含子目录),逻辑同 manga.tree 但作用于 chapter.chapterPath
+   * 杩斿洖绔犺妭涓嬫墍鏈夋枃浠舵竻鍗?鍚瓙鐩綍),閫昏緫鍚?manga.tree 浣嗕綔鐢ㄤ簬 chapter.chapterPath
    */
   async chapter_tree({ request, params, response }: HttpContext) {
     try {
@@ -348,6 +351,7 @@ export default class P2PServeController {
 
       const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
       if (!chapter) {
+        log_p2p_info('serve.chapter_tree.not_found_chapter', { groupNo, callerNodeId, chapterId })
         return response
           .status(404)
           .json({ code: 404, message: `chapter not found (chapterId=${chapterId})`, status: 'not found' })
@@ -355,6 +359,12 @@ export default class P2PServeController {
 
       const chapterPath = chapter.chapterPath
       if (!fs.existsSync(chapterPath)) {
+        log_p2p_info('serve.chapter_tree.not_found_path', {
+          groupNo,
+          callerNodeId,
+          chapterId,
+          chapterPath,
+        })
         return response
           .status(404)
           .json({ code: 404, message: `chapter path not found: ${chapterPath}`, status: 'not found' })
@@ -364,12 +374,12 @@ export default class P2PServeController {
       let rootDir: string
       let isSingleFile: boolean
       let files: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
-      // sideFiles: 章节同级目录下、与本章节相关的外置封面
-      //   relPath = basename(同级文件),客户端按 path.join(parentDir, relPath) 落盘
+      // sideFiles: 绔犺妭鍚岀骇鐩綍涓嬨€佷笌鏈珷鑺傜浉鍏崇殑澶栫疆灏侀潰
+      //   relPath = basename(鍚岀骇鏂囦欢),瀹㈡埛绔寜 path.join(parentDir, relPath) 钀界洏
       const sideFiles: Array<{ absPath: string; relPath: string; size: number; mtime: number }> = []
 
       const chParentDir = path.dirname(chapterPath)
-      // 章节基名(目录保留全名,文件去扩展名)
+      // 绔犺妭鍩哄悕(鐩綍淇濈暀鍏ㄥ悕,鏂囦欢鍘绘墿灞曞悕)
       let chBaseName = path.basename(chapterPath)
       const extMatch = /\.(cbr|cbz|zip|7z|epub|rar|pdf)$/i.exec(chBaseName)
       if (extMatch) chBaseName = chBaseName.slice(0, chBaseName.length - extMatch[0].length)
@@ -391,20 +401,24 @@ export default class P2PServeController {
         files = walk_dir_files(chapterPath)
       }
 
-      // 章节同级外置封面: <chBaseName>.ext / <chBaseName>-*.ext
+      // 绔犺妭鍚岀骇澶栫疆灏侀潰: <chBaseName>.ext / <chBaseName>-*.ext
       list_side_cover_files(chParentDir, chBaseName, sideFiles)
-      // 目录型章节:外置封面如已位于 chapterPath 内部,会出现在 files 中,这里 chParentDir
-      // 是 chapterPath 的父目录,不会重叠,无需去重
+      // 鐩綍鍨嬬珷鑺?澶栫疆灏侀潰濡傚凡浣嶄簬 chapterPath 鍐呴儴,浼氬嚭鐜板湪 files 涓?杩欓噷 chParentDir
+      // 鏄?chapterPath 鐨勭埗鐩綍,涓嶄細閲嶅彔,鏃犻渶鍘婚噸
 
       const totalBytes =
         files.reduce((acc, f) => acc + (f.size || 0), 0) +
         sideFiles.reduce((acc, f) => acc + (f.size || 0), 0)
+      log_p2p_info('serve.chapter_tree', {
+        groupNo,
+        callerNodeId,
+        chapterId,
+        isSingleFile,
+        fileCount: files.length,
+        sideFileCount: sideFiles.length,
+        totalBytes,
+      })
 
-      console.log(
-        `[p2p-serve] chapter_tree 200 | caller=${callerNodeId} groupNo=${groupNo} ` +
-        `chapterId=${chapterId} isSingleFile=${isSingleFile} fileCount=${files.length} ` +
-        `sideFileCount=${sideFiles.length} totalBytes=${totalBytes}`
-      )
 
       return response.json({
         code: 200,
@@ -424,13 +438,13 @@ export default class P2PServeController {
       })
     } catch (e: any) {
       log_p2p_error('serve.chapter_tree', e)
-      return response.status(500).json({ code: 500, message: e?.message || 'chapter_tree 查询失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'chapter_tree 鏌ヨ澶辫触' })
     }
   }
 
   /**
    * POST /p2p/serve/file/stat  { file: absPath }
-   * 返回文件元信息(size/mtime),供客户端做完整性校验
+   * 杩斿洖鏂囦欢鍏冧俊鎭?size/mtime),渚涘鎴风鍋氬畬鏁存€ф牎楠?
    */
   async file_stat({ request, response }: HttpContext) {
     try {
@@ -438,34 +452,34 @@ export default class P2PServeController {
       const { file } = await fileBodyValidator.validate(request.all())
 
       if (!fs.existsSync(file)) {
-        console.warn(`[p2p-serve] file_stat 404 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
+        log_p2p_info('serve.file_stat.not_found', { groupNo, callerNodeId, file })
         return response.status(404).json({ code: 404, message: `file not found: ${file}` })
       }
       const st = fs.statSync(file)
       return response.json({ code: 200, message: '', data: { size: st.size, mtime: st.mtimeMs, isFile: st.isFile() } })
     } catch (e: any) {
       log_p2p_error('serve.file_stat', e)
-      return response.status(500).json({ code: 500, message: e?.message || 'file_stat 失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'file_stat 澶辫触' })
     }
   }
 
   /**
    * POST/GET /p2p/serve/file  { file: absPath }
-   * 支持 HTTP Range:
-   *  - 无 Range 头         → 200 OK + 整文件
-   *  - `Range: bytes=a-b`  → 206 Partial Content + [a,b] 区间
-   *  - `Range: bytes=a-`   → 206 + [a, size-1]
-   * 始终暴露 `Accept-Ranges: bytes` 供客户端探测
+   * 鏀寔 HTTP Range:
+   *  - 鏃?Range 澶?        鈫?200 OK + 鏁存枃浠?
+   *  - `Range: bytes=a-b`  鈫?206 Partial Content + [a,b] 鍖洪棿
+   *  - `Range: bytes=a-`   鈫?206 + [a, size-1]
+   * 濮嬬粓鏆撮湶 `Accept-Ranges: bytes` 渚涘鎴风鎺㈡祴
    */
   async file({ request, response }: HttpContext) {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
-      // 兼容 POST body / GET query 两种传参，统一合并后走 validator
+      // 鍏煎 POST body / GET query 涓ょ浼犲弬锛岀粺涓€鍚堝苟鍚庤蛋 validator
       const merged: any = { ...(request.qs?.() || {}), ...(request.all?.() || {}) }
       const { file } = await fileBodyValidator.validate(merged)
 
       if (!fs.existsSync(file)) {
-        console.warn(`[p2p-serve] file 404 文件不存在 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
+        log_p2p_info('serve.file.not_found', { groupNo, callerNodeId, file })
         return response.status(404).json({ code: 404, message: `file not found: ${file}` })
       }
 
@@ -479,13 +493,13 @@ export default class P2PServeController {
       response.header('X-File-Mtime', String(st.mtimeMs))
 
       if (rangeHeader && /^bytes=/i.test(rangeHeader)) {
-        // 解析 Range: bytes=start-end
+        // 瑙ｆ瀽 Range: bytes=start-end
         const m = /bytes=(\d*)-(\d*)/i.exec(rangeHeader)
         let start = m && m[1] !== '' ? Number(m[1]) : NaN
         let end = m && m[2] !== '' ? Number(m[2]) : NaN
 
         if (isNaN(start) && !isNaN(end)) {
-          // suffix: bytes=-N  → 最后 N 字节
+          // suffix: bytes=-N  鈫?鏈€鍚?N 瀛楄妭
           start = Math.max(0, totalSize - end)
           end = totalSize - 1
         } else {
@@ -502,20 +516,15 @@ export default class P2PServeController {
         response.status(206)
         response.header('Content-Range', `bytes ${start}-${end}/${totalSize}`)
         response.header('Content-Length', String(chunkSize))
-        console.log(
-          `[p2p-serve] file 206 | caller=${callerNodeId} groupNo=${groupNo} ` +
-          `file=${file} range=${start}-${end}/${totalSize}`
-        )
         response.stream(fs.createReadStream(file, { start, end }))
         return
       }
 
-      console.log(`[p2p-serve] file 200 | caller=${callerNodeId} groupNo=${groupNo} file=${file} size=${totalSize}`)
       response.header('Content-Length', String(totalSize))
       response.stream(fs.createReadStream(file))
     } catch (e: any) {
       log_p2p_error('serve.file', e)
-      return response.status(500).json({ code: 500, message: e?.message || 'file 流式下载失败' })
+      return response.status(500).json({ code: 500, message: e?.message || 'file 娴佸紡涓嬭浇澶辫触' })
     }
   }
 }

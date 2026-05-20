@@ -1,4 +1,4 @@
-/**
+﻿/**
  * P2P 身份管理服务
  *
  * 职责:
@@ -24,7 +24,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { get_config, set_config } from '#utils/index'
 import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
-import { log_p2p_error } from '#utils/p2p_log'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 import { normalize_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 
 export type P2PIdentity = {
@@ -55,11 +55,11 @@ class P2PIdentityService {
     const config = get_config()
     const p2p = config?.p2p
     if (!p2p?.enable) {
-      console.warn('[p2p] ensureIdentity: 跳过 (smanga.json p2p.enable=false)')
+      log_p2p_info('identity.ensure.skipped_disabled')
       return null
     }
     if (!p2p?.role?.node) {
-      console.warn('[p2p] ensureIdentity: 跳过 (smanga.json p2p.role.node=false)')
+      log_p2p_info('identity.ensure.skipped_node_role_disabled')
       return null
     }
 
@@ -74,10 +74,7 @@ class P2PIdentityService {
             where: { nodeId: p2p.node.nodeId },
           })
           if (!exists) {
-            console.warn(
-              `[p2p] 检测到 config 中的 nodeId=${p2p.node.nodeId} 在 tracker_node 表中不存在,` +
-              '正在用配置里的凭证补录一条记录(避免"节点不存在")'
-            )
+            log_p2p_info('identity.local_tracker_node_missing', { nodeId: p2p.node.nodeId })
             await this.syncLocalTrackerNode(p2p)
           }
         } catch (e: any) {
@@ -96,9 +93,7 @@ class P2PIdentityService {
       }
 
       // 3) 失效:清空本地身份后走下面的注册流程
-      console.warn(
-        `[p2p] 本地 nodeId=${p2p.node.nodeId} 在 tracker 端失效(可能被清库或换了 tracker),将自动重新注册`
-      )
+      log_p2p_info('identity.invalidated_on_tracker', { nodeId: p2p.node.nodeId })
       this.clearLocalIdentity()
     }
 
@@ -108,7 +103,10 @@ class P2PIdentityService {
     if (this.isLocalTracker(p2p)) {
       try {
         const identity = await this.registerLocally(nodeName, p2p)
-        console.log(`[p2p] 本机 tracker,已本地直注册 nodeId=${identity.nodeId}`)
+        log_p2p_info('identity.register.local.success', {
+          nodeId: identity.nodeId,
+          nodeName: identity.nodeName,
+        })
         return identity
       } catch (e: any) {
         log_p2p_error('identity.registerLocally', e)
@@ -120,16 +118,12 @@ class P2PIdentityService {
     // 2) 远端 tracker,走 HTTP 注册
     const trackerUrl = this.pickTrackerUrl(p2p)
     if (!trackerUrl) {
-      console.warn(
-        '[p2p] ensureIdentity 失败: 未配置 trackers 且本机非 tracker 角色\n' +
-        '       请在 smanga.json 中设置 p2p.node.trackers = ["http://你的tracker地址:端口"]\n' +
-        '       或将本机配置为 tracker (p2p.role.tracker=true)'
-      )
+      log_p2p_info('identity.register.remote.skipped_no_tracker')
       this.lastRegisterError = new Error('未配置 trackers 且本机非 tracker 角色')
       return null
     }
 
-    console.log(`[p2p] ensureIdentity: 准备向远端 tracker 注册 url=${trackerUrl}`)
+    log_p2p_info('identity.register.remote.started', { trackerUrl })
     const client = new TrackerClient(trackerUrl)
     try {
       const res = await client.register({
@@ -147,7 +141,11 @@ class P2PIdentityService {
       }
       set_config(config)
 
-      console.log(`[p2p] 节点自动注册成功 nodeId=${res.nodeId} publicUrl=${res.publicUrl}`)
+      log_p2p_info('identity.register.remote.success', {
+        trackerUrl,
+        nodeId: res.nodeId,
+        publicUrl: res.publicUrl || null,
+      })
       return {
         nodeId: res.nodeId,
         nodeToken: res.nodeToken,
@@ -160,12 +158,10 @@ class P2PIdentityService {
       this.lastRegisterError = remoteMsg ? new Error(remoteMsg) : e
       // 给出明确的诊断建议
       if (e?.code === 'ECONNREFUSED' || e?.code === 'ENOTFOUND' || e?.code === 'ETIMEDOUT') {
-        console.warn(
-          '[p2p] 网络层连接失败提示:\n' +
-          `       - 检查 tracker 地址 ${trackerUrl} 是否可达 (telnet / curl 测试)\n` +
-          '       - 检查 tracker 服务是否已启动\n' +
-          '       - 检查防火墙 / 端口映射'
-        )
+        log_p2p_info('identity.register.remote.network_unreachable', {
+          trackerUrl,
+          code: e?.code || null,
+        })
         this.lastRegisterError = new Error(`无法连接 tracker ${trackerUrl} (${e?.code})`)
       }
       return null
@@ -209,7 +205,10 @@ class P2PIdentityService {
       }
       // 网络错误等暂时性问题:不当作失效,避免误清身份
       if (process.env.P2P_DEBUG) {
-        console.warn(`[p2p] identity.verify 网络异常,保留身份 (status=${status} msg=${e?.message})`)
+        log_p2p_info('identity.verify.network_error_debug', {
+          status: status || null,
+          message: e?.message || '',
+        })
       }
       return true
     }
@@ -277,9 +276,10 @@ class P2PIdentityService {
       if (valid) {
         // 有效 → 只推送最新信息到 tracker(不换 nodeId)
         await this.pushUpdateToTracker(p2p)
-        console.log(
-          `[p2p] manualRegister: 节点已存在于 tracker,复用 nodeId=${p2p.node.nodeId} 并更新信息`
-        )
+        log_p2p_info('identity.manual_register.reused', {
+          nodeId: p2p.node.nodeId,
+          nodeName: p2p.node.nodeName || '',
+        })
         return {
           identity: {
             nodeId: p2p.node.nodeId,
@@ -289,9 +289,7 @@ class P2PIdentityService {
           reused: true,
         }
       }
-      console.warn(
-        `[p2p] manualRegister: 本地 nodeId=${p2p.node.nodeId} 在 tracker 侧已失效,将重新注册`
-      )
+      log_p2p_info('identity.manual_register.invalidated', { nodeId: p2p.node.nodeId })
     }
 
     // 2) 无身份或身份失效 → 走完整重注册
@@ -405,12 +403,7 @@ class P2PIdentityService {
     const cfgPublicUrl = resolvePublicUrl(p2p) // 已过滤掉 loopback
 
     if (!cfgPublicUrl) {
-      console.warn(
-        '[p2p] 本地直注册:未配置 p2p.node.publicUrl,publicUrl 将先置空。\n' +
-        '       如本机需要被外部节点访问,请在 smanga.json 设置:\n' +
-        '         p2p.node.publicUrl = "你的公网IP或域名[:端口][/path]"\n' +
-        '       示例: "example.com:9797/api" 或 "http://1.2.3.4:9798"'
-      )
+      log_p2p_info('identity.local_register.public_url_empty')
     }
 
     await prisma.tracker_node.create({
@@ -472,7 +465,7 @@ class P2PIdentityService {
       },
     })
 
-    console.log(`[p2p] 已补录 tracker_node 记录 nodeId=${nodeId}`)
+    log_p2p_info('identity.sync_local_tracker_node.completed', { nodeId })
   }
 
   /**

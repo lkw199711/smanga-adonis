@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 拉取媒体库 Bull Job(C 方案:独立 Bull 任务 + 派生 MangaJob)
  *
  * command: 'taskP2PPullMedia'
@@ -23,6 +23,7 @@
 
 import prisma from '#start/prisma'
 import { addTask } from '#services/queue_service'
+import log from '#services/log_service'
 import { TaskPriority } from '../../../type/index.js'
 import { fetchMediaMangas } from './pull_tree_fetcher.js'
 import {
@@ -53,11 +54,23 @@ export default class PullMediaJob {
     const logTag = `p2p-pull-media#${transferId}-M${mediaId}`
 
     if (await isTransferCanceled(transferId)) {
-      console.log(`[${logTag}] 已取消,跳过`)
+      void log.info({
+        type: 'p2p',
+        module: 'p2p.pull.media',
+        action: 'media_pull.skipped_canceled',
+        message: `[${logTag}] 已取消,跳过`,
+        context: { transferId, mediaId, groupNo, parentDir },
+      })
       return
     }
 
-    console.log(`[${logTag}] 开始 mediaId=${mediaId} parentDir=${parentDir}`)
+    void log.info({
+      type: 'p2p',
+      module: 'p2p.pull.media',
+      action: 'media_pull.started',
+      message: `[${logTag}] 开始 mediaId=${mediaId} parentDir=${parentDir}`,
+      context: { transferId, mediaId, groupNo, parentDir },
+    })
 
     // 把 transfer 状态切换为 running(独立入口调用本 Job 时)
     await prisma.p2p_transfer
@@ -95,13 +108,26 @@ export default class PullMediaJob {
         }))
     } catch (e: any) {
       const msg = e?.message || String(e)
-      console.error(`[${logTag}] 获取漫画列表失败: ${msg}`)
+      await log.error({
+        type: 'p2p',
+        module: 'p2p.pull.media',
+        action: 'media_pull.fetch_mangas.failed',
+        message: `[${logTag}] 获取漫画列表失败: ${msg}`,
+        error: e,
+        context: { transferId, mediaId, groupNo, parentDir },
+      })
       await this.fail(transferId, msg)
       return
     }
 
     if (!mangas.length) {
-      console.warn(`[${logTag}] 漫画列表为空,直接完成`)
+      await log.warn({
+        type: 'p2p',
+        module: 'p2p.pull.media',
+        action: 'media_pull.no_mangas',
+        message: `[${logTag}] 漫画列表为空,直接完成`,
+        context: { transferId, mediaId, groupNo, parentDir },
+      })
       await this.finalize(transferId, true, 0, '媒体库下无漫画')
       return
     }
@@ -109,11 +135,23 @@ export default class PullMediaJob {
     // 以漫画本数作为初始 expected;MangaJob 处理目录漫画时会 transferSelfToChildren 动态扩展
     initTracker(transferId, mangas.length, 0)
 
-    console.log(`[${logTag}] 共 ${mangas.length} 本漫画,派发 MangaJob 子任务`)
+    void log.info({
+      type: 'p2p',
+      module: 'p2p.pull.media',
+      action: 'media_pull.dispatch_manga_jobs.started',
+      message: `[${logTag}] 共 ${mangas.length} 本漫画,派发 MangaJob 子任务`,
+      context: { transferId, mediaId, groupNo, mangaCount: mangas.length },
+    })
 
     for (const m of mangas) {
       if (await isTransferCanceled(transferId)) {
-        console.log(`[${logTag}] 派发过程中检测到取消,中止`)
+        void log.warn({
+          type: 'p2p',
+          module: 'p2p.pull.media',
+          action: 'media_pull.dispatch_manga_jobs.canceled',
+          message: `[${logTag}] 派发过程中检测到取消,中止`,
+          context: { transferId, mediaId, groupNo },
+        })
         break
       }
       await addTask({
@@ -132,7 +170,13 @@ export default class PullMediaJob {
       })
     }
 
-    console.log(`[${logTag}] 派发完成,等待子任务结算`)
+    void log.info({
+      type: 'p2p',
+      module: 'p2p.pull.media',
+      action: 'media_pull.dispatch_manga_jobs.completed',
+      message: `[${logTag}] 派发完成,等待子任务结算`,
+      context: { transferId, mediaId, groupNo, mangaCount: mangas.length },
+    })
   }
 
   private async fail(transferId: number, msg: string) {

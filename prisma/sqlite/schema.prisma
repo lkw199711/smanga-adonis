@@ -142,6 +142,13 @@ model log {
   createTime  DateTime @default(now())
   updateTime  DateTime @default(now()) @updatedAt
   userId      Int?
+
+  @@index([createTime], map: "idx_log_create_time")
+  @@index([logLevel, createTime], map: "idx_log_level_create_time")
+  @@index([logType, createTime], map: "idx_log_type_create_time")
+  @@index([module, createTime], map: "idx_log_module_create_time")
+  @@index([userId, createTime], map: "idx_log_user_create_time")
+  @@index([queue, createTime], map: "idx_log_queue_create_time")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

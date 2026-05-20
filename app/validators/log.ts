@@ -7,6 +7,15 @@ import { paginationFields } from './shared.js'
 export const listLogValidator = vine.compile(
   vine.object({
     ...paginationFields,
+    logType: vine.string().trim().optional(),
+    logLevel: vine.number().optional(),
+    module: vine.string().trim().optional(),
+    queue: vine.string().trim().optional(),
+    userId: vine.number().positive().optional(),
+    keyword: vine.string().trim().optional(),
+    requestId: vine.string().trim().optional(),
+    from: vine.string().trim().optional(),
+    to: vine.string().trim().optional(),
   })
 )
 
@@ -16,18 +25,42 @@ export const idParamLogValidator = vine.compile(
   })
 )
 
-// log 模型字段较自由,只要求 logContent 必填用于 create/update
 export const createLogValidator = vine.compile(
   vine.object({
-    logContent: vine.string(),
-    logType: vine.string().optional(),
-    logLevel: vine.string().optional(),
-    logTitle: vine.string().optional(),
+    logType: vine.string().trim(),
+    logLevel: vine.number(),
+    module: vine.string().trim().optional(),
+    queue: vine.string().trim().optional(),
+    message: vine.string().trim(),
+    exception: vine.string().trim().optional(),
+    context: vine.any().optional(),
+    device: vine.any().optional(),
+    userId: vine.number().positive().optional(),
   })
 )
 
 export const updateLogValidator = vine.compile(
   vine.object({
-    logContent: vine.string(),
+    logType: vine.string().trim().optional(),
+    logLevel: vine.number().optional(),
+    module: vine.string().trim().optional(),
+    queue: vine.string().trim().optional(),
+    message: vine.string().trim().optional(),
+    exception: vine.string().trim().optional(),
+    context: vine.any().optional(),
+    device: vine.any().optional(),
+    userId: vine.number().positive().optional(),
+  })
+)
+
+export const summaryLogValidator = vine.compile(
+  vine.object({
+    hours: vine.number().positive().optional(),
+  })
+)
+
+export const cleanupLogValidator = vine.compile(
+  vine.object({
+    before: vine.string().trim().optional(),
   })
 )

@@ -2,6 +2,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { runNpxCommand } from '#utils/npxShell'
 import { get_os } from '#utils/index'
+import logger from '@adonisjs/core/services/logger'
 const os = get_os()
 // 获取当前运行路径作为根目录
 const rootDir = process.cwd()
@@ -42,7 +43,7 @@ export default async function hanle() {
     schemaPath = path.join(rootDir, 'prisma', 'pgsql', 'schema.prisma')
   } else {
     // 报错 数据库不支持
-    console.error(`Unsupported database client: ${client}`);
+    logger.error(`Unsupported database client: ${client}`)
     process.exit(1);
   }
 

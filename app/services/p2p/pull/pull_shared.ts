@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 子任务公共工具:seeds 发现、鉴权头构造、小下载池工厂、进度上报
  *
  * 每个子 Bull Job(PullChapterJob/PullMetaJob 等)开头都要做相同的准备动作,
@@ -7,6 +7,7 @@
 
 import fs from 'fs'
 import prisma from '#start/prisma'
+import log from '#services/log_service'
 import p2pIdentityService from '../p2p_identity_service.js'
 import { get_default_tracker_client } from '../tracker_client.js'
 import {
@@ -67,7 +68,13 @@ export async function resolveSeeds(
 ): Promise<Seed[]> {
   if (inheritedSeeds && inheritedSeeds.length) {
     if (logTag) {
-      console.log(`[${logTag}] 复用上游 seeds: ${inheritedSeeds.length} 个`)
+      void log.info({
+        type: 'p2p',
+        module: 'p2p.pull.shared',
+        action: 'resolve_seeds.reused_inherited',
+        message: `[${logTag}] 复用上游 seeds: ${inheritedSeeds.length} 个`,
+        context: { logTag, seedCount: inheritedSeeds.length },
+      })
     }
     return inheritedSeeds
   }
@@ -170,7 +177,14 @@ export async function bumpProgress(
       })
     }
   } catch (e: any) {
-    console.warn(`[pull-shared] bumpProgress transferId=${transferId} 失败: ${e?.message || e}`)
+    void log.warn({
+      type: 'p2p',
+      module: 'p2p.pull.shared',
+      action: 'transfer.bump_progress.failed',
+      message: `[pull-shared] bumpProgress transferId=${transferId} 失败: ${e?.message || e}`,
+      error: e,
+      context: { transferId, deltaBytes, speedBps },
+    })
   }
 }
 
@@ -299,14 +313,24 @@ export function preVerifyTasks(
     }
     if (outcome === 'mismatch') {
       mismatched += 1
-      console.warn(`[${logTag}] 预校验失败,已删除残留: ${t.localPath} (期望 size=${t.size})`)
+      void log.warn({
+        type: 'p2p',
+        module: 'p2p.pull.shared',
+        action: 'pre_verify.mismatch_deleted',
+        message: `[${logTag}] 预校验失败,已删除残留: ${t.localPath} (期望 size=${t.size})`,
+        context: { logTag, localPath: t.localPath, expectedSize: t.size },
+      })
     }
     remaining.push(t)
   }
   if (skipped || mismatched) {
-    console.log(
-      `[${logTag}] 预校验完成: 跳过已存在=${skipped}, 删除残缺=${mismatched}, 待下载=${remaining.length}`
-    )
+    void log.info({
+      type: 'p2p',
+      module: 'p2p.pull.shared',
+      action: 'pre_verify.completed',
+      message: `[${logTag}] 预校验完成: 跳过已存在=${skipped}, 删除残缺=${mismatched}, 待下载=${remaining.length}`,
+      context: { logTag, skipped, mismatched, remaining: remaining.length },
+    })
   }
   return { remaining, skipped, mismatched }
 }
@@ -330,11 +354,21 @@ export function postVerifyTasks(
     const sample = failed.slice(0, 3)
       .map((f) => `${f.task.localPath}(${f.reason})`)
       .join('; ')
-    console.warn(
-      `[${logTag}] 收尾校验失败 ${failed.length}/${tasks.length},例如: ${sample}`
-    )
+    void log.warn({
+      type: 'p2p',
+      module: 'p2p.pull.shared',
+      action: 'post_verify.failed',
+      message: `[${logTag}] 收尾校验失败 ${failed.length}/${tasks.length},例如: ${sample}`,
+      context: { logTag, failedCount: failed.length, total: tasks.length, sample },
+    })
   } else {
-    console.log(`[${logTag}] 收尾校验通过 (${tasks.length} 个文件)`)
+    void log.info({
+      type: 'p2p',
+      module: 'p2p.pull.shared',
+      action: 'post_verify.completed',
+      message: `[${logTag}] 收尾校验通过 (${tasks.length} 个文件)`,
+      context: { logTag, total: tasks.length },
+    })
   }
   return { ok: failed.length === 0, failed }
 }
@@ -380,10 +414,21 @@ export async function runChildDownload(opts: {
   if (!seeds.length) {
     throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
   }
-  console.log(
-    `[${opts.logTag}] 发现 ${seeds.length} 个 seed,开始下载 ${remaining.length} 个文件 ` +
-    `(总计划 ${opts.tasks.length} 个,已跳过 ${opts.tasks.length - remaining.length} 个)`
-  )
+  void log.info({
+    type: 'p2p',
+    module: 'p2p.pull.shared',
+    action: 'run_child_download.started',
+    message:
+      `[${opts.logTag}] 发现 ${seeds.length} 个 seed,开始下载 ${remaining.length} 个文件 ` +
+      `(总计划 ${opts.tasks.length} 个,已跳过 ${opts.tasks.length - remaining.length} 个)`,
+    context: {
+      logTag: opts.logTag,
+      seeds: seeds.length,
+      remaining: remaining.length,
+      total: opts.tasks.length,
+      skipped: opts.tasks.length - remaining.length,
+    },
+  })
 
   const pool = createChildPool({
     transferId: opts.transferId,

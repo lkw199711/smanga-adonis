@@ -1,19 +1,19 @@
-/**
- * 拉取元数据 Bull Job(C 方案:独立 Bull 任务)
+﻿/**
+ * 鎷夊彇鍏冩暟鎹?Bull Job(C 鏂规:鐙珛 Bull 浠诲姟)
  *
  * command: 'taskP2PPullMeta'
  *
  * args:
- *  - transferId:   父 p2p_transfer 主键
- *  - groupNo:      群号
- *  - mangaId:      所属漫画 id(用于 seeds 发现)
- *  - files:        由父 MangaJob 已筛好的元数据文件清单(TreeFileEntry[])
- *  - baseDir:      本地保存目录(与漫画主体一致,不套层)
- *  - isSubTask:    true=父任务的子任务(完成后 notifyDone);false=独立任务(罕见)
+ *  - transferId:   鐖?p2p_transfer 涓婚敭
+ *  - groupNo:      缇ゅ彿
+ *  - mangaId:      鎵€灞炴极鐢?id(鐢ㄤ簬 seeds 鍙戠幇)
+ *  - files:        鐢辩埗 MangaJob 宸茬瓫濂界殑鍏冩暟鎹枃浠舵竻鍗?TreeFileEntry[])
+ *  - baseDir:      鏈湴淇濆瓨鐩綍(涓庢极鐢讳富浣撲竴鑷?涓嶅灞?
+ *  - isSubTask:    true=鐖朵换鍔＄殑瀛愪换鍔?瀹屾垚鍚?notifyDone);false=鐙珛浠诲姟(缃曡)
  *
- * 设计要点:
- *  - 本 Job 不自己 fetch tree(由父 MangaJob 已拉过并按元数据规则筛好传入),避免重复请求
- *  - 但仍独立发现 seeds 并起小下载池,保留多 seed 并行能力
+ * 璁捐瑕佺偣:
+ *  - 鏈?Job 涓嶈嚜宸?fetch tree(鐢辩埗 MangaJob 宸叉媺杩囧苟鎸夊厓鏁版嵁瑙勫垯绛涘ソ浼犲叆),閬垮厤閲嶅璇锋眰
+ *  - 浣嗕粛鐙珛鍙戠幇 seeds 骞惰捣灏忎笅杞芥睜,淇濈暀澶?seed 骞惰鑳藉姏
  */
 
 import prisma from '#start/prisma'
@@ -25,24 +25,25 @@ import {
   runChildDownload,
 } from './pull_shared.js'
 import { notifyDone } from './pull_child_tracker.js'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 
-/** 判断 relPath 是否为元数据文件 */
+/** 鍒ゆ柇 relPath 鏄惁涓哄厓鏁版嵁鏂囦欢 */
 export function isMetaFile(relPath: string): boolean {
   if (!relPath) return false
   const rel = relPath.replace(/\\/g, '/').toLowerCase()
 
-  // .smanga/ 目录下全部视为元数据
+  // .smanga/ 鐩綍涓嬪叏閮ㄨ涓哄厓鏁版嵁
   if (rel.startsWith('.smanga/') || rel === '.smanga') return true
 
   const base = rel.split('/').pop() || ''
 
-  // 根目录通用元数据
+  // 鏍圭洰褰曢€氱敤鍏冩暟鎹?
   if (base === 'series.json') return true
   if (base === 'comicinfo.xml') return true
 
-  // 仅处理根目录直接挂载的封面(不含子目录),支持同名递增:
+  // 浠呭鐞嗘牴鐩綍鐩存帴鎸傝浇鐨勫皝闈?涓嶅惈瀛愮洰褰?,鏀寔鍚屽悕閫掑:
   //   cover.jpg / cover-1.jpg / cover1.jpg / banner.jpg / banner-1.jpg / fanart.jpg ...
-  // 子目录中的图片(通常是章节内容图)不算元数据
+  // 瀛愮洰褰曚腑鐨勫浘鐗?閫氬父鏄珷鑺傚唴瀹瑰浘)涓嶇畻鍏冩暟鎹?
   if (!rel.includes('/')) {
     if (/^(cover|banner|fanart|thumbnail|poster)([-_ ]?\d+)?\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(base)) {
       return true
@@ -56,21 +57,21 @@ export type PullMetaJobArgs = {
   transferId: number
   groupNo: string
   mangaId: number
-  /** 元数据文件清单(以 baseDir 为根) */
+  /** 鍏冩暟鎹枃浠舵竻鍗?浠?baseDir 涓烘牴) */
   files: TreeFileEntry[]
-  /** 元数据落盘根目录(通常 = 漫画目录) */
+  /** 鍏冩暟鎹惤鐩樻牴鐩綍(閫氬父 = 婕敾鐩綍) */
   baseDir: string
   /**
-   * 同级外置文件清单(以 sideBaseDir 为根),典型场景:
-   *  - 漫画同级外置封面 / smanga-info 目录(baseDir = 漫画父目录)
-   *  - 章节同级外置封面(baseDir = 漫画目录,relPath 含章节相对路径)
-   * 与 files 一并下载,共享同一个进度上报器。
+   * 鍚岀骇澶栫疆鏂囦欢娓呭崟(浠?sideBaseDir 涓烘牴),鍏稿瀷鍦烘櫙:
+   *  - 婕敾鍚岀骇澶栫疆灏侀潰 / smanga-info 鐩綍(baseDir = 婕敾鐖剁洰褰?
+   *  - 绔犺妭鍚岀骇澶栫疆灏侀潰(baseDir = 婕敾鐩綍,relPath 鍚珷鑺傜浉瀵硅矾寰?
+   * 涓?files 涓€骞朵笅杞?鍏变韩鍚屼竴涓繘搴︿笂鎶ュ櫒銆?
    */
   sideFiles?: TreeFileEntry[]
-  /** sideFiles 的根目录(漫画父目录) */
+  /** sideFiles 鐨勬牴鐩綍(婕敾鐖剁洰褰? */
   sideBaseDir?: string
   isSubTask?: boolean
-  /** 上游已发现的 seeds(优先复用,避免重复查 tracker) */
+  /** 涓婃父宸插彂鐜扮殑 seeds(浼樺厛澶嶇敤,閬垮厤閲嶅鏌?tracker) */
   inheritedSeeds?: Seed[]
 }
 
@@ -86,7 +87,7 @@ export default class PullMetaJob {
     const logTag = `p2p-pull-meta#${transferId}-m${mangaId}`
 
     if (await isTransferCanceled(transferId)) {
-      console.log(`[${logTag}] 已取消,跳过`)
+      log_p2p_info('pull.meta.skipped_canceled', { transferId, mangaId, groupNo })
       if (isSubTask) {
         await notifyDone(transferId, { ok: false, downloadedBytes: 0, canceled: true })
       }
@@ -94,9 +95,9 @@ export default class PullMetaJob {
     }
 
     const totalFiles = (files?.length || 0) + (sideFiles?.length || 0)
-    // 空清单直接视为成功(常见于单文件漫画或无元数据的漫画)
+    // 绌烘竻鍗曠洿鎺ヨ涓烘垚鍔?甯歌浜庡崟鏂囦欢婕敾鎴栨棤鍏冩暟鎹殑婕敾)
     if (!totalFiles) {
-      console.log(`[${logTag}] 元数据+sideFiles 清单均为空,直接完成`)
+      log_p2p_info('pull.meta.empty', { transferId, mangaId, groupNo })
       if (isSubTask) {
         await notifyDone(transferId, { ok: true, downloadedBytes: 0 })
       } else {
@@ -105,9 +106,14 @@ export default class PullMetaJob {
       return
     }
 
-    console.log(
-      `[${logTag}] 开始 meta=${files?.length || 0} side=${sideFiles?.length || 0} baseDir=${baseDir}`
-    )
+    log_p2p_info('pull.meta.started', {
+      transferId,
+      mangaId,
+      groupNo,
+      metaCount: files?.length || 0,
+      sideCount: sideFiles?.length || 0,
+      baseDir,
+    })
     ensureDir(baseDir)
     if (sideBaseDir) ensureDir(sideBaseDir)
 
@@ -136,11 +142,11 @@ export default class PullMetaJob {
         logTag,
         reporter,
       })
-      console.log(`[${logTag}] 完成 bytes=${downloadedBytes}`)
+      log_p2p_info('pull.meta.completed', { transferId, mangaId, groupNo, downloadedBytes })
     } catch (e: any) {
       ok = false
       errorMsg = e?.message || String(e)
-      console.error(`[${logTag}] 失败: ${errorMsg}`)
+      log_p2p_error('pull.meta.run', e)
       await reporter.flush().catch(() => {})
     }
 
@@ -157,7 +163,6 @@ export default class PullMetaJob {
     _downloadedBytes: number,
     errorMsg?: string
   ) {
-    const tag = `p2p-pull-meta#${transferId}`
     try {
       const cur = await prisma.p2p_transfer.findUnique({
         where: { p2pTransferId: transferId },
@@ -176,7 +181,6 @@ export default class PullMetaJob {
         },
       })
     } catch (e: any) {
-      console.warn(`[${tag}] finalize 失败: ${e?.message || e}`)
     }
   }
 }

@@ -6,6 +6,7 @@ const AdmZip = require('adm-zip')
 const unzipper = require('unzipper')
 import { is_img } from './index.js'
 import { parseStringPromise } from 'xml2js'
+import log from '#services/log_service'
 
 export function unzipFile(zipFilePath: string, outputDir: string) {
   const zip = new AdmZip(zipFilePath)
@@ -35,7 +36,13 @@ export async function extractFirstImageSync(
         if (!fs.existsSync(outputDirPath)) {
           fs.mkdirSync(outputDirPath, { recursive: true })
         }
-        console.log('file:', file)
+        void log.debug({
+          type: 'media',
+          module: 'unzip',
+          action: 'zip.first_image.entry_found',
+          message: `file: ${file?.path || ''}`,
+          context: { zipFilePath, outputFilePath, filePath: file?.path },
+        })
 
         const content = await file.buffer()
         fs.writeFileSync(outputFilePath, content)
@@ -44,7 +51,14 @@ export async function extractFirstImageSync(
 
     return imageFound
   } catch (error) {
-    console.error('Error extracting image:', error)
+    void log.error({
+      type: 'media',
+      module: 'unzip',
+      action: 'zip.first_image.extract.failed',
+      message: 'Error extracting image',
+      error,
+      context: { zipFilePath, outputFilePath },
+    })
     return false
   }
 }
@@ -74,7 +88,14 @@ export async function extractFirstImageSyncOrder(
 
     return true
   } catch (error) {
-    console.error('Error extracting image:', error)
+    void log.error({
+      type: 'media',
+      module: 'unzip',
+      action: 'zip.first_image_order.extract.failed',
+      message: 'Error extracting image',
+      error,
+      context: { zipFilePath, outputFilePath },
+    })
     return false
   }
 }
@@ -162,7 +183,14 @@ export async function extractCoverAndMetadata(
 
     return { coverPath, metadata }
   } catch (error) {
-    console.error('Error extracting cover and metadata:', error)
+    void log.error({
+      type: 'media',
+      module: 'unzip',
+      action: 'zip.cover_metadata.extract.failed',
+      message: 'Error extracting cover and metadata',
+      error,
+      context: { zipFilePath, outputDir },
+    })
     return { coverPath: null, metadata: {} }
   }
 }

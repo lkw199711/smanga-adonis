@@ -1,4 +1,4 @@
-/**
+﻿/**
  * P2P 心跳服务
  *
  * 职责:
@@ -13,6 +13,7 @@ import p2pIdentityService from './p2p_identity_service.js'
 import { normalize_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 import { reconcileGroupsWithTracker } from './p2p_group_reconcile_service.js'
 import manifestSyncService from './manifest/manifest_sync_service.js'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 
 class P2PHeartbeatService {
   private timer: NodeJS.Timeout | null = null
@@ -35,9 +36,7 @@ class P2PHeartbeatService {
     // 首次确保身份存在
     const identity = await p2pIdentityService.ensureIdentity()
     if (!identity) {
-      console.warn(
-        '[p2p] 心跳服务启动失败:无有效身份 (具体原因见上方 [p2p] identity.* 日志)'
-      )
+      log_p2p_info('heartbeat.start.skipped_no_identity', { reason: 'identity_unavailable' })
       return
     }
 
@@ -50,7 +49,11 @@ class P2PHeartbeatService {
       this.tick().catch(() => { })
     }, intervalSec * 1000)
 
-    console.log(`[p2p] 心跳服务已启动,间隔 ${intervalSec}s`)
+    log_p2p_info('heartbeat.started', {
+      nodeId: identity.nodeId,
+      intervalSec,
+      trackerCount: Array.isArray(p2p.node?.trackers) ? p2p.node.trackers.length : 0,
+    })
   }
 
   /**
@@ -121,22 +124,30 @@ class P2PHeartbeatService {
           // 401/403 通常意味着 tracker 不认识本节点(数据库重建/换 tracker),
           // 此时自动作废本地身份并重新注册,避免陷入"节点不存在"死循环
           if (status === 401 || status === 403) {
-            console.warn(
-              `[p2p] 心跳 ${url} 返回 ${status} (${e?.response?.data?.message || ''}),自动重新注册节点`
-            )
+            log_p2p_info('heartbeat.reregister.triggered', {
+              trackerUrl: url,
+              status,
+              message: e?.response?.data?.message || '',
+            })
             try {
               const fresh = await p2pIdentityService.invalidateAndReregister()
-              console.log(`[p2p] 节点已重新注册 nodeId=${fresh.nodeId}`)
+              log_p2p_info('heartbeat.reregistered', {
+                trackerUrl: url,
+                nodeId: fresh.nodeId,
+                status,
+              })
             } catch (reErr: any) {
-              console.warn(
-                `[p2p] 节点自动重新注册失败: ${reErr?.message || reErr}`
-              )
+              log_p2p_error('heartbeat.auto-reregister', reErr)
             }
             return
           }
           // 静默失败,避免日志风暴
           if (process.env.P2P_DEBUG) {
-            console.warn('[p2p] 心跳失败', url, status || e?.message)
+            log_p2p_info('heartbeat.failed.debug', {
+              trackerUrl: url,
+              status: status || null,
+              message: e?.message || '',
+            })
           }
         }
       })
@@ -150,11 +161,17 @@ class P2PHeartbeatService {
       try {
         const r = await reconcileGroupsWithTracker()
         if (r.ok && r.removed.length) {
-          console.log(`[p2p] 心跳对账清理孤儿群 ${r.removed.length} 个`)
+          log_p2p_info('heartbeat.reconcile.cleaned', {
+            removedCount: r.removed.length,
+            remoteCount: r.remoteCount,
+            upserted: r.upserted,
+          })
         }
       } catch (e: any) {
         if (process.env.P2P_DEBUG) {
-          console.warn('[p2p] 心跳对账失败', e?.message)
+          log_p2p_info('heartbeat.reconcile.failed.debug', {
+            message: e?.message || '',
+          })
         }
       }
     }

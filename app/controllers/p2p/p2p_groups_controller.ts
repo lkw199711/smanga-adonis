@@ -1,4 +1,4 @@
-/**
+﻿/**
  * P2P 群组管理控制器(前端/用户侧)
  *
  * 路径:/api/p2p/group/*
@@ -17,7 +17,7 @@ import prisma from '#start/prisma'
 import { get_config } from '#utils/index'
 import TrackerClient from '#services/p2p/tracker_client'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
-import { log_p2p_error } from '#utils/p2p_log'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 import {
   reconcileGroupsWithTracker,
   purgeLocalGroupByGroupNo,
@@ -64,7 +64,7 @@ function isNodeAuthError(e: any): boolean {
 async function refresh_client_after_reregister(): Promise<TrackerClient> {
   try {
     const fresh = await p2pIdentityService.invalidateAndReregister()
-    console.log(`[p2p] 节点已自动重新注册 nodeId=${fresh.nodeId}`)
+    log_p2p_info('group.auto-reregister.success', { nodeId: fresh.nodeId })
     const client = get_client()
     if (!client) {
       throw new Error('节点重新注册后仍无法构建 tracker 客户端(检查 p2p 配置)')
@@ -97,7 +97,10 @@ async function call_with_reregister<T>(
     return await fn(initial)
   } catch (e: any) {
     if (!isNodeAuthError(e)) throw e
-    console.warn('[p2p] tracker 认为本节点不存在/令牌无效,尝试自动重新注册后重试')
+    log_p2p_info('group.auto-reregister.triggered', {
+      status: e?.response?.status,
+      message: e?.response?.data?.message || e?.message || null,
+    })
     // 若 refresh 抛错,会带明确的"节点自动重新注册失败"信息,直接向上抛
     const fresh = await refresh_client_after_reregister()
     return await fn(fresh)
@@ -154,6 +157,12 @@ export default class P2PGroupsController {
           memberCount: 1,
         },
       })
+      log_p2p_info('group.create', {
+        groupNo: res.groupNo,
+        p2pGroupId: local.p2pGroupId,
+        isOwner: local.isOwner,
+        memberCount: local.memberCount,
+      })
       return response.json({ code: 200, message: '创建成功', data: { local, remote: res } })
     } catch (e: any) {
       log_p2p_error('group.create', e)
@@ -184,6 +193,7 @@ export default class P2PGroupsController {
       const remoteGroup = res?.group || res
       const existed = await prisma.p2p_group.findUnique({ where: { groupNo } })
       if (existed) {
+        log_p2p_info('group.join.already_member', { groupNo, p2pGroupId: existed.p2pGroupId })
         return response.json({ code: 200, message: '已在群组中', data: existed })
       }
 
@@ -199,6 +209,12 @@ export default class P2PGroupsController {
           trackerUrl: p2pIdentityService.pickTrackerUrl(cfg) || '',
           memberCount: remoteGroup?.memberCount || 1,
         },
+      })
+      log_p2p_info('group.join', {
+        groupNo,
+        p2pGroupId: local.p2pGroupId,
+        ownerNodeId: local.ownerNodeId,
+        memberCount: local.memberCount,
       })
       return response.json({ code: 200, message: '加入成功', data: local })
     } catch (e: any) {
@@ -228,6 +244,7 @@ export default class P2PGroupsController {
     }
 
     await purgeLocalGroupByGroupNo(groupNo)
+    log_p2p_info('group.leave', { groupNo })
 
     return response.json({ code: 200, message: '已退出' })
   }
@@ -264,6 +281,12 @@ export default class P2PGroupsController {
     if (!result.ok) {
       return response.status(500).json({ code: 500, message: result.error || '同步失败' })
     }
+
+    log_p2p_info('group.refresh', {
+      remoteCount: result.remoteCount,
+      upserted: result.upserted,
+      removed: result.removed?.length || 0,
+    })
 
     return response.json({
       code: 200,
@@ -360,6 +383,7 @@ export default class P2PGroupsController {
           data: { memberCount: { decrement: 1 } },
         })
       }
+      log_p2p_info('group.kick', { groupNo, targetNodeId })
       return response.json({ code: 200, message: '已踢出该成员' })
     } catch (e: any) {
       log_p2p_error('group.kick', e)
@@ -395,6 +419,7 @@ export default class P2PGroupsController {
 
     // tracker 端已经成功 → 清理本机数据
     await purgeLocalGroupByGroupNo(groupNo)
+    log_p2p_info('group.dismiss', { groupNo })
 
     return response.json({ code: 200, message: '群组已解散' })
   }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 对端 tree/mangas 接口调用封装
  *
  * 与下载文件不同,tree/mangas 是"目录列表"类一次性请求,
@@ -11,6 +11,7 @@
 import axios from 'axios'
 import type { Seed } from '../p2p_download_pool.js'
 import type { PullHeaders, TreeResponseData } from './pull_context.js'
+import { log_p2p_info } from '#utils/p2p_log'
 
 /**
  * 从 axios 错误中提取详细信息(对端拒连/超时/HTTP 状态等)
@@ -56,7 +57,13 @@ export async function withSeedFailover<T>(
       return await fn(seed)
     } catch (e: any) {
       const msg = format_axios_error(e, `${context} @ ${seed.nodeName || seed.nodeId}`)
-      console.warn(`[${logTag}] ${msg},尝试下一个 seed`)
+      log_p2p_info('pull.seed_failover.retry', {
+        logTag,
+        context,
+        nodeId: seed.nodeId,
+        nodeName: seed.nodeName || undefined,
+        message: msg,
+      })
       lastErr = new Error(msg)
     }
   }

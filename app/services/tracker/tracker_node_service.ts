@@ -1,4 +1,4 @@
-import prisma from '#start/prisma'
+﻿import prisma from '#start/prisma'
 import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
 import { get_config } from '#utils/index'
@@ -7,6 +7,7 @@ import {
   normalize_public_url,
   type ResolveIpResult,
 } from '#utils/ip_resolver'
+import { log_tracker_error, log_tracker_info } from '#utils/p2p_log'
 import trackerReachabilityService from './tracker_reachability_service.js'
 import type {
   NodeRegisterPayload,
@@ -95,9 +96,11 @@ class TrackerNodeService {
 
       const check = await trackerReachabilityService.verify({ baseUrl: decidedUrl })
       if (!check.ok) {
-        console.warn(
-          `[tracker] 注册反向验证失败 publicUrl=${decidedUrl} reason=${check.reason}`
-        )
+        log_tracker_info('node.register.reachability_failed', {
+          publicUrl: decidedUrl,
+          reason: check.reason,
+          ip: clientIp.ip,
+        })
         throw new Error(
           `节点公网可达性验证失败: ${check.reason}\n` +
           `tracker 无法从 ${decidedUrl} 拿到正确 challenge 回包。\n` +
@@ -108,11 +111,13 @@ class TrackerNodeService {
           '  - publicUrl 可从 tracker 所在网络正常访问'
         )
       }
-      console.log(
-        `[tracker] 注册反向验证通过 publicUrl=${decidedUrl} elapsed=${check.elapsedMs}ms`
-      )
+      log_tracker_info('node.register.reachability_ok', {
+        publicUrl: decidedUrl,
+        elapsedMs: check.elapsedMs,
+        ip: clientIp.ip,
+      })
     } else {
-      console.log(`[tracker] 检测到本机自连(loopback),跳过反向验证`)
+      log_tracker_info('node.register.reachability_skipped_loopback', { ip: clientIp.ip })
     }
 
     // 生成唯一 ID 与明文 token(只此一次返回)
@@ -136,11 +141,12 @@ class TrackerNodeService {
       },
     })
 
-    console.log(
-      `[tracker] 节点注册成功 nodeId=${nodeId} ` +
-      `publicUrl=${persistUrl || 'null(loopback)'} ` +
-      `ipSource=${clientIp.source} ipCategory=${clientIp.category}`
-    )
+    log_tracker_info('node.register.completed', {
+      nodeId,
+      publicUrl: persistUrl || null,
+      ipSource: clientIp.source,
+      ipCategory: clientIp.category,
+    })
 
     return {
       nodeId,
@@ -194,16 +200,23 @@ class TrackerNodeService {
         })
         if (check.ok) {
           online = 1
-          console.log(
-            `[tracker] 心跳反向验证通过 nodeId=${nodeId} publicUrl=${decidedUrl} ` +
-            `elapsed=${check.elapsedMs}ms (${endpointChanged ? '端点变更' : '离线恢复'})`
-          )
+          log_tracker_info('node.heartbeat.reachability_ok', {
+            nodeId,
+            publicUrl: decidedUrl,
+            elapsedMs: check.elapsedMs,
+            endpointChanged,
+            wasOffline,
+          })
         } else {
           online = 0
           verifyReason = check.reason
-          console.warn(
-            `[tracker] 心跳反向验证失败 nodeId=${nodeId} publicUrl=${decidedUrl} reason=${check.reason}`
-          )
+          log_tracker_info('node.heartbeat.reachability_failed', {
+            nodeId,
+            publicUrl: decidedUrl,
+            reason: check.reason,
+            endpointChanged,
+            wasOffline,
+          })
         }
       }
       // 端点未变化且本来 online=1:沿用原 online 值,不耗费 HTTP
@@ -261,7 +274,7 @@ class TrackerNodeService {
         }
       } catch (e) {
         // 通知失败不影响心跳主流程
-        console.warn('[tracker] 心跳 manifest 变更检查失败:', (e as Error).message)
+        log_tracker_error('node.heartbeat.manifest_notify', e)
       }
     }
 

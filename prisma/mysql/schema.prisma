@@ -133,7 +133,7 @@ model log {
   logLevel    Int      @default(0) @db.UnsignedInt
   module      String?  @db.VarChar(191)
   queue       String?  @db.VarChar(191)
-  message     String   @db.VarChar(191)
+  message     String   @db.Text
   exception   String?  @db.Text
   version     String   @db.Text
   environment String   @db.Text
@@ -142,6 +142,13 @@ model log {
   createTime  DateTime @default(now()) @db.DateTime(6)
   updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
   userId      Int?     @db.UnsignedInt
+
+  @@index([createTime], map: "idx_log_create_time")
+  @@index([logLevel, createTime], map: "idx_log_level_create_time")
+  @@index([logType, createTime], map: "idx_log_type_create_time")
+  @@index([module, createTime], map: "idx_log_module_create_time")
+  @@index([userId, createTime], map: "idx_log_user_create_time")
+  @@index([queue, createTime], map: "idx_log_queue_create_time")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

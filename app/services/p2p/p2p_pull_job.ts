@@ -1,21 +1,22 @@
 /**
- * P2P 拉取任务入口分发器(C 方案)
+ * P2P 鎷夊彇浠诲姟鍏ュ彛鍒嗗彂鍣?C 鏂规)
  *
- * 原来的 P2PPullJob 是一个"单体父 Job",包含 seeds 发现 + tree 拉取 + 下载池调度 +
- * 落库的完整流程。C 方案把它拆成 4 个独立的 Bull Job(media/manga/chapter/meta),
- * 它们各自通过 queueService.addTask 入队执行。
+ * 鍘熸潵鐨?P2PPullJob 鏄竴涓?鍗曚綋鐖?Job",鍖呭惈 seeds 鍙戠幇 + tree 鎷夊彇 + 涓嬭浇姹犺皟搴?+
+ * 钀藉簱鐨勫畬鏁存祦绋嬨€侰 鏂规鎶婂畠鎷嗘垚 4 涓嫭绔嬬殑 Bull Job(media/manga/chapter/meta),
+ * 瀹冧滑鍚勮嚜閫氳繃 queueService.addTask 鍏ラ槦鎵ц銆?
  *
- * 本文件现在只做一件事:根据 transfer.transferType 把入口任务转发到对应的新 Job。
- * 保留本文件的目的:controller 里的 addTask('taskP2PPull', {transferId}) 不变,
- * 队列层仍然能识别并分发,避免一次性改动 controller + queue_service + 所有调用点。
+ * 鏈枃浠剁幇鍦ㄥ彧鍋氫竴浠朵簨:鏍规嵁 transfer.transferType 鎶婂叆鍙ｄ换鍔¤浆鍙戝埌瀵瑰簲鐨勬柊 Job銆?
+ * 淇濈暀鏈枃浠剁殑鐩殑:controller 閲岀殑 addTask('taskP2PPull', {transferId}) 涓嶅彉,
+ * 闃熷垪灞備粛鐒惰兘璇嗗埆骞跺垎鍙?閬垮厤涓€娆℃€ф敼鍔?controller + queue_service + 鎵€鏈夎皟鐢ㄧ偣銆?
  *
- * 注意:本 Job 自身在分发完成后立即返回(不等子 Job 完成)。真正的完成结算由底层
- * 子 Job + pull_child_tracker 聚合负责。
+ * 娉ㄦ剰:鏈?Job 鑷韩鍦ㄥ垎鍙戝畬鎴愬悗绔嬪嵆杩斿洖(涓嶇瓑瀛?Job 瀹屾垚)銆傜湡姝ｇ殑瀹屾垚缁撶畻鐢卞簳灞?
+ * 瀛?Job + pull_child_tracker 鑱氬悎璐熻矗銆?
  */
 
 import prisma from '#start/prisma'
 import { addTask } from '#services/queue_service'
 import { TaskPriority } from '../../type/index.js'
+import { log_p2p_error, log_p2p_info } from '#utils/p2p_log'
 
 type P2PPullArgs = {
   transferId: number
@@ -29,30 +30,29 @@ export default class P2PPullJob {
   }
 
   async run() {
-    const logTag = `p2p-pull-entry#${this.transferId}`
-    console.log(`[${logTag}] 入口分发器启动`)
+    log_p2p_info('transfer.dispatch.started', { transferId: this.transferId })
 
     const transfer = await prisma.p2p_transfer.findUnique({
       where: { p2pTransferId: this.transferId },
     })
     if (!transfer) {
-      console.warn(`[${logTag}] transfer not found`)
+      log_p2p_info('transfer.dispatch.skipped_not_found', { transferId: this.transferId })
       return
     }
     if (transfer.status === 'canceled') {
-      console.log(`[${logTag}] transfer canceled`)
+      log_p2p_info('transfer.dispatch.skipped_canceled', { transferId: this.transferId })
       return
     }
     if (!transfer.groupNo) {
-      await this.fail('transfer.groupNo 缺失')
+      await this.fail('transfer.groupNo 缂哄け')
       return
     }
 
     try {
       if (transfer.transferType === 'chapter') {
-        if (!transfer.remoteChapterId) throw new Error('remoteChapterId 缺失')
-        if (!transfer.remoteMangaId) throw new Error('remoteMangaId 缺失(章节需要按 manga 发现 seeds)')
-        // 章节独立入口:让 ChapterJob 自己完成 transfer 落状态(非子任务模式)
+        if (!transfer.remoteChapterId) throw new Error('remoteChapterId 缂哄け')
+        if (!transfer.remoteMangaId) throw new Error('remoteMangaId 缂哄け(绔犺妭闇€瑕佹寜 manga 鍙戠幇 seeds)')
+        // 绔犺妭鐙珛鍏ュ彛:璁?ChapterJob 鑷繁瀹屾垚 transfer 钀界姸鎬?闈炲瓙浠诲姟妯″紡)
         await this.markRunning(transfer.p2pTransferId)
         await addTask({
           taskName: `p2p-pull-chapter-${transfer.remoteChapterId}`,
@@ -68,7 +68,7 @@ export default class P2PPullJob {
           priority: TaskPriority.p2pPullChapter,
         })
       } else if (transfer.transferType === 'manga') {
-        if (!transfer.remoteMangaId) throw new Error('remoteMangaId 缺失')
+        if (!transfer.remoteMangaId) throw new Error('remoteMangaId 缂哄け')
         await this.markRunning(transfer.p2pTransferId)
         await addTask({
           taskName: `p2p-pull-manga-${transfer.remoteMangaId}`,
@@ -84,8 +84,8 @@ export default class P2PPullJob {
           priority: TaskPriority.p2pPullManga,
         })
       } else if (transfer.transferType === 'media') {
-        if (!transfer.remoteMediaId) throw new Error('remoteMediaId 缺失')
-        // MediaJob 内部会自行把 transfer 切换到 running
+        if (!transfer.remoteMediaId) throw new Error('remoteMediaId 缂哄け')
+        // MediaJob 鍐呴儴浼氳嚜琛屾妸 transfer 鍒囨崲鍒?running
         await addTask({
           taskName: `p2p-pull-media-${transfer.remoteMediaId}`,
           command: 'taskP2PPullMedia',
@@ -98,13 +98,17 @@ export default class P2PPullJob {
           priority: TaskPriority.p2pPullMedia,
         })
       } else {
-        throw new Error(`暂不支持的 transferType: ${transfer.transferType}`)
+        throw new Error(`鏆備笉鏀寔鐨?transferType: ${transfer.transferType}`)
       }
 
-      console.log(`[${logTag}] 分发完成 type=${transfer.transferType}`)
+      log_p2p_info('transfer.dispatch.completed', {
+        transferId: transfer.p2pTransferId,
+        transferType: transfer.transferType,
+        groupNo: transfer.groupNo,
+      })
     } catch (e: any) {
       const msg = e?.message || String(e)
-      console.error(`[${logTag}] 分发失败: ${msg}`)
+      log_p2p_error('transfer.dispatch', e)
       await this.fail(msg)
     }
   }
@@ -131,5 +135,6 @@ export default class P2PPullJob {
         data: { status: 'failed', error: msg, endTime: new Date(), speedBps: 0 },
       })
       .catch(() => {})
+    log_p2p_info('transfer.dispatch.failed', { transferId: this.transferId, reason: msg })
   }
 }

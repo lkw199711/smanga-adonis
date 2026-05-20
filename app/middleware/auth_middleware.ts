@@ -1,10 +1,3 @@
-/*
- * @Author: 梁楷文 lkw199711@163.com
- * @Date: 2024-06-20 19:42:14
- * @LastEditors: 梁楷文 lkw199711@163.com
- * @LastEditTime: 2024-08-21 11:48:50
- * @FilePath: \smanga-adonis\app\middleware\auth_middleware.ts
- */
 import prisma from '#start/prisma'
 import type { NextFn } from '@adonisjs/core/types/http'
 import { SResponse } from '../interfaces/response.js'
@@ -15,33 +8,31 @@ import {
   authenticate_basic,
   BASIC_REALM,
 } from '../utils/basic_auth.js'
+import log from '#services/log_service'
 
-/**
- * Auth middleware is used authenticate HTTP requests and deny
- * access to unauthenticated users.
- */
+function buildDevice(request: HttpContextWithUserId['request']) {
+  return {
+    requestId: request.id?.(),
+    ip: request.ip(),
+    userAgent: request.header('user-agent'),
+    method: request.method(),
+    url: request.url(),
+  }
+}
+
 export default class AuthMiddleware {
-  /**
-   * The URL to redirect to, when authentication fails
-   */
   redirectTo = '/login'
 
   async handle({ request, response }: HttpContextWithUserId, next: NextFn) {
     const skipRoutes = ['/deploy', '/test', '/login', '/file', '/analysis', '/homepage', '/tracker', '/p2p/serve', '/p2p/verify']
 
-    // 用 "全等 或 以 prefix/ 开头" 的方式精确匹配,避免 /p2p 误命中 /api/p2p,或 /tracker 误命中 /trackerxxx
     const url = request.url()
     const isSkipped = skipRoutes.some((prefix) => url === prefix || url.startsWith(prefix + '/'))
     if (isSkipped) {
-      // 部署/测试/登录/资源/分析/对外接口/对等节点接口 跳过用户 token 校验
       await next()
       return
     }
 
-    // ========================================================================
-    // OPDS 分支: 使用 HTTP Basic Auth 鉴权 (兼容第三方阅读器, 如 可达漫画)
-    // 全局开关: smanga.json 的 opds.enabled 为 0/false 时直接返回 404 (默认启用)
-    // ========================================================================
     if (request.url().startsWith('/opds')) {
       const opdsCfg = (get_config() || {}).opds || {}
       const enabled = opdsCfg.enabled ?? 1
@@ -53,6 +44,17 @@ export default class AuthMiddleware {
         const cred = parse_basic_auth(request.header('authorization'))
         const user = await authenticate_basic(cred)
         if (!user) {
+          await log.warn({
+            type: 'auth',
+            module: 'auth',
+            action: 'auth.opds.failed',
+            message: 'OPDS basic auth failed',
+            context: {
+              reason: 'invalid_basic_auth',
+            },
+            device: buildDevice(request),
+          })
+
           return response
             .status(401)
             .header('WWW-Authenticate', `Basic realm="${BASIC_REALM}", charset="UTF-8"`)
@@ -63,10 +65,19 @@ export default class AuthMiddleware {
         await next()
         return
       } catch (err) {
+        await log.error({
+          type: 'auth',
+          module: 'auth',
+          action: 'auth.opds.failed',
+          message: 'OPDS auth error',
+          error: err,
+          device: buildDevice(request),
+        })
+
         return response
           .status(500)
           .json(
-            new SResponse({ code: 1, message: 'OPDS auth error: ' + (err?.message ?? 'unknown') })
+            new SResponse({ code: 1, message: 'OPDS auth error: ' + ((err as any)?.message ?? 'unknown') })
           )
       }
     }
@@ -74,6 +85,17 @@ export default class AuthMiddleware {
     const userToken = request.header('token')
 
     if (!userToken) {
+      await log.warn({
+        type: 'auth',
+        module: 'auth',
+        action: 'auth.token.missing',
+        message: 'token missing',
+        context: {
+          reason: 'token_missing',
+        },
+        device: buildDevice(request),
+      })
+
       return response
         .status(401)
         .json(new SResponse({ code: 1, message: '用户信息失效', status: 'token error' }))
@@ -84,34 +106,82 @@ export default class AuthMiddleware {
       return
     }
 
-    // 动态引入 Prisma，只在需要的时候才加载它
-    // const { default: prisma } = await import('#start/prisma')
-
     const token = await prisma.token.findFirst({ where: { token: userToken } })
 
     if (!token) {
+      await log.warn({
+        type: 'auth',
+        module: 'auth',
+        action: 'auth.token.invalid',
+        message: 'token invalid',
+        context: {
+          reason: 'token_not_found',
+          token: userToken,
+        },
+        device: buildDevice(request),
+      })
+
       return response
         .status(401)
         .json(new SResponse({ code: 1, message: '用户信息失效', status: 'token error' }))
     }
+
     const user: any = await prisma.user.findUnique({
       where: { userId: token.userId },
       include: { mediaPermissons: true, userPermissons: true },
     })
 
-    // const permissonRoutes = ['/user', '/media', '/collect', '/compress', '/history', '/latest', '/log', '/task', '/path', '/bookmark', '/tag', '/manga', '/chapter', '/image', '/manga-tag', '/chart', '/search', '/config']
+    if (!user) {
+      await log.warn({
+        type: 'auth',
+        module: 'auth',
+        action: 'auth.user.not_found',
+        message: 'token user not found',
+        context: {
+          token: userToken,
+          tokenUserId: token.userId,
+        },
+        device: buildDevice(request),
+      })
 
-    // 用户信息模块
+      return response
+        .status(401)
+        .json(new SResponse({ code: 1, message: '用户信息失效', status: 'token error' }))
+    }
+
     if (request.url().startsWith('/user') && request.url() !== '/user-config') {
       if (user.role !== 'admin') {
+        await log.warn({
+          type: 'auth',
+          module: 'auth',
+          action: 'auth.permission.denied',
+          message: 'permission denied on /user',
+          userId: user.userId,
+          context: {
+            reason: 'user_route_admin_only',
+          },
+          device: buildDevice(request),
+        })
+
         return response
           .status(401)
           .json(new SResponse({ code: 1, message: '无权限操作', status: 'permisson error' }))
       }
     }
 
-    // 检验method为delete
     if (request.method() === 'DELETE' && user.role !== 'admin') {
+      await log.warn({
+        type: 'auth',
+        module: 'auth',
+        action: 'auth.permission.denied',
+        message: 'permission denied on DELETE',
+        userId: user.userId,
+        context: {
+          reason: 'delete_admin_only',
+        },
+        device: buildDevice(request),
+      })
+
       return response
         .status(401)
         .json(new SResponse({ code: 1, message: '无权限操作', status: 'permisson error' }))
@@ -122,7 +192,6 @@ export default class AuthMiddleware {
     request.userId = token.userId
     request.user = user
 
-    await next()
     return next()
   }
 }

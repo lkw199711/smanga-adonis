@@ -8,15 +8,16 @@
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 const { execSync } = require('child_process')
+import logger from '@adonisjs/core/services/logger'
 
 export function runNpxCommand(command: string) {
   try {
     // 执行 npx 命令，并捕获输出
     execSync(command, { stdio: 'inherit' })
-    console.log('命令执行成功')
+    logger.info('命令执行成功')
     return true
   } catch (error) {
-    console.error('命令执行失败:', error.message)
+    logger.error({ err: error, command }, '命令执行失败')
     return false
   }
 }

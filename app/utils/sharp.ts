@@ -8,6 +8,7 @@
 import sharp from 'sharp'
 import fs from 'node:fs'
 import path from 'node:path'
+import log from '#services/log_service'
 
 export async function compressImageToSize(
   inputPath: string,
@@ -63,8 +64,6 @@ export async function compressImageToSize(
       const stats1 = fs.statSync(outputPath)
       fileSize = stats1.size
 
-      // console.log(`Current quality: ${quality}, File size: ${fileSize / 1024} KB`)
-
       // 每次递减质量
       quality -= 10
     }
@@ -76,14 +75,23 @@ export async function compressImageToSize(
     unlink_file(inputPath)
 
     if (fileSize <= maxSizeKB * 1024) {
-      // console.log(`Image successfully compressed to ${fileSize / 1024} KB`)
       return true
     } else {
-      // console.log(`Could not compress image to the desired size within quality limits.`)
       return false
     }
   } catch (error) {
-    console.error(`Failed to compress image: ${error.message}`)
+    void log.error({
+      type: 'compress',
+      module: 'sharp',
+      action: 'image.compress.failed',
+      message: `compress image failed: ${inputPath}`,
+      error,
+      context: {
+        inputPath,
+        outputPath,
+        maxSizeKB,
+      },
+    })
     return false
   }
 }
@@ -112,7 +120,13 @@ export async function compressImageToSize1(
       // 如果文件大小大于目标大小的十倍，直接使用最低压缩倍率
       quality = 10
     } else {
-      console.log(initialFileSize, maxSizeKB * 10240)
+      void log.debug({
+        type: 'compress',
+        module: 'sharp',
+        action: 'image.compress.single_pass.quality_probe',
+        message: `sharp quality probe: initial=${initialFileSize}, target=${maxSizeKB * 10240}`,
+        context: { initialFileSize, target: maxSizeKB * 10240, inputPath, outputPath },
+      })
 
       // 根据初始文件大小和目标大小调整初始质量
       quality = Math.max(
@@ -151,17 +165,46 @@ export async function compressImageToSize1(
     const stats1 = fs.statSync(outputPath)
     fileSize = stats1.size
 
-    console.log(`Final quality: ${quality}, File size: ${fileSize / 1024} KB`)
+    void log.info({
+      type: 'compress',
+      module: 'sharp',
+      action: 'image.compress.single_pass.completed',
+      message: `Final quality: ${quality}, File size: ${fileSize / 1024} KB`,
+      context: { quality, fileSize, inputPath, outputPath, maxSizeKB },
+    })
 
     if (fileSize <= maxSizeKB * 1024) {
-      console.log(`Image successfully compressed to ${fileSize / 1024} KB`)
+      void log.info({
+        type: 'compress',
+        module: 'sharp',
+        action: 'image.compress.single_pass.success',
+        message: `Image successfully compressed to ${fileSize / 1024} KB`,
+        context: { fileSize, inputPath, outputPath, maxSizeKB },
+      })
       return true
     } else {
-      console.log(`Could not compress image to the desired size within quality limits.`)
+      void log.warn({
+        type: 'compress',
+        module: 'sharp',
+        action: 'image.compress.single_pass.limit_reached',
+        message: 'Could not compress image to the desired size within quality limits.',
+        context: { fileSize, inputPath, outputPath, maxSizeKB },
+      })
       return false
     }
   } catch (error) {
-    console.error(`Failed to compress image: ${error.message}`)
+    void log.error({
+      type: 'compress',
+      module: 'sharp',
+      action: 'image.compress.single_pass.failed',
+      message: `compress image single-pass failed: ${inputPath}`,
+      error,
+      context: {
+        inputPath,
+        outputPath,
+        maxSizeKB,
+      },
+    })
     return false
   }
 }
