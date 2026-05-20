@@ -96,7 +96,7 @@ export function path_config() {
 export function get_config() {
   let rawData = ''
   if (platform === 'win32' || platform === 'darwin') {
-    rawData = fs.readFileSync('./data/config/smanga.json', 'utf-8')
+    rawData = fs.readFileSync(path.join(rootDir, 'data', 'config', 'smanga.json'), 'utf-8')
   } else if (platform === 'linux') {
     rawData = fs.readFileSync('/data/config/smanga.json', 'utf-8')
   } else {
@@ -108,7 +108,7 @@ export function get_config() {
 
 export function set_config(config: object) {
   if (platform === 'win32' || platform === 'darwin') {
-    fs.writeFileSync('./data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')
+    fs.writeFileSync(path.join(rootDir, 'data', 'config', 'smanga.json'), JSON.stringify(config, null, 2), 'utf-8')
   } else if (platform === 'linux') {
     fs.writeFileSync('/data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')
   } else {

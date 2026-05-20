@@ -14,7 +14,7 @@ function createPrismaClient() {
     databaseUrl = `mysql://${username}:${password}@${host}:${port}/${database}`
   } else if (client === 'sqlite') {
     const os = get_os()
-    if (os === 'Windows') {
+    if (os === 'Windows' || os === 'MacOS') {
       databaseUrl = `file:${path.join(rootDir, 'data', 'db', 'smanga.db')}`
     } else {
       databaseUrl = `file:${path.join('/', 'data', 'db', 'smanga.db')}`
