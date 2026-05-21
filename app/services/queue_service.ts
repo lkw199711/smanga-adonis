@@ -70,11 +70,11 @@ scanQueue.process('compress', queueConfig.concurrency, async (job: any) => {
   switch (command) {
     case 'compressChapter':
       //压缩章节
-      new CompressChapterJob(args).run()
+      await new CompressChapterJob(args).run()
       break
     case 'clearCompressCache':
       await new ClearCompressJob().run()
-        break
+      break
     default:
       break
   }
@@ -222,7 +222,6 @@ type addTaskType = {
 }
 
 async function addTask({ taskName, command, args, priority, timeout }: addTaskType) {
-  void timeout // 形参保留以兼容外部调用，超时统一使用 queueConfig.timeout
   // console.log(`添加任务: ${taskName}, 命令: ${command}, 参数: ${JSON.stringify(args)}, 优先级: ${priority}, 超时: ${timeout}`);
   console.log(`添加任务: ${taskName}`)
 
@@ -290,7 +289,7 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
       taskQueue = 'p2p'
     }
 
-    scanQueue.add(
+    return await scanQueue.add(
       taskQueue,
       {
         taskName,
@@ -299,7 +298,7 @@ async function addTask({ taskName, command, args, priority, timeout }: addTaskTy
       },
       {
         priority,
-        timeout: queueConfig.timeout, // 使用配置的超时时间
+        timeout: timeout ?? queueConfig.timeout, // 优先使用调用方传入的超时时间
         attempts: queueConfig.attempts, // 最大重试次数
         backoff: {
           type: 'exponential',
