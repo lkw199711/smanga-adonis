@@ -355,6 +355,68 @@ model taskSuccess {
   @@map("taskSuccess")
 }
 
+model queue_job {
+  id            Int       @id @default(autoincrement()) @db.UnsignedInt
+  queue_name    String    @db.VarChar(191)
+  task_queue    String    @db.VarChar(191)
+  task_name     String    @db.VarChar(191)
+  command       String    @db.Text
+  args          Json?
+  status        String    @default("pending") @db.VarChar(191)
+  priority      Int       @default(10)
+  attempts_made Int       @default(0)
+  max_attempts  Int       @default(3)
+  timeout_ms    Int       @default(120000)
+  available_at  DateTime  @default(now()) @db.DateTime(6)
+  locked_by     String?   @db.VarChar(191)
+  locked_until  DateTime? @db.DateTime(6)
+  started_at    DateTime? @db.DateTime(6)
+  last_error    String?   @db.Text
+  created_at    DateTime  @default(now()) @db.DateTime(6)
+  updated_at    DateTime  @default(now()) @updatedAt @db.DateTime(6)
+
+  @@index([queue_name, task_queue, status, available_at, priority, id], map: "idx_queue_jobs_claim")
+  @@index([status, locked_until], map: "idx_queue_jobs_stalled")
+  @@index([task_name, status], map: "idx_queue_jobs_task_status")
+  @@index([locked_by], map: "idx_queue_jobs_locked_by")
+  @@map("queue_jobs")
+}
+
+model queue_failed_job {
+  id              Int      @id @default(autoincrement()) @db.UnsignedInt
+  original_job_id Int      @db.UnsignedInt
+  queue_name      String   @db.VarChar(191)
+  task_queue      String   @db.VarChar(191)
+  task_name       String   @db.VarChar(191)
+  command         String   @db.Text
+  args            Json?
+  attempts_made   Int      @default(0)
+  max_attempts    Int      @default(3)
+  error           String?  @db.Text
+  failed_at       DateTime @default(now()) @db.DateTime(6)
+  created_at      DateTime @default(now()) @db.DateTime(6)
+
+  @@index([queue_name, task_queue, failed_at], map: "idx_queue_failed_jobs_queue")
+  @@index([original_job_id], map: "idx_queue_failed_jobs_original")
+  @@map("queue_failed_jobs")
+}
+
+model queue_worker {
+  worker_id    String    @id @db.VarChar(191)
+  worker_group String    @db.VarChar(191)
+  mode         String    @db.VarChar(191)
+  queues       Json?
+  status       String    @default("running") @db.VarChar(191)
+  started_at   DateTime  @default(now()) @db.DateTime(6)
+  heartbeat_at DateTime? @db.DateTime(6)
+  stopped_at   DateTime? @db.DateTime(6)
+  metadata     Json?
+
+  @@index([worker_group, status], map: "idx_queue_workers_group_status")
+  @@index([heartbeat_at], map: "idx_queue_workers_heartbeat")
+  @@map("queue_workers")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model token {
   tokenId    Int       @id @default(autoincrement()) @db.UnsignedInt

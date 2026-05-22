@@ -1,219 +1,14 @@
-import ScanPathJob from './scan_job.js'
-import ScanMangaJob from './scan_manga_job.js'
-import DeleteChapterJob from './delete_chapter_job.js'
-import DeleteMangaJob from './delete_manga_job.js'
-import DeletePathJob from './delete_path_job.js'
-import DeleteMediaJob from './delete_media_job.js'
-import CopyPosterJob from './copy_poster_job.js'
-import CreateMediaPosterJob from './create_media_poster_job.js'
-import ReloadMangaMetaJob from './reload_manga_meta_job.js'
-import SyncMediaJob from './sync_media_job.js'
-import SyncMangaJob from './sync_manga_job.js'
-import SyncChapterJob from './sync_chapter_job.js'
-import CompressChapterJob from './compress_chapter_job.js'
-import ClearCompressJob from './clear_compress_job.js'
-import P2PPullJob from './p2p/p2p_pull_job.js'
-import PullMediaJob from './p2p/pull/pull_media_sub_job.js'
-import PullMangaJob from './p2p/pull/pull_manga_sub_job.js'
-import PullChapterJob from './p2p/pull/pull_chapter_sub_job.js'
-import PullMetaJob from './p2p/pull/pull_meta_sub_job.js'
 import { get_config } from '#utils/index'
+import { getQueueConfig, resolveTaskQueue } from './queue/queue_config.js'
+import {
+  cleanJobs,
+  enqueueJob,
+  getJob,
+  listJobs,
+  pathJobExists,
+} from './queue/sql_queue_repository.js'
 
-import Bull from 'bull'
-type queueConfigType = {
-  concurrency: number // 并发数
-  attempts: number // 最大重试次数
-  timeout: number // 超时时间（毫秒）
-}
-
-const queueConfig: queueConfigType = get_config()?.queue || {
-  concurrency: 1, // 默认并发数
-  attempts: 3, // 默认重试次数
-  timeout: 120000, // 默认超时时间为2分钟
-}
-
-const concurrency = queueConfig?.concurrency ?? 1 // 并发数 (保留以作为默认值参考，部分 process 中直接使用 queueConfig.concurrency)
-const attempts = queueConfig?.attempts ?? 3 // 最大重试次数
-const timeout = queueConfig?.timeout ?? 120000 // 超时时间（毫秒）
-void concurrency
-void attempts
-void timeout
-
-// 服务标识，用于在共用同一个 Redis 时隔离不同 smanga 实例的队列。
-// 在 data/config/smanga.json 中配置 "serverKey"，缺省为 'default'。
-const serverKey: string = (get_config()?.serverKey || 'default').toString().trim() || 'default'
-const queueName = `smanga:${serverKey}`
-
-const redisOptions = {
-  host: get_config()?.redis?.host || '127.0.0.1',
-  port: get_config()?.redis?.port || 6379,
-}
-
-console.log(`[queue] using queue name: ${queueName}`)
-
-const scanQueue = new Bull(queueName, {
-  redis: redisOptions,
-})
-
-scanQueue.on('completed', (job) => {
-  console.log(`Job completed: ${job.id}`)
-})
-
-scanQueue.on('failed', (job, err) => {
-  console.error(`Job failed: ${job.id} with error: ${err.message}`)
-})
-
-// 处理压缩任务
-scanQueue.process('compress', queueConfig.concurrency, async (job: any) => {
-  const { command, args } = job.data
-
-  switch (command) {
-    case 'compressChapter':
-      //压缩章节
-      await new CompressChapterJob(args).run()
-      break
-    case 'clearCompressCache':
-      await new ClearCompressJob().run()
-      break
-    default:
-      break
-  }
-
-  return true
-})
-
-// 处理扫描任务
-scanQueue.process('scan', queueConfig.concurrency, async (job: any) => {
-  const { command, args } = job.data
-
-  await task_process(command, args)
-
-})
-
-scanQueue.process('sync', queueConfig.concurrency, async (job: any) => {
-  const { command, args } = job.data
-
-  await task_process(command, args)
-})
-
-// ============ P2P 专用队列 process ============
-// 背景:默认 concurrency=1 会把 p2p 任务跟 sync 任务挤在一起串行跑,
-// 而 p2p 拉取是\"IO 密集型 + 可多任务并行\",需要独立的并发配置。
-// 默认值参考 p2p.node.maxConcurrentPulls(若未配置回落到 queueConfig.concurrency)
-const p2pConcurrency =
-  Number(get_config()?.p2p?.node?.maxConcurrentPulls) || queueConfig.concurrency || 2
-console.log(`[queue] p2p concurrency = ${p2pConcurrency}`)
-
-scanQueue.process('p2p', p2pConcurrency, async (job: any) => {
-  const { command, args } = job.data
-
-  await task_process(command, args)
-})
-
-// 处理默认任务
-scanQueue.process(queueConfig.concurrency, async (job: any) => {
-  const { command, args } = job.data
-
-  await task_process(command, args)
-})
-
-const deleteQueue = new Bull(queueName, {
-  redis: redisOptions,
-})
-
-const compressQueue = new Bull(queueName, {
-  redis: redisOptions,
-})
-
-async function task_process(command: string, args: any) {
-  switch (command) {
-    case 'taskScanPath':
-      await new ScanPathJob(args).run()
-      break
-    case 'taskScanManga':
-      await new ScanMangaJob(args).run()
-      break
-    case 'deleteMedia':
-      await new DeleteMediaJob(args).run()
-      break
-    case 'deletePath':
-      await new DeletePathJob(args).run()
-      break
-    case 'deleteManga':
-      await new DeleteMangaJob(args).run()
-      break
-    case 'deleteChapter':
-      await new DeleteChapterJob(args).run()
-      break
-    case 'copyPoster':
-      await new CopyPosterJob(args).run()
-      break
-    case 'compressChapter':
-      await new CompressChapterJob(args).run()
-      break
-    case 'createMediaPoster':
-      await new CreateMediaPosterJob(args).run()
-      break
-    case 'reloadMangaMeta':
-      await new ReloadMangaMetaJob(args).run()
-      break
-    case 'clearCompressCache':
-      await new ClearCompressJob().run()
-      break
-    case 'taskSyncMedia':
-      await new SyncMediaJob(args).run()
-      break
-    case 'taskSyncManga':
-      await new SyncMangaJob(args).run()
-      break
-    case 'taskSyncChapter':
-      await new SyncChapterJob(args).run()
-      break
-    case 'taskP2PPull':
-      await new P2PPullJob(args).run()
-      break
-    case 'taskP2PPullMedia':
-      await new PullMediaJob(args).run()
-      break
-    case 'taskP2PPullManga':
-      await new PullMangaJob(args).run()
-      break
-    case 'taskP2PPullChapter':
-      await new PullChapterJob(args).run()
-      break
-    case 'taskP2PPullMeta':
-      await new PullMetaJob(args).run()
-      break
-    default:
-      break
-  }
-}
-
-async function path_scanning(pathId: number) {
-  const wattingJobs = await scanQueue.getWaiting()
-  const activeJobs = await scanQueue.getActive()
-  const jobs = wattingJobs.concat(activeJobs)
-  const thisPathJobs = jobs.filter((job: any) => job.data.taskName === `scan_path_${pathId}`)
-  if (thisPathJobs.length > 0) {
-    return true
-  }
-
-  return false
-}
-
-async function path_deleting(pathId: number) {
-  const wattingJobs = await scanQueue.getWaiting()
-  const activeJobs = await scanQueue.getActive()
-  const jobs = wattingJobs.concat(activeJobs)
-  const thisPathJobs = jobs.filter((job: any) => job.data.taskName === `delete_path_${pathId}`)
-  if (thisPathJobs.length > 0) {
-    return true
-  }
-
-  return false
-}
-
-type addTaskType = {
+type AddTaskType = {
   taskName: string
   command: string
   args: any
@@ -221,97 +16,67 @@ type addTaskType = {
   timeout?: number
 }
 
-async function addTask({ taskName, command, args, priority, timeout }: addTaskType) {
-  // console.log(`添加任务: ${taskName}, 命令: ${command}, 参数: ${JSON.stringify(args)}, 优先级: ${priority}, 超时: ${timeout}`);
+const scanQueue = {
+  getJobs: async (states?: string[]) => listJobs(states),
+  getJob: async (id: string | number) => getJob(id),
+  clean: async (_grace?: number, _status?: string, _limit?: number, states?: string[]) => {
+    await cleanJobs(states)
+  },
+}
+
+const deleteQueue = scanQueue
+const compressQueue = scanQueue
+
+async function path_scanning(pathId: number) {
+  return pathJobExists(`scan_path_${pathId}`)
+}
+
+async function path_deleting(pathId: number) {
+  return pathJobExists(`delete_path_${pathId}`)
+}
+
+async function runTaskSync(command: string, args: any) {
+  const { runJobCommand } = await import('./queue/job_runner.js')
+  await runJobCommand(command, args)
+}
+
+async function addTask({ taskName, command, args, priority, timeout }: AddTaskType) {
   console.log(`添加任务: ${taskName}`)
 
-  // 才用同步还是异步的方式执行扫描任务
   const config = get_config()
-  const dispatchSync = config.debug.dispatchSync == 1
+  const dispatchSync = config.debug?.dispatchSync === 1 || config.debug?.dispatchSync === '1'
   if (dispatchSync) {
-    switch (command) {
-      case 'taskScanPath':
-        await new ScanPathJob(args).run()
-        break
-      case 'taskScanManga':
-        await new ScanMangaJob(args).run()
-        break
-      case 'deleteMedia':
-        await new DeleteMediaJob(args).run()
-        break
-      case 'deletePath':
-        await new DeletePathJob(args).run()
-        break
-      case 'deleteManga':
-        await new DeleteMangaJob(args).run()
-        break
-      case 'deleteChapter':
-        await new DeleteChapterJob(args).run()
-        break
-      case 'copyPoster':
-        await new CopyPosterJob(args).run()
-        break
-      case 'compressChapter':
-        //压缩章节
-        await new CompressChapterJob(args).run()
-        break
-      case 'createMediaPoster':
-        await new CreateMediaPosterJob(args).run()
-        break
-      case 'reloadMangaMeta':
-        await new ReloadMangaMetaJob(args).run()
-        break
-      case 'clearCompressCache':
-        await new ClearCompressJob().run()
-        break
-      default:
-        break
+    await runTaskSync(command, args)
+    return {
+      id: 'sync',
+      data: { taskName, command, args },
+      queue: { name: 'sync' },
+      opts: { priority, timeout },
     }
-  } else {
-    if (command === 'taskScanPath') {
-      if (await path_scanning(args.pathId)) {
-        console.log(`路径${args.pathId} 正在被扫描,跳过执行`)
-        return false
-      }
-    } else if (command === 'deletePath') {
-      if (await path_deleting(args.pathId)) {
-        console.log(`路径${args.pathId} 正在被删除,跳过执行`)
-        return false
-      }
-    }
-
-    let taskQueue = 'scan'
-    if (/sync/.test(taskName)) {
-      taskQueue = 'sync'
-    } else if (/compress/.test(taskName)) {
-      taskQueue = 'compress'
-    } else if (/p2p/i.test(taskName) || /^taskP2P/.test(command)) {
-      taskQueue = 'p2p'
-    }
-
-    return await scanQueue.add(
-      taskQueue,
-      {
-        taskName,
-        command,
-        args,
-      },
-      {
-        priority,
-        timeout: timeout ?? queueConfig.timeout, // 优先使用调用方传入的超时时间
-        attempts: queueConfig.attempts, // 最大重试次数
-        backoff: {
-          type: 'exponential',
-          delay: 10 * 1000, // 初始延迟10秒
-          options: {
-            factor: 2, // 每次延迟翻倍
-            jitter: true, // 添加随机抖动，避免并发重试风暴‌:ml-citation{ref="3,4" data="citationList"}
-            maxDelay: 2 * 60 * 1000, // 最大延迟时间（防止无限增长）
-          },
-        },
-      }
-    )
   }
+
+  if (command === 'taskScanPath') {
+    if (await path_scanning(args.pathId)) {
+      console.log(`路径${args.pathId} 正在被扫描,跳过执行`)
+      return false
+    }
+  } else if (command === 'deletePath') {
+    if (await path_deleting(args.pathId)) {
+      console.log(`路径${args.pathId} 正在被删除,跳过执行`)
+      return false
+    }
+  }
+
+  const queueConfig = getQueueConfig()
+  const taskQueue = resolveTaskQueue(taskName, command)
+  return enqueueJob({
+    taskQueue,
+    taskName,
+    command,
+    args,
+    priority,
+    timeout: timeout ?? queueConfig.timeout,
+  })
 }
 
 export { scanQueue, deleteQueue, compressQueue, addTask, path_scanning, path_deleting }
