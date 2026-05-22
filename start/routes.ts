@@ -8,7 +8,7 @@
 */
 
 import router from '@adonisjs/core/services/router'
-import app from '@adonisjs/core/services/app'
+import { frontendEnabled, frontendIndexPath, resolveFrontendFile } from '#utils/frontend_assets'
 const UsersController = () => import('#controllers/users_controller')
 const CollectsController = () => import('#controllers/collects_controller')
 const CompressesController = () => import('#controllers/compresses_controller')
@@ -395,10 +395,19 @@ router.get('*', async ({ request, response }) => {
     return response.status(404).json({ code: 404, message: 'not found' })
   }
 
+  const staticFile = resolveFrontendFile(path)
+  if (staticFile) {
+    return response.download(staticFile)
+  }
+
   const accept = request.header('accept') || ''
   if (accept && !accept.includes('text/html') && !accept.includes('*/*')) {
     return response.status(404).json({ code: 404, message: 'not found' })
   }
 
-  return response.download(app.publicPath('index.html'))
+  if (!frontendEnabled()) {
+    return response.status(404).json({ code: 404, message: 'frontend not found' })
+  }
+
+  return response.download(frontendIndexPath())
 })

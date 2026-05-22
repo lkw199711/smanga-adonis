@@ -62,7 +62,6 @@
   "dependencies": {
     "@adonisjs/core": "^6.12.0",
     "@adonisjs/cors": "^2.2.1",
-    "@adonisjs/static": "^1.1.1",
     "@prisma/client": "^6.11.1",
     "@vinejs/vine": "^2.1.0",
     "adm-zip": "^0.5.16",
