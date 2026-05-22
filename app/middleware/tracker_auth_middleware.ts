@@ -5,12 +5,18 @@ import { SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
 import crypto from 'crypto'
 import log from '#services/log_service'
+import { isApiPath, normalizeApiPath } from '#utils/http_path'
 
 export default class TrackerAuthMiddleware {
   async handle(ctx: HttpContext, next: NextFn) {
     const { request, response } = ctx
 
-    const url = request.url()
+    if (!isApiPath(request.url())) {
+      await next()
+      return
+    }
+
+    const url = normalizeApiPath(request.url())
     const isTrackerRoute = url === '/tracker' || url.startsWith('/tracker/')
     if (!isTrackerRoute) {
       await next()

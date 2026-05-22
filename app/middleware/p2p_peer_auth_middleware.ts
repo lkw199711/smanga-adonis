@@ -6,11 +6,17 @@ import trackerGroupService from '#services/tracker/tracker_group_service'
 import { get_default_tracker_client } from '#services/p2p/tracker_client'
 import membershipCache from '#services/p2p/p2p_membership_cache'
 import log from '#services/log_service'
+import { isApiPath, normalizeApiPath } from '#utils/http_path'
 
 export default class P2PPeerAuthMiddleware {
   async handle(ctx: HttpContext, next: NextFn) {
     const { request, response } = ctx
-    const url = request.url()
+    if (!isApiPath(request.url())) {
+      await next()
+      return
+    }
+
+    const url = normalizeApiPath(request.url())
 
     const isPeerServeRoute = url === '/p2p/serve' || url.startsWith('/p2p/serve/')
     if (!isPeerServeRoute) {

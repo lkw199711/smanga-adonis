@@ -9,6 +9,7 @@ import {
   BASIC_REALM,
 } from '../utils/basic_auth.js'
 import log from '#services/log_service'
+import { isApiPath, normalizeApiPath } from '#utils/http_path'
 
 function buildDevice(request: HttpContextWithUserId['request']) {
   return {
@@ -24,16 +25,21 @@ export default class AuthMiddleware {
   redirectTo = '/login'
 
   async handle({ request, response }: HttpContextWithUserId, next: NextFn) {
+    if (!isApiPath(request.url())) {
+      await next()
+      return
+    }
+
     const skipRoutes = ['/deploy', '/test', '/login', '/file', '/analysis', '/homepage', '/tracker', '/p2p/serve', '/p2p/verify']
 
-    const url = request.url()
+    const url = normalizeApiPath(request.url())
     const isSkipped = skipRoutes.some((prefix) => url === prefix || url.startsWith(prefix + '/'))
     if (isSkipped) {
       await next()
       return
     }
 
-    if (request.url().startsWith('/opds')) {
+    if (url.startsWith('/opds')) {
       const opdsCfg = (get_config() || {}).opds || {}
       const enabled = opdsCfg.enabled ?? 1
       if (enabled === 0 || enabled === false || String(enabled).toLowerCase() === 'false') {
@@ -149,7 +155,7 @@ export default class AuthMiddleware {
         .json(new SResponse({ code: 1, message: '用户信息失效', status: 'token error' }))
     }
 
-    if (request.url().startsWith('/user') && request.url() !== '/user-config') {
+    if (url.startsWith('/user') && url !== '/user-config') {
       if (user.role !== 'admin') {
         await log.warn({
           type: 'auth',
