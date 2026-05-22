@@ -33,6 +33,7 @@ server.errorHandler(() => import('#exceptions/handler'))
  * the request URL.
  */
 server.use([
+  () => import('@adonisjs/static/static_middleware'),
   () => import('#middleware/container_bindings_middleware'),
   () => import('#middleware/force_json_response_middleware'),
   () => import('@adonisjs/cors/cors_middleware'),
@@ -43,7 +44,6 @@ server.use([
  */
 router.use([
   () => import('@adonisjs/core/bodyparser_middleware'),
-  () => import('@adonisjs/auth/initialize_auth_middleware'),
   () => import('#middleware/params_middleware'),
   () => import('#middleware/auth_middleware'),
   () => import('#middleware/tracker_auth_middleware'),

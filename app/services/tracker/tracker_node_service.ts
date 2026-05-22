@@ -87,7 +87,7 @@ class TrackerNodeService {
           '注册请求缺少有效的 publicUrl。请在 smanga.json 的 p2p.node.publicUrl\n' +
           '配置节点对外可达地址,例如:\n' +
           '  "example.com:9797/api"     (经 webui 反代)\n' +
-          '  "http://1.2.3.4:9798"      (后端直连)\n' +
+          '  "http://1.2.3.4:9797/api"  (Adonis 统一服务)\n' +
           '  "https://example.com"      (HTTPS 反代)\n' +
           '本项目不支持纯内网/CGNAT 节点接入'
         )
@@ -160,7 +160,7 @@ class TrackerNodeService {
    *  - loopback:豁免
    *
    * 关键:这里使用与 register 完全一致的 decide_public_url + reachability 链路,
-   * 不会出现"DB 里 example.com:9797/api、反向验证却用 example.com:9798"的不一致。
+   * 不会出现"DB 里 example.com:9797/api、反向验证却用其它后端端口"的不一致。
    */
   async heartbeat(
     nodeId: string,

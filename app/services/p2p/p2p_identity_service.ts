@@ -409,7 +409,7 @@ class P2PIdentityService {
         '[p2p] 本地直注册:未配置 p2p.node.publicUrl,publicUrl 将先置空。\n' +
         '       如本机需要被外部节点访问,请在 smanga.json 设置:\n' +
         '         p2p.node.publicUrl = "你的公网IP或域名[:端口][/path]"\n' +
-        '       示例: "example.com:9797/api" 或 "http://1.2.3.4:9798"'
+        '       示例: "example.com:9797/api" 或 "http://1.2.3.4:9797/api"'
       )
     }
 

@@ -29,8 +29,7 @@ import {
 export type VerifyReachableParams = {
   /**
    * 节点完整 baseUrl: "http(s)://host[:port][/pathPrefix]"
-   * 例如: http://1.2.3.4:9798 (后端直连)
-   *      http://1.2.3.4:9797/api (经 webui 反代)
+   * 例如: http://1.2.3.4:9797/api (Adonis 统一服务)
    * 探测时会在该 baseUrl 后拼接 /p2p/verify/echo
    */
   baseUrl: string

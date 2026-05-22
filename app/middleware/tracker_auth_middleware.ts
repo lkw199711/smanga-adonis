@@ -5,6 +5,11 @@ import { SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
 import crypto from 'crypto'
 
+function normalizeApiPath(url: string) {
+  if (url === '/api') return '/'
+  return url.startsWith('/api/') ? url.slice(4) : url
+}
+
 /**
  * Tracker 鉴权中间件
  * - 放行 /tracker/node/register (公开接口)
@@ -15,7 +20,7 @@ export default class TrackerAuthMiddleware {
   async handle(ctx: HttpContext, next: NextFn) {
     const { request, response } = ctx
 
-    const url = request.url()
+    const url = normalizeApiPath(request.url())
 
     // 仅对 /tracker 与 /tracker/* 路径生效,其余直接放行 (避免误匹配 /trackerxxx)
     const isTrackerRoute = url === '/tracker' || url.startsWith('/tracker/')

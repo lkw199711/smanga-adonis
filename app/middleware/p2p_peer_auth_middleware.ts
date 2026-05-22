@@ -6,6 +6,11 @@ import trackerGroupService from '#services/tracker/tracker_group_service'
 import { get_default_tracker_client } from '#services/p2p/tracker_client'
 import membershipCache from '#services/p2p/p2p_membership_cache'
 
+function normalizeApiPath(url: string) {
+  if (url === '/api') return '/'
+  return url.startsWith('/api/') ? url.slice(4) : url
+}
+
 /**
  * P2P 对等节点鉴权中间件
  *
@@ -32,7 +37,7 @@ import membershipCache from '#services/p2p/p2p_membership_cache'
 export default class P2PPeerAuthMiddleware {
   async handle(ctx: HttpContext, next: NextFn) {
     const { request, response } = ctx
-    const url = request.url()
+    const url = normalizeApiPath(request.url())
 
     // 仅对 /p2p/serve 与 /p2p/serve/* 生效
     const isPeerServeRoute = url === '/p2p/serve' || url.startsWith('/p2p/serve/')

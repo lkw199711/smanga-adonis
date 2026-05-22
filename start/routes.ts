@@ -8,6 +8,7 @@
 */
 
 import router from '@adonisjs/core/services/router'
+import app from '@adonisjs/core/services/app'
 const UsersController = () => import('#controllers/users_controller')
 const CollectsController = () => import('#controllers/collects_controller')
 const CompressesController = () => import('#controllers/compresses_controller')
@@ -45,6 +46,7 @@ const P2PServeController = () => import('#controllers/p2p/p2p_serve_controller')
 const P2PVerifyController = () => import('#controllers/p2p/p2p_verify_controller')
 const P2PTransfersController = () => import('#controllers/p2p/p2p_transfers_controller')
 
+router.group(() => {
 router.get('/', async () => {
   return {
     hello: 'world',
@@ -381,3 +383,21 @@ router.post('/p2p/serve/file/stat', [P2PServeController, 'file_stat'])
 // 公开访问(不走 P2PPeerAuthMiddleware,因为注册阶段调用方还没有群组上下文)
 // ============================================================================
 router.get('/p2p/verify/echo', [P2PVerifyController, 'echo'])
+}).prefix('/api')
+
+router.get('*', async ({ request, response }) => {
+  if (request.url() === '/api' || request.url().startsWith('/api/')) {
+    return response.status(404).json({ code: 404, message: 'not found' })
+  }
+
+  if (request.method() !== 'GET') {
+    return response.status(404).json({ code: 404, message: 'not found' })
+  }
+
+  const accept = request.header('accept') || ''
+  if (accept && !accept.includes('text/html') && !accept.includes('*/*')) {
+    return response.status(404).json({ code: 404, message: 'not found' })
+  }
+
+  return response.download(app.publicPath('index.html'))
+})

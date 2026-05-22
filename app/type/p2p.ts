@@ -53,10 +53,10 @@ export type P2PNodeConfig = {
    * 节点对外可达 URL(统一字段,替代旧的 publicHost + publicPort)
    * 支持格式:
    *   "example.com"
-   *   "example.com:9798"
-   *   "http://example.com:9798"
+   *   "example.com:9797/api"
+   *   "http://example.com:9797/api"
    *   "https://example.com"
-   *   "1.2.3.4:9798"
+   *   "1.2.3.4:9797/api"
    * 留空表示未配置(由 tracker 端 request.ip() 推断)
    */
   publicUrl: string

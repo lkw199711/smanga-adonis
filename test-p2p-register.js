@@ -20,7 +20,7 @@ console.log('[cfg] nodeToken   =', p2p.node?.nodeToken ? '(已存在)' : '(空)'
 const trackers = p2p.node?.trackers || [];
 let url = trackers[0];
 if (!url && p2p.role?.tracker) {
-  url = p2p.tracker?.publicUrl || `http://127.0.0.1:${process.env.PORT || 9798}`;
+  url = p2p.tracker?.publicUrl || `http://127.0.0.1:${process.env.PORT || 9797}/api`;
 }
 console.log('[cfg] 选中 trackerUrl =', url);
 

@@ -16,6 +16,11 @@ import {
   BASIC_REALM,
 } from '../utils/basic_auth.js'
 
+function normalizeApiPath(url: string) {
+  if (url === '/api') return '/'
+  return url.startsWith('/api/') ? url.slice(4) : url
+}
+
 /**
  * Auth middleware is used authenticate HTTP requests and deny
  * access to unauthenticated users.
@@ -26,11 +31,22 @@ export default class AuthMiddleware {
    */
   redirectTo = '/login'
 
-  async handle({ request, response }: HttpContextWithUserId, next: NextFn) {
+  async handle(ctx: HttpContextWithUserId & { route?: { pattern?: string } }, next: NextFn) {
+    const { request, response } = ctx
+    const rawUrl = request.url()
+    if (rawUrl !== '/api' && !rawUrl.startsWith('/api/')) {
+      await next()
+      return
+    }
+    if (ctx.route?.pattern === '*') {
+      await next()
+      return
+    }
+
     const skipRoutes = ['/deploy', '/test', '/login', '/file', '/analysis', '/homepage', '/tracker', '/p2p/serve', '/p2p/verify']
 
     // 用 "全等 或 以 prefix/ 开头" 的方式精确匹配,避免 /p2p 误命中 /api/p2p,或 /tracker 误命中 /trackerxxx
-    const url = request.url()
+    const url = normalizeApiPath(rawUrl)
     const isSkipped = skipRoutes.some((prefix) => url === prefix || url.startsWith(prefix + '/'))
     if (isSkipped) {
       // 部署/测试/登录/资源/分析/对外接口/对等节点接口 跳过用户 token 校验
@@ -42,7 +58,7 @@ export default class AuthMiddleware {
     // OPDS 分支: 使用 HTTP Basic Auth 鉴权 (兼容第三方阅读器, 如 可达漫画)
     // 全局开关: smanga.json 的 opds.enabled 为 0/false 时直接返回 404 (默认启用)
     // ========================================================================
-    if (request.url().startsWith('/opds')) {
+    if (url.startsWith('/opds')) {
       const opdsCfg = (get_config() || {}).opds || {}
       const enabled = opdsCfg.enabled ?? 1
       if (enabled === 0 || enabled === false || String(enabled).toLowerCase() === 'false') {
@@ -102,7 +118,7 @@ export default class AuthMiddleware {
     // const permissonRoutes = ['/user', '/media', '/collect', '/compress', '/history', '/latest', '/log', '/task', '/path', '/bookmark', '/tag', '/manga', '/chapter', '/image', '/manga-tag', '/chart', '/search', '/config']
 
     // 用户信息模块
-    if (request.url().startsWith('/user') && request.url() !== '/user-config') {
+    if (url.startsWith('/user') && url !== '/user-config') {
       if (user.role !== 'admin') {
         return response
           .status(401)

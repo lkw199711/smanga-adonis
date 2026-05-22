@@ -33,10 +33,6 @@ const defaultConfig = {
     file: './data/smanga.db',
     deploy: true,
   },
-  redis: {
-    host: '127.0.0.1',
-    port: 6379,
-  },
   imagick: {
     memory: '1gb',
     map: '1gb',
@@ -114,14 +110,14 @@ const defaultConfig = {
       nodeId: '',
       nodeToken: '',
       nodeName: '',
-      listenPort: 9798,
+      listenPort: 9797,
       publicUrl: '',
-      trackers: ['http://145000.xyz:9798'],
+      trackers: ['http://145000.xyz:9797/api'],
       heartbeatInterval: 30,
       announceInterval: 300,
       allowLan: true,
       lanHost: '',
-      lanPort: 9798,
+      lanPort: 9797,
       maxConcurrentPulls: 2,
       maxConcurrentServes: 4,
       maxUploadKbps: 0,
@@ -279,12 +275,6 @@ async function check_config_ver() {
     set_config(config)
   }
 
-  if (config?.redis === undefined) {
-    console.log('配置文件不存在redis字段，使用默认值')
-    config.redis = defaultConfig.redis
-    set_config(config)
-  }
-
   if (config?.serverKey === undefined) {
     console.log('配置文件不存在serverKey字段，使用默认值')
     config.serverKey = uuidv4()
@@ -294,7 +284,7 @@ async function check_config_ver() {
   ensure_queue_config(config)
 
   // 默认tracker地址常量，便于之后修改
-  const DEFAULT_TRACKER_URL = 'http://145000.xyz:9798'
+  const DEFAULT_TRACKER_URL = 'http://145000.xyz:9797/api'
 
   // 老用户升级时补充 p2p 段,默认全部关闭
   if (config?.p2p === undefined) {
