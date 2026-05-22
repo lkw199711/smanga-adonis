@@ -386,7 +386,8 @@ router.get('/p2p/verify/echo', [P2PVerifyController, 'echo'])
 }).prefix('/api')
 
 router.get('*', async ({ request, response }) => {
-  if (request.url() === '/api' || request.url().startsWith('/api/')) {
+  const path = request.url().split('?')[0] || '/'
+  if (path === '/api' || path.startsWith('/api/')) {
     return response.status(404).json({ code: 404, message: 'not found' })
   }
 

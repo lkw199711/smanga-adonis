@@ -8,7 +8,8 @@ import type { NextFn } from '@adonisjs/core/types/http'
  */
 export default class ForceJsonResponseMiddleware {
   async handle({ request }: HttpContext, next: NextFn) {
-    if (request.url() === '/api' || request.url().startsWith('/api/')) {
+    const path = request.url().split('?')[0] || '/'
+    if (path === '/api' || path.startsWith('/api/')) {
       const headers = request.headers()
       headers.accept = 'application/json'
     }

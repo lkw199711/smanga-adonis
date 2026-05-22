@@ -6,8 +6,9 @@ import { get_config } from '#utils/index'
 import crypto from 'crypto'
 
 function normalizeApiPath(url: string) {
-  if (url === '/api') return '/'
-  return url.startsWith('/api/') ? url.slice(4) : url
+  const path = url.split('?')[0] || '/'
+  if (path === '/api') return '/'
+  return path.startsWith('/api/') ? path.slice(4) : path
 }
 
 /**

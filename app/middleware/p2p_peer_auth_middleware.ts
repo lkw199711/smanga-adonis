@@ -7,8 +7,9 @@ import { get_default_tracker_client } from '#services/p2p/tracker_client'
 import membershipCache from '#services/p2p/p2p_membership_cache'
 
 function normalizeApiPath(url: string) {
-  if (url === '/api') return '/'
-  return url.startsWith('/api/') ? url.slice(4) : url
+  const path = url.split('?')[0] || '/'
+  if (path === '/api') return '/'
+  return path.startsWith('/api/') ? path.slice(4) : path
 }
 
 /**
