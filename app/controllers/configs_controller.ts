@@ -137,7 +137,6 @@ export default class ConfigsController {
           role: { node: false, tracker: false },
           node: {
             nodeName: '',
-            listenPort: 19798,
             publicUrl: '',
             trackers: [],
             heartbeatInterval: 30,
@@ -152,6 +151,8 @@ export default class ConfigsController {
       if (!config.p2p.role) config.p2p.role = { node: false, tracker: false }
       if (!config.p2p.node) config.p2p.node = {} as any
       if (!config.p2p.tracker) config.p2p.tracker = {} as any
+      if ('listenPort' in config.p2p.node) delete config.p2p.node.listenPort
+      if ('listenPort' in config.p2p.tracker) delete config.p2p.tracker.listenPort
     }
 
     if (key === 'p2p.enable') {
@@ -184,12 +185,6 @@ export default class ConfigsController {
       const raw = String(value || '').trim().replace(/\/+$/, '')
       config.p2p.node.publicUrl = raw
       needIdentityRefresh = true
-    }
-
-    if (key === 'p2p.node.listenPort') {
-      const n = Number(value)
-      // 仅写入配置,真正生效需要重启进程
-      config.p2p.node.listenPort = Number.isFinite(n) && n > 0 ? n : 19798
     }
 
     if (key === 'p2p.node.heartbeatInterval') {

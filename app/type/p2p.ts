@@ -48,7 +48,6 @@ export type P2PNodeConfig = {
   nodeId: string
   nodeToken: string
   nodeName: string
-  listenPort: number
   /**
    * 节点对外可达 URL(统一字段,替代旧的 publicHost + publicPort)
    * 支持格式:
@@ -76,7 +75,6 @@ export type P2PNodeConfig = {
 
 export type P2PTrackerConfig = {
   publicUrl: string
-  listenPort: number
   allowPublicRegister: boolean
   requireInviteToRegister: boolean
   maxNodes: number

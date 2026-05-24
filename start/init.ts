@@ -109,7 +109,6 @@ const defaultConfig = {
       nodeId: '',
       nodeToken: '',
       nodeName: '',
-      listenPort: 9797,
       publicUrl: '',
       trackers: [
         'http://117.72.27.9:9797/api',
@@ -129,7 +128,6 @@ const defaultConfig = {
     },
     tracker: {
       publicUrl: '',
-      listenPort: 0,
       allowPublicRegister: true,
       requireInviteToRegister: false,
       maxNodes: 1000,
@@ -315,6 +313,15 @@ async function check_config_ver() {
     }
 
     // 如果本机不是tracker服务器，将配置中缺失的默认tracker地址自动补入
+    if ('listenPort' in config.p2p.node) {
+      delete config.p2p.node.listenPort
+      changed = true
+    }
+    if ('listenPort' in config.p2p.tracker) {
+      delete config.p2p.tracker.listenPort
+      changed = true
+    }
+
     if (config.p2p.enable && config.p2p.role?.node && !config.p2p.role?.tracker) {
       if (!Array.isArray(config.p2p.node.trackers)) {
         config.p2p.node.trackers = []
