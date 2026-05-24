@@ -69,10 +69,6 @@ function getRawQueueConfig() {
 
 export function getQueueConfig(): QueueConfig {
   const raw = getRawQueueConfig()
-  const legacyConcurrency = positiveNumber(
-    raw.concurrency,
-    defaultQueueConfig.workers.background.concurrency
-  )
 
   return {
     driver: 'sql',
@@ -105,12 +101,12 @@ export function getQueueConfig(): QueueConfig {
       background: {
         enabled: raw.workers?.background?.enabled ?? defaultQueueConfig.workers.background.enabled,
         queues: raw.workers?.background?.queues || defaultQueueConfig.workers.background.queues,
-        concurrency: positiveNumber(raw.workers?.background?.concurrency, legacyConcurrency),
+        concurrency: positiveNumber(raw.workers?.background?.concurrency, defaultQueueConfig.workers.background.concurrency),
       },
       compress: {
         enabled: raw.workers?.compress?.enabled ?? defaultQueueConfig.workers.compress.enabled,
         queues: raw.workers?.compress?.queues || defaultQueueConfig.workers.compress.queues,
-        concurrency: positiveNumber(raw.workers?.compress?.concurrency, legacyConcurrency),
+        concurrency: positiveNumber(raw.workers?.compress?.concurrency, defaultQueueConfig.workers.compress.concurrency),
       },
     },
   }

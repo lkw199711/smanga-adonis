@@ -41,7 +41,6 @@ const defaultConfig = {
   },
   scan: {
     auto: 0,
-    concurrency: 1,
     reloadCover: 0,
     doNotCopyCover: 1,
     ignoreHiddenFiles: 1,
@@ -233,13 +232,6 @@ async function check_config_ver() {
   if (!defaultTagColor) {
     console.log('配置文件不存在defaultTagColor字段，使用默认值')
     config.scan.defaultTagColor = '#a0d911'
-    set_config(config)
-  }
-
-  // 如果配置文件不存在concurrency字段，则添加，默认值为1
-  if (config.scan?.concurrency === undefined) {
-    console.log('配置文件不存在concurrency字段，使用默认值')
-    config.scan.concurrency = defaultConfig.scan.concurrency
     set_config(config)
   }
 
