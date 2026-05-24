@@ -7,8 +7,31 @@
 |
 */
 
+import { createReadStream } from 'node:fs'
 import router from '@adonisjs/core/services/router'
 import { frontendEnabled, frontendIndexPath, resolveFrontendFile } from '#utils/frontend_assets'
+
+const MIME_TYPES: Record<string, string> = {
+  html: 'text/html',
+  js: 'application/javascript',
+  mjs: 'application/javascript',
+  css: 'text/css',
+  json: 'application/json',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  ico: 'image/x-icon',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+  ttf: 'font/ttf',
+  txt: 'text/plain',
+  xml: 'application/xml',
+  webp: 'image/webp',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+}
 const UsersController = () => import('#controllers/users_controller')
 const CollectsController = () => import('#controllers/collects_controller')
 const CompressesController = () => import('#controllers/compresses_controller')
@@ -397,7 +420,9 @@ router.get('*', async ({ request, response }) => {
 
   const staticFile = resolveFrontendFile(path)
   if (staticFile) {
-    return response.download(staticFile)
+    const ext = path.split('.').pop()?.toLowerCase() || ''
+    response.header('Content-Type', MIME_TYPES[ext] || 'application/octet-stream')
+    return response.stream(createReadStream(staticFile))
   }
 
   const accept = request.header('accept') || ''
@@ -409,5 +434,6 @@ router.get('*', async ({ request, response }) => {
     return response.status(404).json({ code: 404, message: 'frontend not found' })
   }
 
-  return response.download(frontendIndexPath())
+  response.header('Content-Type', 'text/html')
+  return response.stream(createReadStream(frontendIndexPath()))
 })
