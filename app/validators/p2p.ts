@@ -5,7 +5,9 @@ export const p2pVerifyEchoValidator = vine.compile(
   vine
     .object({
       challenge: vine.string().trim().minLength(1),
-      nodeId: vine.string().trim().optional(),
+      // nodeId: 由 tracker 可选传入用于双重校验,但 controller 侧读的是本地 config,
+      // 不从此处取值。移除该字段避免 empty string 导致 VineJS 校验失败 → 500。
+      // allowUnknownProperties() 确保多余参数不影响校验。
     })
     .allowUnknownProperties()
 )

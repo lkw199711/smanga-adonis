@@ -8,7 +8,7 @@
  * 设计要点:
  *  - 路径 /p2p/verify/echo 与 /p2p/serve/* 隔离,不走 P2PPeerAuthMiddleware
  *    (注册阶段调用方 tracker 还没有 X-Group-No 上下文)
- *  - 接口无状态,只把请求里的 challenge / nodeId 原样回显
+ *  - 接口无状态,只把请求里的 challenge 原样回显
  *  - 不暴露任何敏感信息,仅证明"这个端口的进程是 smanga-adonis 节点"
  *  - 仅当 p2p.enable && role.node 为 true 时启用,否则返回 503
  */

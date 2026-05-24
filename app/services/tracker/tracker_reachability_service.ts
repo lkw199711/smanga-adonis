@@ -72,9 +72,15 @@ class TrackerReachabilityService {
     const challenge = crypto.randomBytes(16).toString('hex')
     // 用 join_url_path 拼接,避免 baseUrl 末尾 / 与 subPath 起始 / 重复
     const url = join_url_path(normalizedBase, '/p2p/verify/echo')
+
+    // 构建 query params:仅当 expectNodeId 非空时才附带 nodeId,
+    // 避免 nodeId= 空字符串导致 peer 端 VineJS validator 报 Validation failure
+    const queryParams: Record<string, string> = { challenge }
+    if (expectNodeId) queryParams.nodeId = expectNodeId
+
     try {
       const resp = await axios.get(url, {
-        params: { challenge, nodeId: expectNodeId || '' },
+        params: queryParams,
         timeout: timeoutMs,
         // 不自动跟随过多跳转(P2P 节点不该有重定向)
         maxRedirects: 0,
