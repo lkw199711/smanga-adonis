@@ -32,8 +32,7 @@ if (!url) {
 const payload = {
   nodeName: p2p.node?.nodeName || os.hostname() || 'smanga-node',
   version: 'smanga-adonis',
-  localHost: p2p.node?.lanHost || undefined,
-  localPort: p2p.node?.lanPort || p2p.node?.listenPort || undefined,
+  publicUrl: p2p.node?.publicUrl || undefined,
 };
 console.log('[req] payload =', payload);
 

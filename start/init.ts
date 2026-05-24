@@ -111,7 +111,10 @@ const defaultConfig = {
       nodeName: '',
       listenPort: 9797,
       publicUrl: '',
-      trackers: ['http://145000.xyz:9797/api'],
+      trackers: [
+        'http://117.72.27.9:9797/api',
+        // 备用 tracker 域名数组，初始化时自动补入缺失项
+      ],
       heartbeatInterval: 30,
       announceInterval: 300,
       allowLan: true,
@@ -275,8 +278,13 @@ async function check_config_ver() {
 
   ensure_queue_config(config)
 
-  // 默认tracker地址常量，便于之后修改
-  const DEFAULT_TRACKER_URL = 'http://145000.xyz:9797/api'
+  // 默认tracker地址列表，便于之后增删
+  // 初始化时会将用户配置中缺失的默认地址自动补入
+  const DEFAULT_TRACKER_URLS: string[] = [
+    'http://117.72.27.9:9797/api',
+    'http://146000.xyz:9797/api',
+    'http://149000.xyz:9797/api',
+  ]
 
   // 老用户升级时补充 p2p 段,默认全部关闭
   if (config?.p2p === undefined) {
@@ -299,15 +307,25 @@ async function check_config_ver() {
       changed = true
     }
 
-    // 如果本机不是tracker服务器，且trackers配置为空，则添加默认tracker地址
+    // 如果本机不是tracker服务器，将配置中缺失的默认tracker地址自动补入
     if (config.p2p.enable && config.p2p.role?.node && !config.p2p.role?.tracker) {
-      const trackers: string[] = config.p2p.node?.trackers || []
-      if (trackers.length === 0) {
+      if (!Array.isArray(config.p2p.node.trackers)) {
+        config.p2p.node.trackers = []
+      }
+      const trackers: string[] = config.p2p.node.trackers
+      const added: string[] = []
+      for (const url of DEFAULT_TRACKER_URLS) {
+        if (!trackers.includes(url)) {
+          trackers.push(url)
+          added.push(url)
+        }
+      }
+      if (added.length > 0) {
         console.log(
-          '检测到本机不是tracker服务器且trackers配置为空，自动添加默认tracker地址:',
-          DEFAULT_TRACKER_URL
+          '检测到本机不是tracker服务器，自动补入缺失的默认tracker地址:',
+          added.join(', ')
         )
-        config.p2p.node.trackers = [DEFAULT_TRACKER_URL]
+        config.p2p.node.trackers = trackers
         changed = true
       }
     }

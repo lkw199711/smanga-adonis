@@ -84,7 +84,8 @@ class TrackerReachabilityService {
 
       const body = resp?.data
       // SResponse 结构:{ code, message, data: { challenge, nodeId, ... } }
-      if (!body || body.code !== 0 || !body.data) {
+      // SResponse 协议约定 code=200 表示成功
+      if (!body || body.code !== 200 || !body.data) {
         return {
           ok: false,
           reason: `peer 响应格式异常: code=${body?.code} message=${body?.message}`,
