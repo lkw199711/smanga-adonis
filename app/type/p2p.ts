@@ -108,6 +108,8 @@ export type NodeRegisterPayload = {
    */
   publicUrl?: string
   inviteCode?: string
+  /** 服务实例级唯一标识(UUID),替代随机 nodeId,保证同实例始终注册为同一节点 */
+  serverKey?: string
 }
 
 export type NodeRegisterResult = {

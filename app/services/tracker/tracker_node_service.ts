@@ -116,8 +116,8 @@ class TrackerNodeService {
       console.log(`[tracker] 检测到本机自连(loopback),跳过反向验证`)
     }
 
-    // 生成唯一 ID 与明文 token(只此一次返回)
-    const nodeId = uuidv4()
+    // 优先使用客户端提供的 serverKey 作为 nodeId,保证同实例始终注册为同一节点
+    const nodeId = payload.serverKey || uuidv4()
     const rawToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '')
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 

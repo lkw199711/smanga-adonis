@@ -141,6 +141,7 @@ class P2PIdentityService {
         nodeName,
         version: 'smanga-adonis',
         publicUrl: resolvePublicUrl(p2p),
+        serverKey: get_config()?.serverKey,
       })
 
       // 回写配置
@@ -405,7 +406,7 @@ class P2PIdentityService {
    *    (一体机自连无法识别外部 IP,这一步交给后续真实远程心跳来填补)
    */
   private async registerLocally(nodeName: string, p2p: any): Promise<P2PIdentity> {
-    const nodeId = uuidv4()
+    const nodeId = get_config()?.serverKey || uuidv4()
     const rawToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '')
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
