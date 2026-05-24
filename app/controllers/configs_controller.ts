@@ -236,6 +236,59 @@ export default class ConfigsController {
       config.p2p.tracker.requireInviteToRegister = to_bool(value)
     }
 
+    // ===== 队列设置 =====
+    if (/^queue\./.test(key)) {
+      if (!config.queue) {
+        config.queue = {} as any
+      }
+      if (!config.queue.worker) {
+        config.queue.worker = {} as any
+      }
+      if (!config.queue.workers) {
+        config.queue.workers = {} as any
+      }
+      if (!config.queue.workers.background) {
+        config.queue.workers.background = {} as any
+      }
+      if (!config.queue.workers.compress) {
+        config.queue.workers.compress = {} as any
+      }
+      if (!config.queue.retry) {
+        config.queue.retry = {} as any
+      }
+    }
+
+    if (key === 'queue.worker.mode') {
+      const modes = ['embedded', 'external', 'disabled']
+      const raw = String(value || '').trim()
+      config.queue.worker.mode = modes.includes(raw) ? raw : 'embedded'
+    }
+
+    if (key === 'queue.workers.background.concurrency') {
+      const n = Number(value)
+      config.queue.workers.background.concurrency = Number.isFinite(n) && n > 0 ? n : 1
+    }
+
+    if (key === 'queue.workers.compress.concurrency') {
+      const n = Number(value)
+      config.queue.workers.compress.concurrency = Number.isFinite(n) && n > 0 ? n : 1
+    }
+
+    if (key === 'queue.attempts') {
+      const n = Number(value)
+      config.queue.attempts = Number.isFinite(n) && n > 0 ? n : 3
+    }
+
+    if (key === 'queue.timeout') {
+      const n = Number(value)
+      config.queue.timeout = Number.isFinite(n) && n > 0 ? n : 120000
+    }
+
+    if (key === 'queue.pollIntervalMs') {
+      const n = Number(value)
+      config.queue.pollIntervalMs = Number.isFinite(n) && n > 0 ? n : 1000
+    }
+
     // 检查并创建配置文件
     const configFile = join(path_config(), 'smanga.json')
     try {
