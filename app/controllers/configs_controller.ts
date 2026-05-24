@@ -236,6 +236,15 @@ export default class ConfigsController {
       config.p2p.tracker.requireInviteToRegister = to_bool(value)
     }
 
+    if (key === 'p2p.tracker.syncKey') {
+      config.p2p.tracker.syncKey = String(value || '').trim()
+    }
+
+    if (key === 'p2p.tracker.syncIntervalSec') {
+      const n = Number(value)
+      config.p2p.tracker.syncIntervalSec = Number.isFinite(n) && n >= 30 ? n : 300
+    }
+
     // ===== 队列设置 =====
     if (/^queue\./.test(key)) {
       if (!config.queue) {

@@ -62,6 +62,18 @@ export const heartbeatTrackerNodeValidator = vine.compile(
     .allowUnknownProperties()
 )
 
+export const importTrackerNodeValidator = vine.compile(
+  vine
+    .object({
+      nodeId: vine.string().trim().minLength(1),
+      nodeToken: vine.string().trim().minLength(1),
+      nodeName: vine.string().trim().optional(),
+      publicUrl: vine.string().trim().optional(),
+      version: vine.string().trim().optional(),
+    })
+    .allowUnknownProperties()
+)
+
 export const updateTrackerNodeValidator = vine.compile(
   vine
     .object({

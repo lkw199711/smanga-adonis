@@ -61,6 +61,7 @@ const OpdsController = () => import('#controllers/opds_controller')
 const TrackerNodesController = () => import('#controllers/tracker/tracker_nodes_controller')
 const TrackerGroupsController = () => import('#controllers/tracker/tracker_groups_controller')
 const TrackerSharesController = () => import('#controllers/tracker/tracker_shares_controller')
+const TrackerSyncController = () => import('#controllers/tracker/tracker_sync_controller')
 const TrackerAdminGroupsController = () => import('#controllers/tracker/tracker_admin_groups_controller')
 const P2PGroupsController = () => import('#controllers/p2p/p2p_groups_controller')
 const P2PSharesController = () => import('#controllers/p2p/p2p_shares_controller')
@@ -273,6 +274,7 @@ router.post('/sync/execute/:syncId', [SyncsController, 'execute'])
 
 // 节点生命周期
 router.post('/tracker/node/register', [TrackerNodesController, 'register'])
+router.post('/tracker/node/import', [TrackerNodesController, 'importNode'])
 router.post('/tracker/node/heartbeat', [TrackerNodesController, 'heartbeat'])
 router.patch('/tracker/node/me', [TrackerNodesController, 'update'])
 router.delete('/tracker/node/me', [TrackerNodesController, 'deregister'])
@@ -296,6 +298,16 @@ router.get('/tracker/group/:groupNo/seeds', [TrackerSharesController, 'seeds'])
 // 共享清单(manifest)
 router.get('/tracker/group/:groupNo/manifests', [TrackerSharesController, 'manifests'])
 router.get('/tracker/group/:groupNo/manifest', [TrackerSharesController, 'manifest'])
+
+// ============================================================
+// Tracker 间同步接口 (/tracker/sync/*)
+// 鉴权: X-Sync-Key 头(不走节点鉴权中间件)
+// 供其他 tracker 定时拉取数据进行对账同步
+// ============================================================
+router.get('/tracker/sync/groups', [TrackerSyncController, 'groups'])
+router.get('/tracker/sync/nodes', [TrackerSyncController, 'nodes'])
+router.get('/tracker/sync/peers', [TrackerSyncController, 'peers'])
+router.get('/tracker/sync/group/:groupNo/members', [TrackerSyncController, 'groupMembers'])
 
 // ============================================================
 // Tracker 管理员路由 (/tracker-admin/*)

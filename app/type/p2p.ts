@@ -126,6 +126,8 @@ export type HeartbeatResult = {
   publicUrl: string
   serverTime: number
   pendingNotifications: Array<{ type: string; data?: any }>
+  /** 本 tracker 已知的所有 tracker 地址(含自身),供节点/其他 tracker 动态发现 */
+  knownTrackers?: string[]
 }
 
 export type CreateGroupPayload = {
@@ -133,6 +135,8 @@ export type CreateGroupPayload = {
   describe?: string
   password?: string
   maxMembers?: number
+  /** 多 tracker 同步:主 tracker 生成的 groupNo,导入到其他 tracker 时携带 */
+  groupNo?: string
 }
 
 export type JoinGroupPayload = {

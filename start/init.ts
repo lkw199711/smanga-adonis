@@ -138,6 +138,8 @@ const defaultConfig = {
       offlineThresholdSec: 90,
       cleanupCron: '0 */10 * * * *',
       adminNodeIds: [],
+      syncKey: '',
+      syncIntervalSec: 300,
     },
   },
 }
@@ -200,8 +202,13 @@ export default async function boot() {
       const { default: heartbeat } = await import('#services/p2p/p2p_heartbeat_service')
       await heartbeat.start()
     }
+    // 启动 Tracker 间同步服务(若本机是 tracker)
+    if (cfg?.p2p?.enable && cfg?.p2p?.role?.tracker && cfg?.p2p?.tracker?.syncKey) {
+      const { default: trackerSyncService } = await import('#services/tracker/tracker_sync_service')
+      trackerSyncService.start()
+    }
   } catch (e) {
-    console.error('[p2p] 心跳服务启动异常', e)
+    console.error('[p2p] 心跳/同步服务启动异常', e)
   }
 }
 

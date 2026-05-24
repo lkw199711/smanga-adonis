@@ -89,6 +89,8 @@ class P2PIdentityService {
       // 2) 远端有效性验证:防止 tracker 数据库被清/更换 tracker 等场景
       const valid = await this.verifyIdentityOnTracker(p2p)
       if (valid) {
+        // 身份有效,同时广播到其他 tracker(确保所有 tracker 都有此节点)
+        this.broadcastIdentity().catch(() => {})
         return {
           nodeId: p2p.node.nodeId,
           nodeToken: p2p.node.nodeToken,
@@ -110,6 +112,8 @@ class P2PIdentityService {
       try {
         const identity = await this.registerLocally(nodeName, p2p)
         console.log(`[p2p] 本机 tracker,已本地直注册 nodeId=${identity.nodeId}`)
+        // 本地注册后广播到其他 tracker
+        this.broadcastIdentity().catch(() => {})
         return identity
       } catch (e: any) {
         log_p2p_error('identity.registerLocally', e)
@@ -149,6 +153,8 @@ class P2PIdentityService {
       set_config(config)
 
       console.log(`[p2p] 节点自动注册成功 nodeId=${res.nodeId} publicUrl=${res.publicUrl}`)
+      // 注册成功后广播到其他 tracker
+      this.broadcastIdentity().catch(() => {})
       return {
         nodeId: res.nodeId,
         nodeToken: res.nodeToken,
@@ -516,6 +522,54 @@ class P2PIdentityService {
       return []
     }
     return trackerProbeService.getReachableTrackers()
+  }
+
+  /**
+   * 将本节点身份广播(导入)到所有可达的 tracker
+   *
+   * 调用时机:
+   *  - ensureIdentity() 注册成功后
+   *  - 配置变更(trackers 列表变化)后
+   *
+   * 这是多 tracker 同步的关键:
+   *  - 节点在 tracker A 注册后,将相同的 nodeId+nodeToken 导入 tracker B C
+   *  - 之后心跳广播到所有 tracker,各 tracker 都能独立维护该节点的在线状态
+   *  - 导入失败不阻塞主流程,后续心跳会持续触发重试
+   */
+  async broadcastIdentity(): Promise<void> {
+    const config = get_config()
+    const p2p = config?.p2p
+    if (!p2p?.enable || !p2p?.role?.node) return
+
+    const nodeId = p2p.node?.nodeId
+    const nodeToken = p2p.node?.nodeToken
+    if (!nodeId || !nodeToken) return
+
+    const allUrls = this.getReachableTrackerUrls(p2p)
+    if (allUrls.length <= 1) return // 只有 0 或 1 个 tracker,无需广播
+
+    const nodeName = p2p.node?.nodeName || undefined
+    const publicUrl = resolvePublicUrl(p2p)
+
+    for (const url of allUrls) {
+      try {
+        const client = new TrackerClient(url)
+        await client.importNode({
+          nodeId,
+          nodeToken,
+          nodeName,
+          publicUrl,
+          version: 'smanga-adonis',
+        })
+        console.log(`[p2p] 节点身份已同步到 tracker: ${url}`)
+      } catch (e: any) {
+        // 导入失败不阻塞:心跳会持续尝试;
+        // 但如果导入返回 409/重复等,也属于正常(节点已存在)
+        if (process.env.P2P_DEBUG) {
+          console.warn(`[p2p] 节点身份同步到 ${url} 失败: ${e?.message}`)
+        }
+      }
+    }
   }
 }
 

@@ -39,6 +39,9 @@ class TrackerGroupService {
 
   /**
    * 创建群组
+   *
+   * 若 payload.groupNo 不为空(多 tracker 同步场景),直接使用该 groupNo;
+   * 否则自动生成一个新的。
    */
   async create(ownerNodeId: string, payload: CreateGroupPayload) {
     const tc = get_config()?.p2p?.tracker || {}
@@ -53,7 +56,16 @@ class TrackerGroupService {
 
     if (!payload.groupName?.trim()) throw new Error('群组名不能为空')
 
-    const groupNo = await this.genGroupNo()
+    // 多 tracker 同步:使用调用方提供的 groupNo,避免各 tracker 各自生成不同号
+    let groupNo: string
+    if (payload.groupNo) {
+      const exists = await prisma.tracker_group.findUnique({ where: { groupNo: payload.groupNo } })
+      if (exists) throw new Error(`群组号 ${payload.groupNo} 已被占用`)
+      groupNo = payload.groupNo
+    } else {
+      groupNo = await this.genGroupNo()
+    }
+
     const maxMembers = Math.min(
       payload.maxMembers ?? 50,
       tc.maxMembersPerGroup ?? 50

@@ -6,6 +6,7 @@ import {
   registerTrackerNodeValidator,
   heartbeatTrackerNodeValidator,
   updateTrackerNodeValidator,
+  importTrackerNodeValidator,
 } from '#validators/tracker'
 
 /**
@@ -36,6 +37,36 @@ export default class TrackerNodesController {
       return response
         .status(400)
         .json({ code: 400, message: err.message || '注册失败', status: 'register failed' })
+    }
+  }
+
+  /**
+   * POST /tracker/node/import
+   *
+   * 从其他 tracker 导入一个已存在的节点。
+   * 这是多 tracker 同步的关键接口:
+   *  - 节点在 tracker A 注册后,用同样的 nodeId/nodeToken 在 tracker B C 导入
+   *  - 不做可达性验证/邀请码校验(节点已在源 tracker 验证过)
+   *  - 公开接口(不走节点鉴权中间件),信任调用方传入的数据
+   */
+  async importNode({ request, response }: HttpContext) {
+    try {
+      const payload = await importTrackerNodeValidator.validate(request.all())
+      const userAgent = request.header('user-agent')
+      const result = await trackerNodeService.importNode({
+        nodeId: payload.nodeId,
+        nodeToken: payload.nodeToken,
+        nodeName: payload.nodeName,
+        publicUrl: payload.publicUrl,
+        version: payload.version,
+        userAgent: userAgent || null,
+      })
+      return response.json({ code: 200, message: '节点导入成功', data: result })
+    } catch (err: any) {
+      log_tracker_error('node.importNode', err)
+      return response
+        .status(400)
+        .json({ code: 400, message: err.message || '导入失败' })
     }
   }
 

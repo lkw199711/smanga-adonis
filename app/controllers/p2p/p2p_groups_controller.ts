@@ -48,6 +48,8 @@ function get_clients(): TrackerClient[] {
  * 依次尝试每个可达 tracker 执行操作，第一个成功即返回
  * - 每个 client 都会走 call_with_reregister（身份失效自动重注册）
  * - 全部失败才抛错
+ *
+ * 适用场景：查询类操作（合并结果由调用方做去重）
  */
 async function invoke_first_success<T>(
   fn: (client: TrackerClient) => Promise<T>
@@ -68,30 +70,77 @@ async function invoke_first_success<T>(
 }
 
 /**
- * 获取所有 tracker 客户端，查询结果按 nodeId 去重合并
+ * 广播写操作到所有可达 tracker
+ * - 并行尝试所有 tracker,至少一个成功即返回第一个成功结果
+ * - 失败的静默记录日志,不阻塞主流程
+ * - 全部失败才抛错
+ *
+ * 适用场景：群组创建/加入/踢人/解散等写操作
+ * 目的：确保群组数据尽量存在于多个 tracker,减少单点依赖
  */
-async function query_and_merge<T>(
-  fn: (client: TrackerClient) => Promise<T[]>,
-  keyFn: (item: T) => string
-): Promise<T[]> {
+async function broadcast_to_all<T>(
+  fn: (client: TrackerClient) => Promise<T>
+): Promise<T> {
   const clients = get_clients()
-  if (!clients.length) return []
+  if (!clients.length) throw new Error('P2P 未配置或未启用')
 
-  const merged = new Map<string, T>()
-  for (const client of clients) {
-    try {
-      const items = await call_with_reregister(client, fn)
-      for (const item of items || []) {
-        const key = keyFn(item)
-        if (key && !merged.has(key)) {
-          merged.set(key, item)
-        }
-      }
-    } catch (e: any) {
-      log_p2p_error('query_and_merge', e)
+  if (clients.length === 1) {
+    // 只有一个 tracker,直接用 invoke_first_success 逻辑
+    return await invoke_first_success(fn)
+  }
+
+  let firstSuccess: T | undefined
+  let firstError: any = null
+
+  const results = await Promise.allSettled(
+    clients.map((client) => call_with_reregister(client, fn))
+  )
+
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      if (firstSuccess === undefined) firstSuccess = r.value
+    } else {
+      if (!firstError) firstError = r.reason
+      log_p2p_error('broadcast_to_all', r.reason)
     }
   }
-  return Array.from(merged.values())
+
+  if (firstSuccess !== undefined) return firstSuccess
+  throw firstError || new Error('所有 tracker 均不可达')
+}
+
+/**
+ * 两阶段创建群组(多 tracker 下保证 groupNo 一致):
+ *  1. 在第一个 tracker 创建 → 获取 groupNo
+ *  2. 用同一 groupNo 广播到其余 tracker
+ */
+async function broadcast_create_group(
+  payload: { groupName: string; describe?: string; password?: string; maxMembers?: number }
+): Promise<any> {
+  const clients = get_clients()
+  if (!clients.length) throw new Error('P2P 未配置或未启用')
+
+  // Phase 1: 在主 tracker 创建(不传 groupNo,tracker 自动生成)
+  const firstResult = await call_with_reregister(clients[0], (c) =>
+    c.createGroup(payload)
+  )
+  const groupNo = firstResult.groupNo
+
+  // Phase 2: 用同一 groupNo 导入到其余 tracker
+  if (clients.length > 1) {
+    for (let i = 1; i < clients.length; i++) {
+      try {
+        await call_with_reregister(clients[i], (c) =>
+          c.createGroup({ ...payload, groupNo })
+        )
+      } catch (e: any) {
+        // 导入失败不阻塞:可能 groupNo 已被其他节点占用(极低概率)
+        log_p2p_error('broadcast_create_group.import', e)
+      }
+    }
+  }
+
+  return firstResult
 }
 
 /**
@@ -174,6 +223,10 @@ export default class P2PGroupsController {
   /**
    * POST /api/p2p/group/create
    * body: { groupName, describe, password, maxMembers }
+   *
+   * 多 tracker 两阶段创建:
+   *  1. 在主 tracker 创建群组 → 拿到 groupNo
+   *  2. 用同一个 groupNo 导入到其他 tracker
    */
   async create({ request, response }: HttpContext) {
     const { groupName, describe, password, maxMembers } = await createP2PGroupValidator.validate(
@@ -182,9 +235,8 @@ export default class P2PGroupsController {
 
     let res: any
     try {
-      res = await invoke_first_success((c) =>
-        c.createGroup({ groupName, describe, password, maxMembers })
-      )
+      // 两阶段创建:先在一个 tracker 创建获取 groupNo,再广播到其他 tracker
+      res = await broadcast_create_group({ groupName, describe, password, maxMembers })
       const id = p2pIdentityService.getIdentity()!
       const cfg = get_config()?.p2p
 
@@ -217,7 +269,7 @@ export default class P2PGroupsController {
 
     let res: any
     try {
-      res = await invoke_first_success((c) =>
+      res = await broadcast_to_all((c) =>
         c.joinGroup({ groupNo, password, inviteCode })
       )
       const cfg = get_config()?.p2p
@@ -258,7 +310,7 @@ export default class P2PGroupsController {
     const { groupNo } = await leaveP2PGroupValidator.validate(request.all())
 
     try {
-      await invoke_first_success((c) => c.leaveGroup(groupNo))
+      await broadcast_to_all((c) => c.leaveGroup(groupNo))
     } catch (e: any) {
       // 即使 tracker 侧失败也继续清理本地,避免僵尸群组
       log_p2p_error('group.leave.tracker(忽略,继续清理本地)', e)
@@ -393,7 +445,7 @@ export default class P2PGroupsController {
     const { groupNo, targetNodeId } = await kickP2PGroupValidator.validate(request.all())
 
     try {
-      await invoke_first_success((c) => c.kickMember(groupNo, targetNodeId))
+      await broadcast_to_all((c) => c.kickMember(groupNo, targetNodeId))
       // 联动清理本机缓存
       const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
       if (local) {
@@ -426,7 +478,7 @@ export default class P2PGroupsController {
     const { groupNo } = await dismissP2PGroupValidator.validate(request.all())
 
     try {
-      await invoke_first_success((c) => c.dismissGroup(groupNo))
+      await broadcast_to_all((c) => c.dismissGroup(groupNo))
     } catch (e: any) {
       log_p2p_error('group.dismiss.tracker', e)
       return response

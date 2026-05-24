@@ -19,7 +19,6 @@
 import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
 import p2pIdentityService from './p2p_identity_service.js'
-import trackerProbeService from './tracker_probe_service.js'
 import { get_config } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
 

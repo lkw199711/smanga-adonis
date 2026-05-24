@@ -271,11 +271,86 @@ class TrackerNodeService {
       notifications.push({ type: 'reachability_failed', data: { reason: verifyReason } })
     }
 
+    // 构建已知 tracker 列表(供节点动态发现新 tracker)
+    // 包含:自己的 publicUrl + 配置的 trackers 中所有非 loopback 地址
+    const knownTrackers: string[] = []
+    const cfg = get_config()?.p2p
+    if (cfg?.tracker?.publicUrl) {
+      const selfUrl = (cfg.tracker.publicUrl as string).replace(/\/+$/, '')
+      if (selfUrl) knownTrackers.push(selfUrl)
+    }
+    if (cfg?.node?.trackers && Array.isArray(cfg.node.trackers)) {
+      for (const t of cfg.node.trackers) {
+        const normalized = (t as string).replace(/\/+$/, '')
+        if (!normalized) continue
+        // 去重且排除 loopback
+        try {
+          const u = new URL(normalized)
+          if (['localhost', '127.0.0.1', '::1'].includes(u.hostname)) continue
+        } catch { continue }
+        if (!knownTrackers.includes(normalized)) {
+          knownTrackers.push(normalized)
+        }
+      }
+    }
+
     return {
       publicUrl: isLoopback ? '' : (decidedUrl || existing.publicUrl || ''),
       serverTime: Date.now(),
       pendingNotifications: notifications,
+      knownTrackers,
     }
+  }
+
+  /**
+   * 导入节点(从其他 tracker 同步而来)
+   *
+   * 与 register 的区别:
+   *  - 使用调用方提供的 nodeId / nodeToken,不生成新 ID
+   *  - 不做可达性验证(节点已由源 tracker 验证过)
+   *  - 不做邀请码/节点上限等注册限制(这是同步,不是新注册)
+   *  - upsert 语义:已存在则更新信息,不存在则创建
+   */
+  async importNode(payload: {
+    nodeId: string
+    nodeToken: string
+    nodeName?: string | null
+    publicUrl?: string | null
+    version?: string | null
+    userAgent?: string | null
+  }): Promise<{ nodeId: string; publicUrl: string }> {
+    const tokenHash = crypto.createHash('sha256').update(payload.nodeToken).digest('hex')
+    const decidedUrl = decide_public_url(payload.publicUrl)
+
+    await prisma.tracker_node.upsert({
+      where: { nodeId: payload.nodeId },
+      update: {
+        nodeToken: tokenHash,
+        nodeName: payload.nodeName || undefined,
+        publicUrl: decidedUrl || undefined,
+        version: payload.version || undefined,
+        userAgent: payload.userAgent || undefined,
+        online: 1,
+        lastHeartbeat: new Date(),
+      },
+      create: {
+        nodeId: payload.nodeId,
+        nodeToken: tokenHash,
+        nodeName: payload.nodeName || null,
+        publicUrl: decidedUrl || null,
+        version: payload.version || null,
+        userAgent: payload.userAgent || null,
+        online: 1,
+        lastHeartbeat: new Date(),
+      },
+    })
+
+    console.log(
+      `[tracker] 节点导入成功 nodeId=${payload.nodeId} ` +
+      `publicUrl=${decidedUrl || 'null'}`
+    )
+
+    return { nodeId: payload.nodeId, publicUrl: decidedUrl || '' }
   }
 
   /**

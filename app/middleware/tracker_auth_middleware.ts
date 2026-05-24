@@ -40,8 +40,15 @@ export default class TrackerAuthMiddleware {
 
     // 公开访问的接口白名单(精确匹配,避免前缀误伤)
     //   - /tracker/node/register: 节点注册(首次)
+    //   - /tracker/node/import:   从其他 tracker 导入节点(多 tracker 同步)
     //   - /tracker/node/whoami:   客户端网络可达性自检(返回 tracker 视角看到的 IP)
-    if (url === '/tracker/node/register' || url === '/tracker/node/whoami') {
+    //   - /tracker/sync/*:        Tracker 间同步接口(走 X-Sync-Key 鉴权,不走节点鉴权)
+    if (
+      url === '/tracker/node/register' ||
+      url === '/tracker/node/import' ||
+      url === '/tracker/node/whoami' ||
+      url.startsWith('/tracker/sync/')
+    ) {
       await next()
       return
     }

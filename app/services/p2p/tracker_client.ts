@@ -75,6 +75,21 @@ export class TrackerClient {
     return res.data?.data ?? res.data
   }
 
+  /**
+   * 导入节点到另一个 tracker(多 tracker 同步)
+   * 把已在 tracker A 注册的节点信息同步到 tracker B C
+   */
+  async importNode(payload: {
+    nodeId: string
+    nodeToken: string
+    nodeName?: string
+    publicUrl?: string
+    version?: string
+  }): Promise<{ nodeId: string; publicUrl: string }> {
+    const res = await this.http.post('/tracker/node/import', payload)
+    return res.data?.data ?? res.data
+  }
+
   // ============ Group ============
   async createGroup(payload: CreateGroupPayload) {
     const res = await this.http.post('/tracker/group', payload, this.auth())
