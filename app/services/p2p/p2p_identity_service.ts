@@ -24,6 +24,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { get_config, set_config } from '#utils/index'
 import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
+import trackerProbeService from './tracker_probe_service.js'
 import { log_p2p_error } from '#utils/p2p_log'
 import { normalize_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 
@@ -477,13 +478,18 @@ class P2PIdentityService {
 
   /**
    * 选择 tracker url:
-   *  1. 节点配置的 trackers[0]
+   *  1. 节点配置的 trackers 列表中优先取第一个可达的
    *  2. 若自身是 tracker 角色,且 publicUrl 非空则使用
    *  3. 若自身是 tracker 且均为空,则尝试 http://127.0.0.1:{主服务端口}
    */
   pickTrackerUrl(p2p: any): string | null {
     const trackers: string[] = p2p?.node?.trackers || []
-    if (trackers.length > 0) return trackers[0]
+    if (trackers.length > 0) {
+      // 从可达列表中优先选择
+      const reachable = trackerProbeService.getReachableTrackers()
+      if (reachable.length > 0) return reachable[0]
+      return trackers[0] // 保底：全部不可达时也返回第一个，让调用方尝试
+    }
 
     if (p2p?.role?.tracker) {
       const publicUrl = p2p?.tracker?.publicUrl
@@ -494,6 +500,22 @@ class P2PIdentityService {
     }
 
     return null
+  }
+
+  /**
+   * 获取所有可达的 tracker 地址列表
+   */
+  getReachableTrackerUrls(p2p: any): string[] {
+    const trackers: string[] = p2p?.node?.trackers || []
+    if (trackers.length === 0) {
+      // 自身是 tracker 时回落到本地地址
+      if (p2p?.role?.tracker) {
+        const url = this.pickTrackerUrl(p2p)
+        return url ? [url] : []
+      }
+      return []
+    }
+    return trackerProbeService.getReachableTrackers()
   }
 }
 

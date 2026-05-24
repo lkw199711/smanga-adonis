@@ -11,6 +11,7 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
 import { get_config } from '#utils/index'
+import trackerProbeService from './tracker_probe_service.js'
 import type {
   NodeRegisterPayload,
   NodeRegisterResult,
@@ -262,18 +263,17 @@ export class TrackerClient {
 }
 
 /**
- * 根据配置选择 "首选 tracker" 生成一个默认客户端(若未配置返回 null)
+ * 根据配置选择 "首选可达 tracker" 生成一个默认客户端(若未配置返回 null)
  */
 export function get_default_tracker_client(): TrackerClient | null {
   const cfg = get_config()?.p2p
   if (!cfg?.enable || !cfg?.role?.node) return null
 
-  const trackers: string[] = cfg?.node?.trackers || []
-  if (!trackers.length) return null
+  const reachable = trackerProbeService.getReachableTrackers()
+  const url = reachable.length > 0 ? reachable[0] : (cfg?.node?.trackers || [])[0]
+  if (!url) return null
 
-  // 如果本机同时是 tracker 且 publicUrl 为空,则默认连回自身 listenPort
-  // 这里简单取第一个
-  return new TrackerClient(trackers[0], cfg.node?.nodeId, cfg.node?.nodeToken)
+  return new TrackerClient(url, cfg.node?.nodeId, cfg.node?.nodeToken)
 }
 
 export default TrackerClient

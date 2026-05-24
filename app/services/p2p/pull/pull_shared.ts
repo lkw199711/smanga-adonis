@@ -8,7 +8,9 @@
 import fs from 'fs'
 import prisma from '#start/prisma'
 import p2pIdentityService from '../p2p_identity_service.js'
-import { get_default_tracker_client } from '../tracker_client.js'
+import TrackerClient from '../tracker_client.js'
+import trackerProbeService from '../tracker_probe_service.js'
+import { get_config } from '#utils/index'
 import {
   P2PDownloadPool,
   type FileTask,
@@ -16,6 +18,7 @@ import {
 } from '../p2p_download_pool.js'
 import type { DiscoverSeedsArgs, PullHeaders } from './pull_context.js'
 import { normalize_public_url } from '#utils/ip_resolver'
+import { log_p2p_error } from '#utils/p2p_log'
 import { reconcileSingleGroupIfMissing } from '../p2p_group_reconcile_service.js'
 
 export type PullBaseArgs = {
@@ -75,11 +78,18 @@ export async function resolveSeeds(
 }
 
 /**
- * 通过 Tracker 发现 seeds 池
+ * 通过 Tracker 发现 seeds 池（从所有可达 tracker 合并结果）
  */
 export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
-  const tracker = get_default_tracker_client()
-  if (!tracker) throw new Error('未配置 tracker,无法发现 seeds')
+  const cfg = get_config()?.p2p
+  if (!cfg?.enable || !cfg?.role?.node) throw new Error('P2P 未启用')
+
+  const id = p2pIdentityService.getIdentity()
+  if (!id) throw new Error('本节点身份未就绪')
+
+  const urls = trackerProbeService.getReachableTrackers()
+  const trackerUrls = urls.length > 0 ? urls : (cfg?.node?.trackers || []).slice(0, 1)
+  if (!trackerUrls.length) throw new Error('未配置 tracker,无法发现 seeds')
 
   const queryParams: {
     shareType: 'media' | 'manga' | 'chapter'
@@ -96,33 +106,44 @@ export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
     queryParams.remoteMangaId = args.remoteMangaId
   }
 
-  let raw: any[] = []
-  try {
-    raw = await tracker.findSeeds(args.groupNo, queryParams)
-  } catch (e: any) {
-    // 检测 "群组不存在/已停用" 这类错误 → 触发单群对账兜底,清理本地幽灵群
-    const status = e?.response?.status
-    const remoteMsg: string = e?.response?.data?.message || ''
-    const isGroupMissing =
-      status === 404 ||
-      /群组不存在|已停用|group.*not.*found/i.test(remoteMsg)
-    if (isGroupMissing) {
-      // 异步清理,不阻塞当前抛错流程(本次拉取就是要失败的)
-      reconcileSingleGroupIfMissing(args.groupNo).catch(() => {})
+  // 从所有 tracker 合并 seeds（按 nodeId 去重）
+  const seedMap = new Map<string, Seed>()
+  let lastError: any = null
+
+  for (const url of trackerUrls) {
+    try {
+      const tracker = new TrackerClient(url, id.nodeId, id.nodeToken)
+      const raw: any[] = await tracker.findSeeds(args.groupNo, queryParams)
+      for (const r of raw || []) {
+        const baseUrl = pickBaseUrl(r)
+        if (!baseUrl || seedMap.has(r.nodeId)) continue
+        seedMap.set(r.nodeId, {
+          nodeId: r.nodeId,
+          nodeName: r.nodeName,
+          baseUrl,
+        })
+      }
+    } catch (e: any) {
+      lastError = e
+      // 检测 "群组不存在/已停用" → 触发单群对账兜底
+      const status = e?.response?.status
+      const remoteMsg: string = e?.response?.data?.message || ''
+      const isGroupMissing =
+        status === 404 ||
+        /群组不存在|已停用|group.*not.*found/i.test(remoteMsg)
+      if (isGroupMissing) {
+        reconcileSingleGroupIfMissing(args.groupNo).catch(() => {})
+      }
+      log_p2p_error(`discoverSeeds(url=${url})`, e)
     }
-    throw e
   }
-  const seeds: Seed[] = []
-  for (const r of raw || []) {
-    const baseUrl = pickBaseUrl(r)
-    if (!baseUrl) continue
-    seeds.push({
-      nodeId: r.nodeId,
-      nodeName: r.nodeName,
-      baseUrl,
-    })
+
+  if (seedMap.size === 0) {
+    if (lastError) throw lastError
+    return []
   }
-  return seeds
+
+  return Array.from(seedMap.values())
 }
 
 /**

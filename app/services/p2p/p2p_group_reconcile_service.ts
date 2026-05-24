@@ -19,6 +19,7 @@
 import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
 import p2pIdentityService from './p2p_identity_service.js'
+import trackerProbeService from './tracker_probe_service.js'
 import { get_config } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
 
@@ -118,15 +119,30 @@ function buildClient(): TrackerClient | null {
 }
 
 /**
- * 完整对账:拉取 tracker 群列表,upsert 本地新群,清理孤儿群
+ * 获取所有可达 tracker 对应的客户端列表
+ */
+function buildClients(): TrackerClient[] {
+  const cfg = get_config()?.p2p
+  if (!cfg?.enable || !cfg?.role?.node) return []
+
+  const id = p2pIdentityService.getIdentity()
+  if (!id) return []
+
+  const urls = p2pIdentityService.getReachableTrackerUrls(cfg)
+  return urls.map((url) => new TrackerClient(url, id.nodeId, id.nodeToken))
+}
+
+/**
+ * 完整对账:从所有 tracker 拉取群列表合并去重,upsert 本地新群,清理孤儿群
  *
- * 错误策略:
- *  - tracker 调用失败:不做任何清理(避免误删),返回 ok=false
- *  - 单个群清理失败:吞错继续,留待下次对账
+ * 策略:
+ *  - 遍历所有可达 tracker，按 groupNo 去重合并
+ *  - 只有所有 tracker 均未返回的群才算"孤儿"（避免误删仅在部分 tracker 上存在的群）
+ *  - 至少一个 tracker 查询成功才执行清理，全部失败则不做任何删除
  */
 export async function reconcileGroupsWithTracker(): Promise<ReconcileResult> {
-  const client = buildClient()
-  if (!client) {
+  const clients = buildClients()
+  if (!clients.length) {
     return { remoteCount: -1, upserted: 0, removed: [], ok: false, error: 'P2P 未启用或身份未就绪' }
   }
 
@@ -136,25 +152,34 @@ export async function reconcileGroupsWithTracker(): Promise<ReconcileResult> {
     return { remoteCount: -1, upserted: 0, removed: [], ok: false, error: '本节点身份未就绪' }
   }
 
-  let remoteGroups: any[] = []
-  try {
-    remoteGroups = await client.myGroups()
-  } catch (e: any) {
-    log_p2p_error('group.reconcile.fetch', e)
-    return {
-      remoteCount: -1,
-      upserted: 0,
-      removed: [],
-      ok: false,
-      error: e?.response?.data?.message || e?.message || 'tracker 同步失败',
+  // 从所有 tracker 合并群列表（按 groupNo 去重）
+  const groupMap = new Map<string, any>()
+  let anyTrackerSucceeded = false
+
+  for (const client of clients) {
+    try {
+      const groups = await client.myGroups()
+      for (const rg of groups || []) {
+        if (!rg?.groupNo) continue
+        if (!groupMap.has(rg.groupNo)) {
+          groupMap.set(rg.groupNo, rg)
+        }
+      }
+      anyTrackerSucceeded = true
+    } catch (e: any) {
+      log_p2p_error('group.reconcile.fetch', e)
     }
   }
 
-  const remoteSet = new Set<string>()
+  // 所有 tracker 均失败 → 不做任何清理
+  if (!anyTrackerSucceeded) {
+    return { remoteCount: -1, upserted: 0, removed: [], ok: false, error: '所有 tracker 同步失败' }
+  }
+
+  const remoteGroups = Array.from(groupMap.values())
+  const remoteSet = new Set(groupMap.keys())
   let upserted = 0
-  for (const rg of remoteGroups || []) {
-    if (!rg?.groupNo) continue
-    remoteSet.add(rg.groupNo)
+  for (const rg of remoteGroups) {
     const isSelfOwner = rg.role === 'owner'
     const ownerNodeId: string = rg.ownerNodeId || (isSelfOwner ? id.nodeId : '')
     const isOwner = ownerNodeId === id.nodeId ? 1 : 0
@@ -185,7 +210,7 @@ export async function reconcileGroupsWithTracker(): Promise<ReconcileResult> {
     }
   }
 
-  // 找出本地有但 tracker 没有的 → 孤儿群,级联清理
+  // 找出本地有但所有 tracker 都没有的 → 孤儿群,级联清理
   const localGroups = await prisma.p2p_group.findMany({
     select: { p2pGroupId: true, groupNo: true, groupName: true },
   })

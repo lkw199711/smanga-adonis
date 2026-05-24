@@ -32,17 +32,66 @@ import {
   groupNoParamValidator,
 } from '#validators/p2p'
 
-function get_client(): TrackerClient | null {
+/** 获取所有可达 tracker 对应的客户端列表 */
+function get_clients(): TrackerClient[] {
   const cfg = get_config()?.p2p
-  if (!cfg?.enable || !cfg?.role?.node) return null
+  if (!cfg?.enable || !cfg?.role?.node) return []
 
   const id = p2pIdentityService.getIdentity()
-  if (!id) return null
+  if (!id) return []
 
-  const url = p2pIdentityService.pickTrackerUrl(cfg)
-  if (!url) return null
+  const urls = p2pIdentityService.getReachableTrackerUrls(cfg)
+  return urls.map((url) => new TrackerClient(url, id.nodeId, id.nodeToken))
+}
 
-  return new TrackerClient(url, id.nodeId, id.nodeToken)
+/**
+ * 依次尝试每个可达 tracker 执行操作，第一个成功即返回
+ * - 每个 client 都会走 call_with_reregister（身份失效自动重注册）
+ * - 全部失败才抛错
+ */
+async function invoke_first_success<T>(
+  fn: (client: TrackerClient) => Promise<T>
+): Promise<T> {
+  const clients = get_clients()
+  if (!clients.length) throw new Error('P2P 未配置或未启用')
+
+  let lastError: any = null
+  for (const client of clients) {
+    try {
+      return await call_with_reregister(client, fn)
+    } catch (e: any) {
+      lastError = e
+      log_p2p_error('invoke_first_success', e)
+    }
+  }
+  throw lastError || new Error('所有 tracker 均不可达')
+}
+
+/**
+ * 获取所有 tracker 客户端，查询结果按 nodeId 去重合并
+ */
+async function query_and_merge<T>(
+  fn: (client: TrackerClient) => Promise<T[]>,
+  keyFn: (item: T) => string
+): Promise<T[]> {
+  const clients = get_clients()
+  if (!clients.length) return []
+
+  const merged = new Map<string, T>()
+  for (const client of clients) {
+    try {
+      const items = await call_with_reregister(client, fn)
+      for (const item of items || []) {
+        const key = keyFn(item)
+        if (key && !merged.has(key)) {
+          merged.set(key, item)
+        }
+      }
+    } catch (e: any) {
+      log_p2p_error('query_and_merge', e)
+    }
+  }
+  return Array.from(merged.values())
 }
 
 /**
@@ -65,11 +114,11 @@ async function refresh_client_after_reregister(): Promise<TrackerClient> {
   try {
     const fresh = await p2pIdentityService.invalidateAndReregister()
     console.log(`[p2p] 节点已自动重新注册 nodeId=${fresh.nodeId}`)
-    const client = get_client()
-    if (!client) {
+    const clients = get_clients()
+    if (!clients.length) {
       throw new Error('节点重新注册后仍无法构建 tracker 客户端(检查 p2p 配置)')
     }
-    return client
+    return clients[0]
   } catch (e: any) {
     log_p2p_error('group.auto-reregister', e)
     // 将原始错误包装,保证上抛的 message 以 "节点自动重新注册失败:" 开头
@@ -127,17 +176,13 @@ export default class P2PGroupsController {
    * body: { groupName, describe, password, maxMembers }
    */
   async create({ request, response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
-      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
-    }
-
     const { groupName, describe, password, maxMembers } = await createP2PGroupValidator.validate(
       request.all()
     )
 
+    let res: any
     try {
-      const res = await call_with_reregister(client, (c) =>
+      res = await invoke_first_success((c) =>
         c.createGroup({ groupName, describe, password, maxMembers })
       )
       const id = p2pIdentityService.getIdentity()!
@@ -168,15 +213,11 @@ export default class P2PGroupsController {
    * body: { groupNo, password?, inviteCode? }
    */
   async join({ request, response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
-      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
-    }
-
     const { groupNo, password, inviteCode } = await joinP2PGroupValidator.validate(request.all())
 
+    let res: any
     try {
-      const res = await call_with_reregister(client, (c) =>
+      res = await invoke_first_success((c) =>
         c.joinGroup({ groupNo, password, inviteCode })
       )
       const cfg = get_config()?.p2p
@@ -214,14 +255,10 @@ export default class P2PGroupsController {
    * body: { groupNo }
    */
   async leave({ request, response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
-      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
-    }
     const { groupNo } = await leaveP2PGroupValidator.validate(request.all())
 
     try {
-      await call_with_reregister(client, (c) => c.leaveGroup(groupNo))
+      await invoke_first_success((c) => c.leaveGroup(groupNo))
     } catch (e: any) {
       // 即使 tracker 侧失败也继续清理本地,避免僵尸群组
       log_p2p_error('group.leave.tracker(忽略,继续清理本地)', e)
@@ -293,28 +330,41 @@ export default class P2PGroupsController {
       return response.status(404).json({ code: 404, message: '本机未加入该群' })
     }
 
-    const client = get_client()
-    if (!client) {
+    const clients = get_clients()
+    if (!clients.length) {
       // P2P 未启用:仅返回本地视图
       return response.json({ code: 200, message: '', data: { local, members: [], remote: null, fromTracker: false } })
     }
 
     try {
-      const [members, myGroups] = await Promise.all([
-        call_with_reregister(client, (c) => c.groupMembers(groupNo)),
-        call_with_reregister(client, (c) => c.myGroups()),
-      ])
-      const remote = (myGroups as any[]).find((g) => g.groupNo === groupNo) || null
+      // 从所有 tracker 合并成员列表(按 nodeId 去重)
+      const allMembers = new Map<string, any>()
+      let remote: any = null
+
+      for (const client of clients) {
+        try {
+          const [members, myGroups] = await Promise.all([
+            call_with_reregister(client, (c) => c.groupMembers(groupNo)),
+            call_with_reregister(client, (c) => c.myGroups()),
+          ])
+          for (const m of (members as any[]) || []) {
+            if (m?.nodeId) allMembers.set(m.nodeId, m)
+          }
+          if (!remote) {
+            remote = (myGroups as any[]).find((g) => g.groupNo === groupNo) || null
+          }
+        } catch (e: any) {
+          log_p2p_error('group.detail.tracker', e)
+        }
+      }
 
       // 安全考虑:成员列表中的 publicUrl 是节点的对外地址,
       // 暴露给所有客户机会带来扫描/直连风险,故在面向用户接口里剥离;
       // tracker 侧返回的字段保持不动,p2p 拉取流程内部仍可使用 publicUrl。
-      const sanitizedMembers = Array.isArray(members)
-        ? (members as any[]).map((m) => {
-            const { publicUrl: _omit, ...rest } = m || {}
-            return rest
-          })
-        : members
+      const sanitizedMembers = Array.from(allMembers.values()).map((m: any) => {
+        const { publicUrl: _omit, ...rest } = m || {}
+        return rest
+      })
 
       return response.json({ code: 200, message: '', data: { local, members: sanitizedMembers, remote, fromTracker: true } })
     } catch (e: any) {
@@ -340,15 +390,10 @@ export default class P2PGroupsController {
    * "管理员强制踢人" 路径在 tracker 端走的是 /tracker-admin/* 接口(那条路径已存在)。
    */
   async kick({ request, response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
-      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
-    }
-
     const { groupNo, targetNodeId } = await kickP2PGroupValidator.validate(request.all())
 
     try {
-      await call_with_reregister(client, (c) => c.kickMember(groupNo, targetNodeId))
+      await invoke_first_success((c) => c.kickMember(groupNo, targetNodeId))
       // 联动清理本机缓存
       const local = await prisma.p2p_group.findUnique({ where: { groupNo } })
       if (local) {
@@ -378,14 +423,10 @@ export default class P2PGroupsController {
    * 成功后清理本机所有相关数据(p2p_local_share / p2p_peer_cache / p2p_transfer / p2p_group)。
    */
   async dismiss({ request, response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
-      return response.status(400).json({ code: 400, message: 'P2P 未配置或未启用' })
-    }
     const { groupNo } = await dismissP2PGroupValidator.validate(request.all())
 
     try {
-      await call_with_reregister(client, (c) => c.dismissGroup(groupNo))
+      await invoke_first_success((c) => c.dismissGroup(groupNo))
     } catch (e: any) {
       log_p2p_error('group.dismiss.tracker', e)
       return response

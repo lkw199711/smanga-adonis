@@ -20,17 +20,34 @@ import {
   peerChapterTreeQueryValidator,
 } from '#validators/p2p'
 
-function get_client(): TrackerClient | null {
+function get_clients(): TrackerClient[] {
   const cfg = get_config()?.p2p
-  if (!cfg?.enable || !cfg?.role?.node) return null
+  if (!cfg?.enable || !cfg?.role?.node) return []
 
   const id = p2pIdentityService.getIdentity()
-  if (!id) return null
+  if (!id) return []
 
-  const url = p2pIdentityService.pickTrackerUrl(cfg)
-  if (!url) return null
+  const urls = p2pIdentityService.getReachableTrackerUrls(cfg)
+  return urls.map((url) => new TrackerClient(url, id.nodeId, id.nodeToken))
+}
 
-  return new TrackerClient(url, id.nodeId, id.nodeToken)
+/** 依次尝试每个可达 tracker，第一个成功即返回 */
+async function invoke_first_success<T>(
+  fn: (client: TrackerClient) => Promise<T>
+): Promise<T> {
+  const clients = get_clients()
+  if (!clients.length) throw new Error('P2P 未启用')
+
+  let lastError: any = null
+  for (const client of clients) {
+    try {
+      return await fn(client)
+    } catch (e: any) {
+      lastError = e
+      log_p2p_error('invoke_first_success', e)
+    }
+  }
+  throw lastError || new Error('所有 tracker 均不可达')
 }
 
 export default class P2PPeersController {
@@ -39,48 +56,62 @@ export default class P2PPeersController {
    * 从 tracker 获取群成员并缓存到 p2p_peer_cache
    */
   async members({ params, response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
+    const clients = get_clients()
+    if (!clients.length) {
       return response.status(400).json({ code: 400, message: 'P2P 未启用' })
     }
 
     const { groupNo } = await groupNoParamValidator.validate(params)
-    try {
-      const members: any[] = await client.groupMembers(groupNo)
-      const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
 
-      if (group) {
-        // 同步到本地缓存
-        for (const m of members) {
-          await prisma.p2p_peer_cache.upsert({
-            // 注: schema 中 @@unique([p2pGroupId, nodeId], map: "uniqueGroupNode")
-            // map 仅作为数据库索引名;Prisma Client 实际复合键名按字段名拼接为 p2pGroupId_nodeId
-            where: { p2pGroupId_nodeId: { p2pGroupId: group.p2pGroupId, nodeId: m.nodeId } },
-            update: {
-              nodeName: m.nodeName || null,
-              publicUrl: m.publicUrl || null,
-              online: m.online ? 1 : 0,
-              version: m.version || null,
-              lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
-            },
-            create: {
-              p2pGroupId: group.p2pGroupId,
-              nodeId: m.nodeId,
-              nodeName: m.nodeName || null,
-              publicUrl: m.publicUrl || null,
-              online: m.online ? 1 : 0,
-              version: m.version || null,
-              lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
-            },
-          })
+    // 从所有 tracker 合并成员列表（按 nodeId 去重）
+    const allMembers = new Map<string, any>()
+    let lastError: any = null
+
+    for (const client of clients) {
+      try {
+        const list: any[] = await client.groupMembers(groupNo)
+        for (const m of list) {
+          if (m?.nodeId) allMembers.set(m.nodeId, m)
         }
+      } catch (e: any) {
+        lastError = e
+        log_p2p_error('peer.members.tracker', e)
       }
-
-      return response.json({ code: 200, message: '', list: members, count: members.length })
-    } catch (e: any) {
-      log_p2p_error('peer.members', e)
-      return response.status(500).json({ code: 500, message: e?.response?.data?.message || e?.message || '查询失败' })
     }
+
+    if (allMembers.size === 0 && lastError) {
+      return response.status(500).json({ code: 500, message: lastError?.response?.data?.message || lastError?.message || '查询失败' })
+    }
+
+    const members = Array.from(allMembers.values())
+    const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
+
+    if (group) {
+      // 同步到本地缓存
+      for (const m of members) {
+        await prisma.p2p_peer_cache.upsert({
+          where: { p2pGroupId_nodeId: { p2pGroupId: group.p2pGroupId, nodeId: m.nodeId } },
+          update: {
+            nodeName: m.nodeName || null,
+            publicUrl: m.publicUrl || null,
+            online: m.online ? 1 : 0,
+            version: m.version || null,
+            lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
+          },
+          create: {
+            p2pGroupId: group.p2pGroupId,
+            nodeId: m.nodeId,
+            nodeName: m.nodeName || null,
+            publicUrl: m.publicUrl || null,
+            online: m.online ? 1 : 0,
+            version: m.version || null,
+            lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
+          },
+        })
+      }
+    }
+
+    return response.json({ code: 200, message: '', list: members, count: members.length })
   }
 
   /**
@@ -88,18 +119,36 @@ export default class P2PPeersController {
    * 查询群内其他节点共享的资源索引(直接查 tracker)
    */
   async shares({ params, response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
+    const clients = get_clients()
+    if (!clients.length) {
       return response.status(400).json({ code: 400, message: 'P2P 未启用' })
     }
     const { groupNo } = await groupNoParamValidator.validate(params)
-    try {
-      const list: any[] = await client.listShares(groupNo)
-      return response.json({ code: 200, message: '', list, count: list.length })
-    } catch (e: any) {
-      log_p2p_error('peer.shares', e)
-      return response.status(500).json({ code: 500, message: e?.response?.data?.message || e?.message || '查询失败' })
+
+    // 从所有 tracker 合并共享列表（按 shareId 去重）
+    const allShares = new Map<string, any>()
+    let lastError: any = null
+
+    for (const client of clients) {
+      try {
+        const list: any[] = await client.listShares(groupNo)
+        for (const s of list) {
+          // 用 nodeId + shareType + remoteMediaId 组合去重
+          const key = `${s.nodeId || ''}|${s.shareType || ''}|${s.remoteMediaId || ''}`
+          if (!allShares.has(key)) allShares.set(key, s)
+        }
+      } catch (e: any) {
+        lastError = e
+        log_p2p_error('peer.shares.tracker', e)
+      }
     }
+
+    if (allShares.size === 0 && lastError) {
+      return response.status(500).json({ code: 500, message: lastError?.response?.data?.message || lastError?.message || '查询失败' })
+    }
+
+    const list = Array.from(allShares.values())
+    return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   /**
@@ -126,44 +175,67 @@ export default class P2PPeersController {
    * - fallback=1 时 tracker 不可达自动回落到本地缓存(用于离线展示)
    */
   async manifests({ params, request, response }: HttpContext) {
-    const client = get_client()
+    const clients = get_clients()
     const { groupNo } = await groupNoParamValidator.validate(params)
     const { since, nodeId, sync, fallback } = await peerManifestsQueryValidator.validate(
       request.qs()
     )
 
-    if (!client) {
+    if (!clients.length) {
       // P2P 未启用 → 直接走本地缓存
       return response.json({ code: 200, message: '', data: await this._readLocalManifests(groupNo, nodeId, since) })
     }
 
-    try {
-      const result = await client.listManifests(groupNo, {
-        since: since ? Number(since) : undefined,
-        nodeId: nodeId || undefined,
-      })
+    // 从所有 tracker 合并 manifest 摘要（按 manifest 唯一键去重）
+    const allManifests = new Map<string, any>()
+    let lastError: any = null
+    const seenTrackerUrls = new Set<string>()
 
-      // 同步到 p2p_peer_share_manifest 缓存(默认开启,与 syncGroup 路径一致)
-      if (sync !== '0' && sync !== false) {
-        await this._writeLocalManifests(groupNo, result.list || [])
-      }
+    for (const client of clients) {
+      // 避免同一个 tracker URL 被重复查询（getReachableTrackerUrls 已去重，但防御性保留）
+      const trackerUrl = (client as any).baseUrl
+      if (seenTrackerUrls.has(trackerUrl)) continue
+      seenTrackerUrls.add(trackerUrl)
 
-      return response.json({ code: 200, message: '', data: result })
-    } catch (e: any) {
-      log_p2p_error('peer.manifests', e)
-
-      // tracker 不可达且开启 fallback → 走本地缓存
-      if (fallback) {
-        return response.json({
-          code: 200,
-          message: 'fallback to local cache',
-          data: await this._readLocalManifests(groupNo, nodeId, since),
+      try {
+        const result = await client.listManifests(groupNo, {
+          since: since ? Number(since) : undefined,
+          nodeId: nodeId || undefined,
         })
+        for (const m of result.list || []) {
+          const key = `${m.nodeId || ''}|${m.shareType || ''}|${m.remoteMediaId || ''}|${m.remoteMangaId || ''}`
+          if (!allManifests.has(key)) allManifests.set(key, m)
+        }
+      } catch (e: any) {
+        lastError = e
+        log_p2p_error('peer.manifests.tracker', e)
       }
-      return response.status(500).json(
-        { code: 500, message: e?.response?.data?.message || e?.message || '查询失败' }
-      )
     }
+
+    if (allManifests.size > 0) {
+      const mergedList = Array.from(allManifests.values())
+      const mergedResult = { list: mergedList, count: mergedList.length, serverTime: Date.now() }
+
+      // 同步到本地缓存
+      if (sync !== '0' && sync !== false) {
+        await this._writeLocalManifests(groupNo, mergedList)
+      }
+
+      return response.json({ code: 200, message: '', data: mergedResult })
+    }
+
+    // 所有 tracker 均失败
+    log_p2p_error('peer.manifests', lastError)
+    if (fallback) {
+      return response.json({
+        code: 200,
+        message: 'fallback to local cache',
+        data: await this._readLocalManifests(groupNo, nodeId, since),
+      })
+    }
+    return response.status(500).json(
+      { code: 500, message: lastError?.response?.data?.message || lastError?.message || '查询失败' }
+    )
   }
 
   /** 从本地 p2p_peer_share_manifest 读取摘要列表 */
@@ -267,21 +339,17 @@ export default class P2PPeersController {
    * 拉取单个 manifest 完整 payload
    */
   async manifest({ params, request, response }: HttpContext) {
-    const client = get_client()
-    if (!client) {
-      return response.status(400).json({ code: 400, message: 'P2P 未启用' })
-    }
     const { groupNo } = await groupNoParamValidator.validate(params)
     const { nodeId, shareType, remoteMediaId, remoteMangaId } =
       await peerManifestQueryValidator.validate(request.qs())
 
     try {
-      const data = await client.getManifest(groupNo, {
+      const data = await invoke_first_success((c) => c.getManifest(groupNo, {
         nodeId,
         shareType,
         remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
         remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
-      })
+      }))
       return response.json({ code: 200, message: '', data })
     } catch (e: any) {
       log_p2p_error('peer.manifest', e)

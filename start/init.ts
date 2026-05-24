@@ -281,9 +281,9 @@ async function check_config_ver() {
   // 默认tracker地址列表，便于之后增删
   // 初始化时会将用户配置中缺失的默认地址自动补入
   const DEFAULT_TRACKER_URLS: string[] = [
-    'http://117.72.27.9:9797/api',
     'http://146000.xyz:9797/api',
     'http://149000.xyz:9797/api',
+    'http://117.72.27.9:9797/api',
   ]
 
   // 老用户升级时补充 p2p 段,默认全部关闭

@@ -23,17 +23,15 @@ import {
   idParamP2PValidator,
 } from '#validators/p2p'
 
-function get_client(): TrackerClient | null {
+function get_clients(): TrackerClient[] {
   const cfg = get_config()?.p2p
-  if (!cfg?.enable || !cfg?.role?.node) return null
+  if (!cfg?.enable || !cfg?.role?.node) return []
 
   const id = p2pIdentityService.getIdentity()
-  if (!id) return null
+  if (!id) return []
 
-  const url = p2pIdentityService.pickTrackerUrl(cfg)
-  if (!url) return null
-
-  return new TrackerClient(url, id.nodeId, id.nodeToken)
+  const urls = p2pIdentityService.getReachableTrackerUrls(cfg)
+  return urls.map((url) => new TrackerClient(url, id.nodeId, id.nodeToken))
 }
 
 /**
@@ -46,8 +44,8 @@ function get_client(): TrackerClient | null {
  */
 async function announce_group(groupNo: string) {
   try {
-    const client = get_client()
-    if (!client) return
+    const clients = get_clients()
+    if (!clients.length) return
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) return
     const shares = await prisma.p2p_local_share.findMany({
@@ -120,7 +118,16 @@ async function announce_group(groupNo: string) {
       }),
     }
 
-    const result = (await client.announceShares(groupNo, payload)) as AnnounceResult | undefined
+    // 向所有可达 tracker 广播，取第一个成功的结果用于版本回写
+    let result: AnnounceResult | undefined
+    for (const c of clients) {
+      try {
+        result = (await c.announceShares(groupNo, payload)) as AnnounceResult | undefined
+        break // 第一个成功即可
+      } catch (e: any) {
+        log_p2p_error('announce_group.tracker', e)
+      }
+    }
 
     // 把 tracker 返回的 version 回写到本地 manifest 缓存
     //   - 只有当本次 manifest 生成成功且 changed 时才需要更新缓存
