@@ -931,7 +931,7 @@ export default class ScanMangaJob {
 
     // 复制封面到poster目录 使用单独任务队列
     if (copyPoster) {
-      this.copy_poster(sourcePoster, posterName, maxSizeKB)
+      await this.copy_poster(sourcePoster, posterName, maxSizeKB)
     }
 
     return copyPoster ? posterName : sourcePoster
@@ -1026,7 +1026,7 @@ export default class ScanMangaJob {
 
     // 复制封面到poster目录 使用单独任务队列
     if (copyPoster) {
-      this.copy_poster(sourcePoster, posterName, maxSizeKB)
+      await this.copy_poster(sourcePoster, posterName, maxSizeKB)
     }
 
     return copyPoster ? posterName : sourcePoster

@@ -9,6 +9,9 @@ import sharp from 'sharp'
 import fs from 'node:fs'
 import path from 'node:path'
 
+// 禁用 sharp 内部缓存，防止原生内存持续堆积
+sharp.cache(false)
+
 export async function compressImageToSize(
   inputPath: string,
   outputPath: string,

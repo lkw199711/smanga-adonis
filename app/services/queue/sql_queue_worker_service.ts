@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
+import { fork } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 import { getQueueConfig, getWorkerConfig, type QueueWorkerGroup } from './queue_config.js'
 import {
   claimNextJob,
@@ -10,7 +13,9 @@ import {
   stopWorker,
   decodeJson,
 } from './sql_queue_repository.js'
-import { runJobWithTimeout } from './job_runner.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -104,8 +109,7 @@ export class SqlQueueWorkerService {
         this.running += 1
         try {
           console.log(`[queue] job ${job.id} started: ${job.command}`)
-          await runJobWithTimeout(job.command, decodeJson(job.args), job.timeout_ms)
-          await markJobCompleted(job.id)
+          await this.runJobInChildProcess(job)
           console.log(`[queue] job ${job.id} completed: ${job.command}`)
         } catch (error) {
           console.error(`[queue] job ${job.id} failed: ${job.command}`, error)
@@ -118,6 +122,73 @@ export class SqlQueueWorkerService {
         await sleep(config.pollIntervalMs)
       }
     }
+  }
+
+  /**
+   * 在子进程中执行 job
+   * 子进程退出后 OS 自动回收所有内存
+   */
+  private runJobInChildProcess(job: any): Promise<void> {
+    return new Promise((resolve) => {
+      const args = decodeJson(job.args)
+      const config = getQueueConfig()
+      const queueChildWorkerPath = path.resolve(__dirname, '../../../bin/queue_child_worker.js')
+
+      const child = fork(queueChildWorkerPath, [], {
+        env: {
+          ...process.env,
+          QUEUE_JOB_COMMAND: job.command,
+          QUEUE_JOB_ARGS: JSON.stringify(args),
+        },
+        silent: true,
+      })
+
+      let stderr = ''
+      child.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+      child.stdout?.on('data', (data: Buffer) => {
+        process.stdout.write(`[child-${job.id}] ${data}`)
+      })
+
+      const timeoutMs = job.timeout_ms || config.timeout
+      const timeoutId = setTimeout(() => {
+        console.warn(`[queue] job ${job.id} timeout after ${timeoutMs}ms, killing child process`)
+        child.kill('SIGTERM')
+        // 5 秒后强制 SIGKILL
+        setTimeout(() => {
+          if (!child.killed) child.kill('SIGKILL')
+        }, 5000)
+      }, timeoutMs)
+
+      child.on('exit', async (code, signal) => {
+        clearTimeout(timeoutId)
+        try {
+          if (code === 0) {
+            await markJobCompleted(job.id)
+          } else {
+            const reason = signal
+              ? `killed by signal ${signal}`
+              : stderr.trim() || `exit code ${code}`
+            await markJobFailedOrRetry(job, new Error(reason))
+          }
+        } catch (err) {
+          console.error(`[queue] failed to update job ${job.id} status`, err)
+        } finally {
+          resolve()
+        }
+      })
+
+      child.on('error', async (err) => {
+        clearTimeout(timeoutId)
+        try {
+          await markJobFailedOrRetry(job, err)
+        } catch {}
+        finally {
+          resolve()
+        }
+      })
+    })
   }
 }
 
