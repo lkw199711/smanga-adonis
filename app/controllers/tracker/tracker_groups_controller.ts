@@ -111,8 +111,10 @@ export default class TrackerGroupsController {
     try {
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
       const list = await trackerGroupService.listMembers(groupNo)
+      // 移除 publicUrl 避免泄漏节点公网地址给普通用户
+      const safeList = list.map(({ publicUrl, ...rest }) => rest)
       return response.json(
-        { code: 200, message: '', list: list as any, count: list.length }
+        { code: 200, message: '', list: safeList as any, count: safeList.length }
       )
     } catch (err: any) {
       log_tracker_error('group.members', err)

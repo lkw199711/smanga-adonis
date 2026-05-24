@@ -128,6 +128,30 @@ class TrackerSyncService {
   }
 
   /**
+   * 手动触发一次完整同步
+   * 供前端按钮调用,立即从所有 peer tracker 拉取数据
+   */
+  async triggerSync(): Promise<{ ok: boolean; message: string }> {
+    const cfg = get_config()?.p2p
+    if (!cfg?.enable || !cfg?.role?.tracker) {
+      return { ok: false, message: 'Tracker 未启用' }
+    }
+    if (!cfg?.tracker?.syncKey) {
+      return { ok: false, message: '未配置同步密钥' }
+    }
+    const peers = this.getPeerTrackerUrls()
+    if (peers.length === 0) {
+      return { ok: false, message: '未发现 peer tracker' }
+    }
+    try {
+      await this.syncAll()
+      return { ok: true, message: `同步完成,已处理 ${peers.length} 个 peer tracker` }
+    } catch (e: any) {
+      return { ok: false, message: e?.message || '同步失败' }
+    }
+  }
+
+  /**
    * 执行完整的同步流程:从所有 peer tracker 拉取数据并合并
    */
   private async syncAll(): Promise<void> {

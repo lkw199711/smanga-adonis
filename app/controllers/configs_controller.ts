@@ -381,6 +381,42 @@ export default class ConfigsController {
     }
   }
 
+  /**
+   * 手动触发 Tracker 间数据同步
+   * - 校验 admin 权限
+   * - 校验 p2p.enable 且 p2p.role.tracker 为 true
+   * - 立即从所有 peer tracker 拉取群组/节点/成员数据
+   */
+  public async trigger_tracker_sync({ request, response }: HttpContext) {
+    const user = (request as any).user
+    if (user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限', status: 'error' })
+    }
+
+    const cfg = get_config()?.p2p
+    if (!cfg?.enable) {
+      return response.status(400).json({ code: 400, message: '请先开启 P2P(启用 P2P 开关)', status: 'error' })
+    }
+    if (!cfg?.role?.tracker) {
+      return response.status(400).json({ code: 400, message: '请先开启"作为 Tracker"角色', status: 'error' })
+    }
+    if (!cfg?.tracker?.syncKey) {
+      return response.status(400).json({ code: 400, message: '请先配置同步密钥', status: 'error' })
+    }
+
+    try {
+      const { default: trackerSyncService } = await import('#services/tracker/tracker_sync_service')
+      const result = await trackerSyncService.triggerSync()
+      return response.json({
+        code: result.ok ? 200 : 400,
+        message: result.message,
+        data: result,
+      })
+    } catch (err: any) {
+      return response.status(500).json({ code: 500, message: err?.message || '同步触发失败', status: 'error' })
+    }
+  }
+
   public async user_config({ request, response }: HttpContext) {
     const userId = (request as any).userId
     const { userConfig } = await userConfigValidator.validate(request.all())
