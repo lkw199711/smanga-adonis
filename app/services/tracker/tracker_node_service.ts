@@ -104,8 +104,9 @@ class TrackerNodeService {
           '请确认:\n' +
           '  - 节点服务正常运行且监听端口正确\n' +
           '  - 防火墙/安全组已放行该端口\n' +
-          '  - NAT 后做好端口映射\n' +
-          '  - publicUrl 可从 tracker 所在网络正常访问'
+          '  - 若使用 IPv6 地址,请确保 tracker 所在网络支持 IPv6 出站(双栈环境)\n' +
+          '  - 若 tracker 仅 IPv4,请为节点配置一个 IPv4 可达的 publicUrl\n' +
+          '  - NAT 后做好端口映射'
         )
       }
       console.log(

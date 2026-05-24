@@ -166,7 +166,20 @@ export function is_reportable_public_host(host: string | undefined | null): bool
   if (h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' || h === '::1' || h === '::') {
     return false
   }
+  // IPv6 私有地址段拦截(hostname 从 URL 解析后不含方括号)
+  if (_is_bare_ipv6_address(h)) {
+    if (/^fe80:/i.test(h)) return false       // link-local fe80::/10
+    if (/^f[c-d][0-9a-f]{2}:/i.test(h)) return false // ULA fc00::/7 (fd00::/8)
+  }
   return true
+}
+
+/**
+ * 判断一个字符串是否看起来像裸 IPv6 地址(不含方括号的纯十六进制+冒号形式)
+ * 避免误伤域名(域名通常含有 g-z 等非十六进制字母)
+ */
+function _is_bare_ipv6_address(s: string): boolean {
+  return /^[0-9a-f:]+(\.[0-9]+)?$/.test(s) && s.includes(':')
 }
 
 // ========================= publicUrl 工具 =========================
@@ -187,13 +200,63 @@ export function is_reportable_public_host(host: string | undefined | null): bool
  */
 export function normalize_public_url(raw: string | undefined | null): string {
   if (!raw) return ''
-  const s = String(raw).trim().replace(/\/+$/, '')
+  let s = String(raw).trim().replace(/\/+$/, '')
   if (!s) return ''
   if (/^https?:\/\//i.test(s)) {
     return s
   }
-  // 没有协议头,默认 http
+  // 没有协议头:先尝试按现状解析;若因裸 IPv6 失败则自动包裹方括号再试
+  if (!_try_parse_url(`http://${s}`)) {
+    const wrapped = _wrap_bare_ipv6_host(s)
+    if (wrapped !== s) {
+      s = wrapped
+    }
+  }
   return `http://${s}`
+}
+
+/**
+ * 试探 URL 解析是否成功
+ */
+function _try_parse_url(url: string): boolean {
+  try {
+    new URL(url)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 当字符串整体无法被 URL 解析且看起来是裸 IPv6 时,
+ * 自动给主机部分包裹方括号:
+ *   "2001:db8::1"        → "[2001:db8::1]"
+ *   "2001:db8::1:9797/api" → "[2001:db8::1]:9797/api"
+ * 不影响正常域名/已带方括号/纯 IPv4 的输入
+ */
+function _wrap_bare_ipv6_host(s: string): string {
+  if (s.startsWith('[')) return s // 已有方括号
+
+  const slashIdx = s.indexOf('/')
+  const host = slashIdx >= 0 ? s.slice(0, slashIdx) : s
+  const path = slashIdx >= 0 ? s.slice(slashIdx) : ''
+
+  // 是否像裸 IPv6:含至少 2 个冒号,且全部由十六进制字符/冒号/点组成
+  const colons = (host.match(/:/g) || []).length
+  if (colons < 2) return s
+  if (!_is_bare_ipv6_address(host)) return s
+
+  // 末尾冒号后是纯数字 → 视为端口,只包裹端口前的 IPv6 部分
+  const lastColon = host.lastIndexOf(':')
+  if (lastColon > 0) {
+    const after = host.slice(lastColon + 1)
+    if (/^\d+$/.test(after)) {
+      return `[${host.slice(0, lastColon)}]:${after}${path}`
+    }
+  }
+
+  // 纯 IPv6 无端口
+  return `[${host}]${path}`
 }
 
 /**
