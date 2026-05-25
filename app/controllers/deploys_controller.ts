@@ -157,13 +157,13 @@ export default class DeploysController {
   }
 
   /**
-   * 首次部署初始化（无鉴权，仅在 deploy=false 时可用）
+   * 第一步：数据库初始化（无鉴权，仅在 deploy=false 时可用）
    * POST /api/deploy/init
+   * 写入配置 + 执行 prisma generate/migrate，不创建用户
    */
   public async init({ request, response }: HttpContext) {
     const config = get_config()
 
-    // 防御：已经初始化过了
     if (config.sql?.deploy) {
       return response.status(400).json({
         code: 400,
@@ -172,16 +172,13 @@ export default class DeploysController {
     }
 
     const body = request.body() as any
-    const { client, host, port, username, password, database, adminUser, adminPass } = body
+    const { client, host, port, username, password, database } = body
 
     const pgClients = ['pgsql', 'postgresql', 'postgres', 'postgressql']
 
     // 1. 校验参数
     if (![...pgClients, 'sqlite', 'mysql'].includes(client)) {
       return response.status(400).json({ code: 400, message: '不支持的数据库类型' })
-    }
-    if (!adminUser || !adminPass) {
-      return response.status(400).json({ code: 400, message: '管理员用户名和密码不能为空' })
     }
 
     // 2. 写入 smanga.json
@@ -212,7 +209,6 @@ export default class DeploysController {
       varName = 'DB_URL_MYSQL'
       schemaPath = path.join(rootDir, 'prisma', 'mysql', 'schema.prisma')
     } else {
-      // postgresql / pgsql
       dbUrl = `postgresql://${username}:${password}@${host}:${port}/${database}`
       varName = 'DB_URL_POSTGRESQL'
       schemaPath = path.join(rootDir, 'prisma', 'pgsql', 'schema.prisma')
@@ -228,18 +224,75 @@ export default class DeploysController {
     fs.writeFileSync(ENV_FILE, envContent, 'utf8')
 
     // 4. 执行 Prisma 命令
-    const genOk = runNpxCommand('npx prisma generate --schema=' + schemaPath)
-    if (!genOk) {
-      return response.status(500).json({ code: 500, message: 'Prisma generate 失败' })
+    const genResult = runNpxCommand('npx prisma generate --schema=' + schemaPath)
+    if (!genResult.success) {
+      return response.status(500).json({
+        code: 500,
+        message: 'Prisma generate 失败: ' + (genResult.error || '未知错误'),
+      })
     }
-    const migrateOk = runNpxCommand('npx prisma migrate deploy --schema=' + schemaPath)
-    if (!migrateOk) {
-      return response.status(500).json({ code: 500, message: 'Prisma migrate 失败' })
+    const migrateResult = runNpxCommand('npx prisma migrate deploy --schema=' + schemaPath)
+    if (!migrateResult.success) {
+      return response.status(500).json({
+        code: 500,
+        message: 'Prisma migrate 失败: ' + (migrateResult.error || '未知错误'),
+      })
     }
 
-    // 5. 动态创建 PrismaClient 并创建 admin 用户
+    // 返回成功，不设 deploy=true，不退出
+    return response.json({
+      code: 200,
+      message: '数据库初始化完成',
+    })
+  }
+
+  /**
+   * 第二步：创建管理员账户并完成部署（无鉴权，数据库已初始化后可用）
+   * POST /api/deploy/init-account
+   * 创建 admin 用户 → deploy=true → process.exit(0)
+   */
+  public async initAccount({ request, response }: HttpContext) {
+    const config = get_config()
+
+    if (config.sql?.deploy) {
+      return response.status(400).json({
+        code: 400,
+        message: '系统已完成初始化，此接口不可用',
+      })
+    }
+
+    // 防御：必须先完成数据库初始化
+    if (!config.sql) {
+      return response.status(400).json({
+        code: 400,
+        message: '请先完成数据库初始化',
+      })
+    }
+
+    const body = request.body() as any
+    const { adminUser, adminPass } = body
+
+    if (!adminUser || !adminPass) {
+      return response.status(400).json({ code: 400, message: '管理员用户名和密码不能为空' })
+    }
+
+    // 从 smanga.json 构造 DB URL
+    const { client, host, port, username, password, database } = config.sql
+    let dbUrl: string
+
+    if (client === 'sqlite') {
+      const os = get_os()
+      dbUrl = (os === 'Windows' || os === 'MacOS')
+        ? `file:${path.join(rootDir, 'data', 'db', 'smanga.db')}`
+        : 'file:/data/db/smanga.db'
+    } else if (client === 'mysql') {
+      dbUrl = `mysql://${username}:${password}@${host}:${port}/${database}`
+    } else {
+      dbUrl = `postgresql://${username}:${password}@${host}:${port}/${database}`
+    }
+
+    // 创建 admin 用户
     try {
-      // 动态导入 PrismaClient（避免影响已加载的模块）
       const { PrismaClient } = await import('@prisma/client')
       const initPrisma = new PrismaClient({
         datasources: { db: { url: dbUrl } },
@@ -264,18 +317,17 @@ export default class DeploysController {
       })
     }
 
-    // 6. 标记完成
+    // 标记完成
     config.sql.deploy = true
     set_config(config)
 
-    // 7. 返回成功
     response.json({
       code: 200,
       message: '初始化完成，服务即将重启',
       data: true,
     })
 
-    // 8. 延迟退出，确保响应已发送
+    // 延迟退出，确保响应已发送
     setTimeout(() => process.exit(0), 1000)
   }
 }

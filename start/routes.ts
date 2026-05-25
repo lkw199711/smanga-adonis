@@ -103,6 +103,7 @@ router.get('/deploy/database-test', [DeploysController, 'database_test'])
 router.get('/deploy/database-check', [DeploysController, 'database_check'])
 // 首次部署初始化（无鉴权）
 router.post('/deploy/init', [DeploysController, 'init'])
+router.post('/deploy/init-account', [DeploysController, 'initAccount'])
 
 // 收藏模块 collect
 router.get('/collect', [CollectsController, 'index'])
