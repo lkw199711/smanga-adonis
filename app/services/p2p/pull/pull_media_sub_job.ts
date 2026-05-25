@@ -32,6 +32,7 @@ import {
   discoverSeeds,
 } from './pull_shared.js'
 import { initTracker } from './pull_child_tracker.js'
+import { extractErrorMessage } from '#utils/p2p_log'
 import type { Seed } from './pull_context.js'
 
 export type PullMediaJobArgs = {
@@ -94,7 +95,7 @@ export default class PullMediaJob {
           mangaName: String(m.mangaName || ''),
         }))
     } catch (e: any) {
-      const msg = e?.message || String(e)
+      const msg = extractErrorMessage(e)
       console.error(`[${logTag}] 获取漫画列表失败: ${msg}`)
       await this.fail(transferId, msg)
       return

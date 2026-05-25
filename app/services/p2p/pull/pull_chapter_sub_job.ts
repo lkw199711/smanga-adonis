@@ -31,6 +31,7 @@ import {
   resolveSeeds,
 } from './pull_shared.js'
 import { notifyDone } from './pull_child_tracker.js'
+import { extractErrorMessage } from '#utils/p2p_log'
 
 export type PullChapterJobArgs = {
   transferId: number
@@ -105,7 +106,7 @@ export default class PullChapterJob {
       )
     } catch (e: any) {
       ok = false
-      errorMsg = e?.message || String(e)
+      errorMsg = extractErrorMessage(e)
       console.error(`[${logTag}] 失败: ${errorMsg}`)
       await reporter.flush().catch(() => {})
     }

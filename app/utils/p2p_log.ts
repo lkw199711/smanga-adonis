@@ -40,4 +40,48 @@ export function log_tracker_error(tag: string, err: any) {
   console.error(`[tracker] ${tag} failed:`, extract_error_fields(err))
 }
 
-export default { log_p2p_error, log_tracker_error }
+/**
+ * 从任意错误对象中提取人类可读的错误消息。
+ *
+ * 处理优先级:
+ *  1. AggregateError → 展平 errors[] 中的所有子错误消息
+ *  2. axios 错误 → 优先取远端返回的 message,其次取本地 message
+ *  3. 普通 Error → message || stack
+ *  4. 其他 → String(err)
+ */
+export function extractErrorMessage(err: any): string {
+  if (!err) return '未知错误'
+
+  // AggregateError (Promise.any / 部分 Prisma 批处理)
+  if (err instanceof AggregateError && Array.isArray(err.errors) && err.errors.length) {
+    const parts = err.errors.map((e: any) => {
+      if (e?.response?.data?.message) return e.response.data.message
+      if (e?.message) return e.message
+      return String(e)
+    })
+    // 去重后拼接
+    const unique = [...new Set(parts)]
+    return unique.join('; ')
+  }
+
+  // axios 风格错误
+  if (err?.response?.data?.message) {
+    const ctx = err?.config?.url ? `[${err.config.url}] ` : ''
+    return `${ctx}${err.response.data.message}`
+  }
+
+  // 普通 Error
+  if (err instanceof Error) {
+    return err.message || err.stack || String(err)
+  }
+
+  // 其他
+  if (typeof err === 'string') return err
+  try {
+    return JSON.stringify(err)
+  } catch {
+    return String(err)
+  }
+}
+
+export default { log_p2p_error, log_tracker_error, extractErrorMessage }

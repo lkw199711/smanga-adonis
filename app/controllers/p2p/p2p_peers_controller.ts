@@ -56,62 +56,70 @@ export default class P2PPeersController {
    * 从 tracker 获取群成员并缓存到 p2p_peer_cache
    */
   async members({ params, response }: HttpContext) {
-    const clients = get_clients()
-    if (!clients.length) {
-      return response.status(400).json({ code: 400, message: 'P2P 未启用' })
-    }
+    try {
+      const clients = get_clients()
+      if (!clients.length) {
+        return response.status(400).json({ code: 400, message: 'P2P 未启用' })
+      }
 
-    const { groupNo } = await groupNoParamValidator.validate(params)
+      const { groupNo } = await groupNoParamValidator.validate(params)
 
-    // 从所有 tracker 合并成员列表（按 nodeId 去重）
-    const allMembers = new Map<string, any>()
-    let lastError: any = null
+      // 从所有 tracker 合并成员列表（按 nodeId 去重）
+      const allMembers = new Map<string, any>()
+      const errors: string[] = []
 
-    for (const client of clients) {
-      try {
-        const list: any[] = await client.groupMembers(groupNo)
-        for (const m of list) {
-          if (m?.nodeId) allMembers.set(m.nodeId, m)
+      for (const client of clients) {
+        try {
+          const list: any[] = await client.groupMembers(groupNo)
+          for (const m of list) {
+            if (m?.nodeId) allMembers.set(m.nodeId, m)
+          }
+        } catch (e: any) {
+          const errMsg = e?.response?.data?.message || e?.message || String(e)
+          errors.push(errMsg)
+          log_p2p_error('peer.members.tracker', e)
         }
-      } catch (e: any) {
-        lastError = e
-        log_p2p_error('peer.members.tracker', e)
       }
-    }
 
-    if (allMembers.size === 0 && lastError) {
-      return response.status(500).json({ code: 500, message: lastError?.response?.data?.message || lastError?.message || '查询失败' })
-    }
-
-    const members = Array.from(allMembers.values())
-    const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
-
-    if (group) {
-      // 同步到本地缓存
-      for (const m of members) {
-        await prisma.p2p_peer_cache.upsert({
-          where: { p2pGroupId_nodeId: { p2pGroupId: group.p2pGroupId, nodeId: m.nodeId } },
-          update: {
-            nodeName: m.nodeName || null,
-            publicUrl: m.publicUrl || null,
-            online: m.online ? 1 : 0,
-            version: m.version || null,
-            lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
-          },
-          create: {
-            p2pGroupId: group.p2pGroupId,
-            nodeId: m.nodeId,
-            nodeName: m.nodeName || null,
-            publicUrl: m.publicUrl || null,
-            online: m.online ? 1 : 0,
-            version: m.version || null,
-            lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
-          },
-        })
+      if (allMembers.size === 0 && errors.length > 0) {
+        const detail = errors.join('; ')
+        return response.status(500).json({ code: 500, message: `查询失败: ${detail}` })
       }
-    }
 
-    return response.json({ code: 200, message: '', list: members, count: members.length })
+      const members = Array.from(allMembers.values())
+      const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
+
+      if (group) {
+        // 同步到本地缓存
+        for (const m of members) {
+          await prisma.p2p_peer_cache.upsert({
+            where: { p2pGroupId_nodeId: { p2pGroupId: group.p2pGroupId, nodeId: m.nodeId } },
+            update: {
+              nodeName: m.nodeName || null,
+              publicUrl: m.publicUrl || null,
+              online: m.online ? 1 : 0,
+              version: m.version || null,
+              lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
+            },
+            create: {
+              p2pGroupId: group.p2pGroupId,
+              nodeId: m.nodeId,
+              nodeName: m.nodeName || null,
+              publicUrl: m.publicUrl || null,
+              online: m.online ? 1 : 0,
+              version: m.version || null,
+              lastSeen: m.lastHeartbeat ? new Date(m.lastHeartbeat) : null,
+            },
+          })
+        }
+      }
+
+      return response.json({ code: 200, message: '', list: members, count: members.length })
+    } catch (e: any) {
+      log_p2p_error('peer.members', e)
+      const message = e?.response?.data?.message || e?.message || '查询失败'
+      return response.status(500).json({ code: 500, message })
+    }
   }
 
   /**

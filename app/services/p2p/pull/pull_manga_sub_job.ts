@@ -54,6 +54,7 @@ import {
   resolveSeeds,
 } from './pull_shared.js'
 import { initTracker, notifyDone, transferSelfToChildren } from './pull_child_tracker.js'
+import { extractErrorMessage } from '#utils/p2p_log'
 
 export type PullMangaJobArgs = {
   transferId: number
@@ -107,7 +108,7 @@ export default class PullMangaJob {
       if (!resolvedSeeds.length) throw new Error('群组内未发现该资源的可用节点 (seeds 列表为空)')
       tree = await fetchMangaTree(resolvedSeeds, headers, logTag, mangaId)
     } catch (e: any) {
-      const errorMsg = e?.message || String(e)
+      const errorMsg = extractErrorMessage(e)
       console.error(`[${logTag}] 获取 tree 失败: ${errorMsg}`)
       if (isSubTask) {
         await notifyDone(transferId, { ok: false, downloadedBytes: 0, error: errorMsg })
@@ -179,7 +180,7 @@ export default class PullMangaJob {
       )
     } catch (e: any) {
       ok = false
-      errorMsg = e?.message || String(e)
+      errorMsg = extractErrorMessage(e)
       console.error(`[${logTag}] (单文件) 失败: ${errorMsg}`)
       await reporter.flush().catch(() => {})
     }
@@ -207,7 +208,7 @@ export default class PullMangaJob {
     try {
       chapters = await this.fetchChapters(groupNo, mangaId, logTag, resolvedSeeds)
     } catch (e: any) {
-      const errorMsg = e?.message || String(e)
+      const errorMsg = extractErrorMessage(e)
       console.error(`[${logTag}] 获取 chapters 失败: ${errorMsg}`)
       if (isSubTask) {
         await notifyDone(transferId, { ok: false, downloadedBytes: 0, error: errorMsg })

@@ -16,6 +16,7 @@
 import prisma from '#start/prisma'
 import { addTask } from '#services/queue_service'
 import { TaskPriority } from '../../type/index.js'
+import { extractErrorMessage } from '#utils/p2p_log'
 
 type P2PPullArgs = {
   transferId: number
@@ -103,7 +104,7 @@ export default class P2PPullJob {
 
       console.log(`[${logTag}] 分发完成 type=${transfer.transferType}`)
     } catch (e: any) {
-      const msg = e?.message || String(e)
+      const msg = extractErrorMessage(e)
       console.error(`[${logTag}] 分发失败: ${msg}`)
       await this.fail(msg)
     }

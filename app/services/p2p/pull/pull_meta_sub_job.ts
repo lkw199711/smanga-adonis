@@ -25,6 +25,7 @@ import {
   runChildDownload,
 } from './pull_shared.js'
 import { notifyDone } from './pull_child_tracker.js'
+import { extractErrorMessage } from '#utils/p2p_log'
 
 /** 判断 relPath 是否为元数据文件 */
 export function isMetaFile(relPath: string): boolean {
@@ -139,7 +140,7 @@ export default class PullMetaJob {
       console.log(`[${logTag}] 完成 bytes=${downloadedBytes}`)
     } catch (e: any) {
       ok = false
-      errorMsg = e?.message || String(e)
+      errorMsg = extractErrorMessage(e)
       console.error(`[${logTag}] 失败: ${errorMsg}`)
       await reporter.flush().catch(() => {})
     }
