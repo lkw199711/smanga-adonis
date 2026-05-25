@@ -1,26 +1,22 @@
 /**
- * P2P 身份管理服务
+ * P2P 身份管理服务（精简版：无 nodeToken）
  *
  * 职责:
- *  - 保证本节点拥有 nodeId / nodeToken(若无则自动向首选 Tracker 注册)
- *  - 注册成功后将 nodeId/nodeToken/nodeName 写回 smanga.json
+ *  - 保证本节点在所有 tracker 上已注册(serverKey 作为 nodeId)
+ *  - 注册成功后回写 nodeId(=serverKey)/nodeName 到 smanga.json
  *  - 提供给其他服务统一的身份读取入口
  *
- * publicUrl 语义(重构后):
- *  - 完全由用户在 smanga.json 的 p2p.node.publicUrl 配置,节点/tracker 不再做端口拆分/替换
- *  - 仅在上报时做一次规范化(补 http:// 前缀、去尾部斜杠)
- *  - tracker 侧也直接信任这个 URL,不再拼接 localHost/localPort
+ * 鉴权策略（简化后）:
+ *  - nodeId = serverKey（smanga 实例的全局唯一密钥）
+ *  - 不再使用 nodeToken，tracker 中间件仅校验 X-Node-Id 是否存在
  *
- * 注意:
- *  - nodeToken 仅首次注册由 Tracker 明文返回,之后仅持久化在本地配置;
- *    Tracker 侧只存 sha256(token),无法恢复。
- *  - 如果本机 role.tracker == true 且 trackers 为空/指向自身,则走 "本地直注册" 分支,
- *    直接写入 tracker_node 表,避免 HTTP 自调(此时后端可能尚未就绪)。
+ * publicUrl 语义:
+ *  - 由用户在 smanga.json 的 p2p.node.publicUrl 配置
+ *  - 仅在上报时做一次规范化(补 http:// 前缀、去尾部斜杠)
+ *  - tracker 侧也直接信任这个 URL
  */
 
 import os from 'os'
-import crypto from 'crypto'
-import { v4 as uuidv4 } from 'uuid'
 import { get_config, set_config } from '#utils/index'
 import prisma from '#start/prisma'
 import TrackerClient from './tracker_client.js'
@@ -28,17 +24,23 @@ import trackerProbeService from './tracker_probe_service.js'
 import { log_p2p_error } from '#utils/p2p_log'
 import { normalize_public_url, is_reportable_public_url } from '#utils/ip_resolver'
 
+/** 简化后的身份类型 */
 export type P2PIdentity = {
   nodeId: string
-  nodeToken: string
   nodeName: string
 }
 
+/** 单个 tracker 的注册结果 */
+export interface TrackerRegisterResult {
+  trackerUrl: string
+  success: boolean
+  publicUrl?: string
+  error?: string
+  reused?: boolean
+}
+
 /**
- * 解析节点对外可达 publicUrl:
- *  - 取 smanga.json 的 p2p.node.publicUrl 原值
- *  - 仅做 normalize_public_url(补 http://、去尾部斜杠)
- *  - host 为 loopback / 空 -> 返回 undefined(不入库)
+ * 解析节点对外可达 publicUrl
  */
 function resolvePublicUrl(p2p: any): string | undefined {
   const raw = p2p?.node?.publicUrl
@@ -48,328 +50,353 @@ function resolvePublicUrl(p2p: any): string | undefined {
 
 class P2PIdentityService {
   /**
-   * 获取身份;如缺失或已失效则自动(重新)注册
-   * - 本机 tracker:直接落库
-   * - 远端 tracker:HTTP 注册;若已有身份会先做一次心跳验证,无效则清身份重注册
+   * 向所有 tracker 并行注册，返回每个 tracker 的结果
+   *
+   * 这是三处注册逻辑的统一入口：
+   *  - 启动时 ensureIdentity()
+   *  - 手动点击按钮 manualRegister()
+   *  - 心跳 401/403 重注册
    */
-  async ensureIdentity(options: { forceReregister?: boolean } = {}): Promise<P2PIdentity | null> {
+  async registerToAllTrackers(options: {
+    forceReregister?: boolean
+  } = {}): Promise<{
+    results: TrackerRegisterResult[]
+    anySuccess: boolean
+    reused: boolean
+  }> {
     const config = get_config()
     const p2p = config?.p2p
     if (!p2p?.enable) {
-      console.warn('[p2p] ensureIdentity: 跳过 (smanga.json p2p.enable=false)')
-      return null
+      return { results: [], anySuccess: false, reused: false }
     }
     if (!p2p?.role?.node) {
-      console.warn('[p2p] ensureIdentity: 跳过 (smanga.json p2p.role.node=false)')
-      return null
+      return { results: [], anySuccess: false, reused: false }
     }
 
-    // 已存在且完整(且未强制重注册)
-    if (!options.forceReregister && p2p.node?.nodeId && p2p.node?.nodeToken) {
-      // 1) 若本机同时是 tracker,先校验本地 tracker_node 表是否真的存在该节点
-      //    防止数据漂移:config 里有 nodeId 但数据库被重置/清空,导致后续所有
-      //    /tracker/* 请求被中间件判为 "节点不存在"
-      if (this.isLocalTracker(p2p)) {
-        try {
-          const exists = await prisma.tracker_node.findUnique({
-            where: { nodeId: p2p.node.nodeId },
-          })
-          if (!exists) {
-            console.warn(
-              `[p2p] 检测到 config 中的 nodeId=${p2p.node.nodeId} 在 tracker_node 表中不存在,` +
-              '正在用配置里的凭证补录一条记录(避免"节点不存在")'
-            )
-            await this.syncLocalTrackerNode(p2p)
-          }
-        } catch (e: any) {
-          log_p2p_error('identity.syncLocalTrackerNode', e)
-        }
+    const serverKey = config?.serverKey
+    if (!serverKey) {
+      const err: TrackerRegisterResult = {
+        trackerUrl: '(本地)',
+        success: false,
+        error: '缺少 serverKey，无法注册节点',
       }
-
-      // 2) 远端有效性验证:防止 tracker 数据库被清/更换 tracker 等场景
-      const valid = await this.verifyIdentityOnTracker(p2p)
-      if (valid) {
-        // 身份有效,同时广播到其他 tracker(确保所有 tracker 都有此节点)
-        this.broadcastIdentity().catch(() => {})
-        return {
-          nodeId: p2p.node.nodeId,
-          nodeToken: p2p.node.nodeToken,
-          nodeName: p2p.node.nodeName || '',
-        }
-      }
-
-      // 3) 失效:清空本地身份后走下面的注册流程
-      console.warn(
-        `[p2p] 本地 nodeId=${p2p.node.nodeId} 在 tracker 端失效(可能被清库或换了 tracker),将自动重新注册`
-      )
-      this.clearLocalIdentity()
+      return { results: [err], anySuccess: false, reused: false }
     }
 
     const nodeName = p2p.node?.nodeName || os.hostname() || 'smanga-node'
+    const publicUrl = resolvePublicUrl(p2p)
 
-    // 1) 本机即 tracker 时,直接本地落库,不依赖 HTTP
+    // 判断是否已有身份（nodeId = serverKey）
+    const existingNodeId = p2p.node?.nodeId
+    const hasIdentity = !!existingNodeId && !options.forceReregister
+
+    // 已有身份且非强制重注册：先验证是否仍然有效
+    if (hasIdentity) {
+      const valid = await this.verifyIdentityQuick(p2p, existingNodeId, publicUrl)
+      if (valid) {
+        // 身份有效，仅推送更新到所有 tracker（更新 publicUrl/nodeName）
+        const results = await this.pushUpdateToAllTrackers(p2p, existingNodeId, nodeName, publicUrl)
+        console.log(
+          `[p2p] registerToAllTrackers: 复用 nodeId=${existingNodeId}，已更新各 tracker 信息`
+        )
+        return { results, anySuccess: results.some((r) => r.success), reused: true }
+      }
+      console.warn(
+        `[p2p] registerToAllTrackers: nodeId=${existingNodeId} 在 tracker 端已失效，将重新注册`
+      )
+    }
+
+    // 走完整注册：并行向所有 tracker 注册
+    const urls = trackerProbeService.getAllTrackerUrls()
+
+    // 对于本地 tracker 场景：直接 upsert 到 tracker_node 表
     if (this.isLocalTracker(p2p)) {
+      const localUrl = this.pickTrackerUrl(p2p) || '(本地)'
       try {
-        const identity = await this.registerLocally(nodeName, p2p)
-        console.log(`[p2p] 本机 tracker,已本地直注册 nodeId=${identity.nodeId}`)
-        // 本地注册后广播到其他 tracker
-        this.broadcastIdentity().catch(() => {})
-        return identity
+        await prisma.tracker_node.upsert({
+          where: { nodeId: serverKey },
+          update: {
+            nodeName,
+            publicUrl: publicUrl || undefined,
+            version: 'smanga-adonis',
+            userAgent: 'local-register',
+            online: 1,
+            lastHeartbeat: new Date(),
+          },
+          create: {
+            nodeId: serverKey,
+            nodeToken: '',
+            nodeName,
+            publicUrl: publicUrl || null,
+            version: 'smanga-adonis',
+            userAgent: 'local-register',
+            online: 1,
+            lastHeartbeat: new Date(),
+          },
+        })
+        console.log(`[p2p] 本地直注册成功 nodeId=${serverKey}`)
+
+        // 保存 identity 到配置
+        config.p2p.node.nodeId = serverKey
+        config.p2p.node.nodeName = nodeName
+        set_config(config)
+
+        const localResult: TrackerRegisterResult = {
+          trackerUrl: localUrl,
+          success: true,
+          publicUrl: publicUrl || '',
+        }
+
+        // 如果还有远程 tracker，也并行注册过去
+        if (urls.length > 0) {
+          const remoteResults = await this.registerToRemoteTrackers(
+            urls, serverKey, nodeName, publicUrl
+          )
+          return {
+            results: [localResult, ...remoteResults],
+            anySuccess: true,
+            reused: false,
+          }
+        }
+
+        return { results: [localResult], anySuccess: true, reused: false }
       } catch (e: any) {
         log_p2p_error('identity.registerLocally', e)
-        this.lastRegisterError = e
-        return null
+        return {
+          results: [{ trackerUrl: localUrl, success: false, error: e?.message || '本地注册失败' }],
+          anySuccess: false,
+          reused: false,
+        }
       }
     }
 
-    // 2) 远端 tracker,走 HTTP 注册
-    const trackerUrl = this.pickTrackerUrl(p2p)
-    if (!trackerUrl) {
-      console.warn(
-        '[p2p] ensureIdentity 失败: 未配置 trackers 且本机非 tracker 角色\n' +
-        '       请在 smanga.json 中设置 p2p.node.trackers = ["http://你的tracker地址:端口"]\n' +
-        '       或将本机配置为 tracker (p2p.role.tracker=true)'
-      )
-      this.lastRegisterError = new Error('未配置 trackers 且本机非 tracker 角色')
-      return null
-    }
+    // 纯远程 tracker 场景
+    const results = await this.registerToRemoteTrackers(urls, serverKey, nodeName, publicUrl)
+    const anySuccess = results.some((r) => r.success)
 
-    console.log(`[p2p] ensureIdentity: 准备向远端 tracker 注册 url=${trackerUrl}`)
-    const client = new TrackerClient(trackerUrl)
-    try {
-      const res = await client.register({
-        nodeName,
-        version: 'smanga-adonis',
-        publicUrl: resolvePublicUrl(p2p),
-        serverKey: get_config()?.serverKey,
-      })
-
-      // 回写配置
-      config.p2p.node.nodeId = res.nodeId
-      config.p2p.node.nodeToken = res.nodeToken
+    if (anySuccess) {
+      config.p2p.node.nodeId = serverKey
       config.p2p.node.nodeName = nodeName
-      if (res.publicUrl) {
-        config.p2p.node.publicUrl = normalize_public_url(res.publicUrl)
-      }
       set_config(config)
-
-      console.log(`[p2p] 节点自动注册成功 nodeId=${res.nodeId} publicUrl=${res.publicUrl}`)
-      // 注册成功后广播到其他 tracker
-      this.broadcastIdentity().catch(() => {})
-      return {
-        nodeId: res.nodeId,
-        nodeToken: res.nodeToken,
-        nodeName,
-      }
-    } catch (e: any) {
-      log_p2p_error(`identity.register(url=${trackerUrl})`, e)
-      // 记录远端返回的 message(若有),否则用原始 error.message
-      const remoteMsg: string | undefined = e?.response?.data?.message
-      this.lastRegisterError = remoteMsg ? new Error(remoteMsg) : e
-      // 给出明确的诊断建议
-      if (e?.code === 'ECONNREFUSED' || e?.code === 'ENOTFOUND' || e?.code === 'ETIMEDOUT') {
-        console.warn(
-          '[p2p] 网络层连接失败提示:\n' +
-          `       - 检查 tracker 地址 ${trackerUrl} 是否可达 (telnet / curl 测试)\n` +
-          '       - 检查 tracker 服务是否已启动\n' +
-          '       - 检查防火墙 / 端口映射'
-        )
-        this.lastRegisterError = new Error(`无法连接 tracker ${trackerUrl} (${e?.code})`)
-      }
-      return null
+      console.log(`[p2p] 远程注册完成: ${results.filter((r) => r.success).length}/${results.length} 个成功`)
     }
+
+    return { results, anySuccess, reused: false }
   }
 
   /**
-   * 校验本地 nodeId/nodeToken 在 tracker 端是否仍然有效
-   * - 本机 tracker:查 tracker_node 表
-   * - 远端 tracker:用 heartbeat 探测,401 视为失效;网络错误视为"暂时性",当作仍有效避免误清
+   * 并行向所有远程 tracker 注册
    */
-  private async verifyIdentityOnTracker(p2p: any): Promise<boolean> {
-    const nodeId = p2p?.node?.nodeId
-    const nodeToken = p2p?.node?.nodeToken
-    if (!nodeId || !nodeToken) return false
+  private async registerToRemoteTrackers(
+    urls: string[],
+    serverKey: string,
+    nodeName: string,
+    publicUrl: string | undefined
+  ): Promise<TrackerRegisterResult[]> {
+    if (!urls.length) return []
 
+    const settled = await Promise.allSettled(
+      urls.map(async (url): Promise<TrackerRegisterResult> => {
+        try {
+          const client = new TrackerClient(url)
+          const res = await client.register({
+            nodeName,
+            version: 'smanga-adonis',
+            publicUrl,
+            serverKey,
+          })
+          console.log(`[p2p] 注册成功 tracker=${url} nodeId=${res.nodeId}`)
+          return {
+            trackerUrl: url,
+            success: true,
+            publicUrl: res.publicUrl || '',
+          }
+        } catch (e: any) {
+          const remoteMsg: string | undefined = e?.response?.data?.message
+          const reason = remoteMsg || e?.message || '未知错误'
+          if (e?.code === 'ECONNREFUSED' || e?.code === 'ENOTFOUND' || e?.code === 'ETIMEDOUT') {
+            console.warn(`[p2p] 注册失败 ${url}: 网络不可达 (${e?.code})`)
+          } else {
+            log_p2p_error(`identity.register(url=${url})`, e)
+          }
+          return {
+            trackerUrl: url,
+            success: false,
+            error: reason,
+          }
+        }
+      })
+    )
+
+    return settled.map((s) =>
+      s.status === 'fulfilled' ? s.value : { trackerUrl: '(unknown)', success: false, error: '内部错误' }
+    )
+  }
+
+  /**
+   * 快速验证身份在 tracker 侧是否仍有效
+   * - 本地 tracker：查 tracker_node 表
+   * - 远程 tracker：发 heartbeat 探测，401/403 视为失效
+   */
+  private async verifyIdentityQuick(
+    p2p: any,
+    nodeId: string,
+    publicUrl: string | undefined
+  ): Promise<boolean> {
     if (this.isLocalTracker(p2p)) {
       try {
         const node = await prisma.tracker_node.findUnique({ where: { nodeId } })
-        if (!node) return false
-        const tokenHash = crypto.createHash('sha256').update(nodeToken).digest('hex')
-        return tokenHash === node.nodeToken
-      } catch (e: any) {
-        log_p2p_error('identity.verifyLocal', e)
-        return true // 数据库异常时不清身份
+        return !!node
+      } catch {
+        return true // 数据库异常时不误清身份
       }
     }
 
     const url = this.pickTrackerUrl(p2p)
-    if (!url) return true // 取不到 url 不当作失效
+    if (!url) return true
     try {
-      const client = new TrackerClient(url, nodeId, nodeToken)
-      await client.heartbeat({
-        publicUrl: resolvePublicUrl(p2p),
-      })
+      const client = new TrackerClient(url, nodeId)
+      await client.heartbeat({ publicUrl })
       return true
     } catch (e: any) {
       const status = e?.response?.status
-      if (status === 401 || status === 403) {
-        return false
+      if (status === 401 || status === 403) return false
+      return true // 网络错误保留身份
+    }
+  }
+
+  /**
+   * 向所有 tracker 推送更新（不换 nodeId）
+   */
+  private async pushUpdateToAllTrackers(
+    p2p: any,
+    nodeId: string,
+    nodeName: string,
+    publicUrl: string | undefined
+  ): Promise<TrackerRegisterResult[]> {
+    const results: TrackerRegisterResult[] = []
+
+    // 本地 tracker
+    if (this.isLocalTracker(p2p)) {
+      try {
+        await prisma.tracker_node.upsert({
+          where: { nodeId },
+          update: {
+            nodeName,
+            publicUrl: publicUrl || undefined,
+            online: 1,
+            lastHeartbeat: new Date(),
+          },
+          create: {
+            nodeId,
+            nodeToken: '',
+            nodeName,
+            publicUrl: publicUrl || null,
+            version: 'smanga-adonis',
+            userAgent: 'local-update',
+            online: 1,
+            lastHeartbeat: new Date(),
+          },
+        })
+        results.push({ trackerUrl: '(本地)', success: true, publicUrl: publicUrl || '', reused: true })
+      } catch (e: any) {
+        results.push({ trackerUrl: '(本地)', success: false, error: e?.message, reused: true })
       }
-      // 网络错误等暂时性问题:不当作失效,避免误清身份
-      if (process.env.P2P_DEBUG) {
-        console.warn(`[p2p] identity.verify 网络异常,保留身份 (status=${status} msg=${e?.message})`)
-      }
-      return true
     }
+
+    // 远程 tracker
+    const urls = trackerProbeService.getAllTrackerUrls()
+    const settled = await Promise.allSettled(
+      urls.map(async (url): Promise<TrackerRegisterResult> => {
+        try {
+          const client = new TrackerClient(url, nodeId)
+          await client.heartbeat({ publicUrl })
+          try {
+            await client.updateNode({ nodeName })
+          } catch {
+            // nodeName 更新失败不阻塞
+          }
+          console.log(`[p2p] 推送更新成功 tracker=${url}`)
+          return { trackerUrl: url, success: true, publicUrl: publicUrl || '', reused: true }
+        } catch (e: any) {
+          const reason = e?.response?.data?.message || e?.message || '未知错误'
+          return { trackerUrl: url, success: false, error: reason, reused: true }
+        }
+      })
+    )
+
+    for (const s of settled) {
+      results.push(
+        s.status === 'fulfilled'
+          ? s.value
+          : { trackerUrl: '(unknown)', success: false, error: '内部错误', reused: true }
+      )
+    }
+
+    return results
   }
 
   /**
-   * 清空本地配置中的 nodeId / nodeToken,nodeName 保留
+   * 获取身份；如缺失或已失效则自动注册
+   * 返回 boolean 表示是否注册成功
    */
-  private clearLocalIdentity() {
-    const config = get_config()
-    if (config?.p2p?.node) {
-      config.p2p.node.nodeId = ''
-      config.p2p.node.nodeToken = ''
-      set_config(config)
+  async ensureIdentity(options: { forceReregister?: boolean } = {}): Promise<boolean> {
+    const { anySuccess } = await this.registerToAllTrackers(options)
+    if (!anySuccess) {
+      console.warn('[p2p] ensureIdentity: 所有 tracker 注册均失败')
     }
+    return anySuccess
   }
 
   /**
-   * 主动作废本地身份并重新注册:供心跳/控制器在收到 401 / 节点不存在时调用
-   * - 成功:返回新的身份
-   * - 失败:抛出最近一次注册失败的原因(便于上层把详细错误透给前端)
-   */
-  async invalidateAndReregister(): Promise<P2PIdentity> {
-    this.clearLocalIdentity()
-    this.lastRegisterError = null
-    const fresh = await this.ensureIdentity({ forceReregister: true })
-    if (!fresh) {
-      const reason = this.lastRegisterError?.message || this.lastRegisterError?.toString() || '未知原因'
-      const err: any = new Error(`节点重新注册失败: ${reason}`)
-      err.cause = this.lastRegisterError
-      throw err
-    }
-    return fresh
-  }
-
-  /**
-   * 最近一次注册过程中遇到的错误(由 ensureIdentity 内部记录,供 invalidateAndReregister 上抛)
-   */
-  private lastRegisterError: any = null
-
-  /**
-   * 手动注册(用户在设置页点"立即注册节点"按钮触发)
-   *
-   * 与 invalidateAndReregister 的差异:
-   *  - 若本地 nodeId/nodeToken 在 tracker 仍然有效 → 不生成新 nodeId,
-   *    仅把最新 publicUrl / nodeName 推送到 tracker(心跳+更新)
-   *  - 若身份失效或本地无身份 → 才走完整重注册流程
-   *
-   * 这样可避免每次手动点击都产生一个新的节点记录、污染 tracker 节点表,
-   * 也能让用户修改 publicUrl/节点名后一键"同步到 tracker"。
+   * 手动注册（用户在设置页点击"立即注册节点"按钮触发）
+   * 返回每个 tracker 的结果供前端展示
    */
   async manualRegister(): Promise<{
-    identity: P2PIdentity
-    reused: boolean // true=复用已有身份仅更新信息; false=走了全新注册
+    results: TrackerRegisterResult[]
+    anySuccess: boolean
+    reused: boolean
   }> {
     const p2p = get_config()?.p2p
     if (!p2p?.enable) throw new Error('P2P 未启用')
     if (!p2p?.role?.node) throw new Error('未开启节点角色')
 
-    const hasLocalIdentity = !!(p2p.node?.nodeId && p2p.node?.nodeToken)
-
-    // 1) 已有本地身份 → 先验证在 tracker 侧是否仍有效
-    if (hasLocalIdentity) {
-      const valid = await this.verifyIdentityOnTracker(p2p)
-      if (valid) {
-        // 有效 → 只推送最新信息到 tracker(不换 nodeId)
-        await this.pushUpdateToTracker(p2p)
-        console.log(
-          `[p2p] manualRegister: 节点已存在于 tracker,复用 nodeId=${p2p.node.nodeId} 并更新信息`
-        )
-        return {
-          identity: {
-            nodeId: p2p.node.nodeId,
-            nodeToken: p2p.node.nodeToken,
-            nodeName: p2p.node.nodeName || '',
-          },
-          reused: true,
-        }
-      }
-      console.warn(
-        `[p2p] manualRegister: 本地 nodeId=${p2p.node.nodeId} 在 tracker 侧已失效,将重新注册`
-      )
-    }
-
-    // 2) 无身份或身份失效 → 走完整重注册
-    const fresh = await this.invalidateAndReregister()
-    return { identity: fresh, reused: false }
+    return this.registerToAllTrackers()
   }
 
   /**
-   * 将本地配置里的最新端点信息推送到 tracker
-   *  - 本机 tracker: 直接写 tracker_node 表
-   *  - 远端 tracker: heartbeat 覆盖 publicUrl,updateNode 覆盖 nodeName
-   *
-   * 任一子步骤失败都直接抛错给调用方,让用户看到具体原因。
+   * 主动作废本地身份并重新注册（供心跳 401/403 时调用）
    */
-  private async pushUpdateToTracker(p2p: any): Promise<void> {
-    const nodeId: string = p2p.node.nodeId
-    const nodeToken: string = p2p.node.nodeToken
-    const nodeName: string = p2p.node?.nodeName || os.hostname() || 'smanga-node'
-
-    // 本机 tracker: 直接走 syncLocalTrackerNode(upsert)路径,避免 HTTP 自调
-    if (this.isLocalTracker(p2p)) {
-      await this.syncLocalTrackerNode(p2p)
-      // nodeName 需要单独更新(syncLocalTrackerNode 只在 create 时写入 nodeName)
-      await prisma.tracker_node.update({
-        where: { nodeId },
-        data: { nodeName },
-      })
-      return
+  async invalidateAndReregister(): Promise<boolean> {
+    const config = get_config()
+    if (config?.p2p?.node) {
+      config.p2p.node.nodeId = ''
+      set_config(config)
     }
-
-    // 远端 tracker: heartbeat + updateNode
-    const url = this.pickTrackerUrl(p2p)
-    if (!url) throw new Error('未配置 tracker 地址')
-
-    const client = new TrackerClient(url, nodeId, nodeToken)
-
-    // heartbeat 会触发 tracker 端反向可达性校验并更新 publicUrl
-    await client.heartbeat({
-      publicUrl: resolvePublicUrl(p2p),
-    })
-
-    // nodeName 通过 updateNode 同步(heartbeat 不处理 nodeName)
-    try {
-      await client.updateNode({ nodeName })
-    } catch (e: any) {
-      // nodeName 更新失败不阻塞主流程,只记录日志
-      log_p2p_error('identity.manualRegister.updateNodeName', e)
+    const { anySuccess } = await this.registerToAllTrackers({ forceReregister: true })
+    if (!anySuccess) {
+      console.warn('[p2p] invalidateAndReregister: 重新注册失败')
     }
+    return anySuccess
   }
 
   /**
-   * 读取当前身份(不触发注册)
+   * 读取当前身份（不触发注册）
+   * nodeId 直接取 serverKey
    */
   getIdentity(): P2PIdentity | null {
-    const p2p = get_config()?.p2p
-    if (!p2p?.node?.nodeId || !p2p?.node?.nodeToken) return null
+    const config = get_config()
+    const serverKey = config?.serverKey
+    if (!serverKey) return null
+    const p2p = config?.p2p
     return {
-      nodeId: p2p.node.nodeId,
-      nodeToken: p2p.node.nodeToken,
-      nodeName: p2p.node.nodeName || '',
+      nodeId: serverKey,
+      nodeName: p2p?.node?.nodeName || '',
     }
   }
 
   /**
-   * 判定当前配置下 tracker 是否就是本机:
-   *  - role.tracker 必须为 true
-   *  - 满足以下任一:
-   *      a) node.trackers 为空
-   *      b) node.trackers[0] host 指向 localhost / 127.0.0.1 / ::1
-   *      c) node.trackers[0] 与 tracker.publicUrl 完全一致
+   * 判定当前配置下 tracker 是否就是本机
    */
   private isLocalTracker(p2p: any): boolean {
     if (!p2p?.role?.tracker) return false
@@ -397,111 +424,19 @@ class P2PIdentityService {
   }
 
   /**
-   * 本地直注册:自行生成 nodeId/rawToken,写入 tracker_node 表,并回写 smanga.json
-   * 用于 "本机既是 node 又是 tracker" 的一体机场景,避免 HTTP 自调
-   *
-   * publicUrl 决策:
-   *  - 用户在 smanga.json 配置了 p2p.node.publicUrl(且 host 非 loopback) -> 规范化后采用
-   *  - 否则置 null(留空),等节点首次心跳/外部请求时由 tracker 侧识别
-   *    (一体机自连无法识别外部 IP,这一步交给后续真实远程心跳来填补)
-   */
-  private async registerLocally(nodeName: string, p2p: any): Promise<P2PIdentity> {
-    const nodeId = get_config()?.serverKey || uuidv4()
-    const rawToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '')
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
-
-    const cfgPublicUrl = resolvePublicUrl(p2p) // 已过滤掉 loopback
-
-    if (!cfgPublicUrl) {
-      console.warn(
-        '[p2p] 本地直注册:未配置 p2p.node.publicUrl,publicUrl 将先置空。\n' +
-        '       如本机需要被外部节点访问,请在 smanga.json 设置:\n' +
-        '         p2p.node.publicUrl = "你的公网IP或域名[:端口][/path]"\n' +
-        '       示例: "example.com:9797/api" 或 "http://1.2.3.4:9797/api"'
-      )
-    }
-
-    await prisma.tracker_node.create({
-      data: {
-        nodeId,
-        nodeToken: tokenHash,
-        nodeName: nodeName || null,
-        publicUrl: cfgPublicUrl || null,
-        version: 'smanga-adonis',
-        userAgent: 'local-init',
-        online: 1,
-        lastHeartbeat: new Date(),
-      },
-    })
-
-    // 回写配置(仅 nodeId/nodeToken/nodeName,publicUrl 不主动写入 loopback)
-    const config = get_config()
-    config.p2p.node.nodeId = nodeId
-    config.p2p.node.nodeToken = rawToken
-    config.p2p.node.nodeName = nodeName
-    set_config(config)
-
-    return { nodeId, nodeToken: rawToken, nodeName }
-  }
-
-  /**
-   * 一体机自愈:当 config 中有 nodeId/nodeToken,但 tracker_node 表没有对应记录时,
-   * 用配置里的 rawToken 计算 hash 并补录一条 tracker_node 记录。
-   * 这样后续 /tracker/* 请求的 X-Node-Id/X-Node-Token 鉴权就能通过。
-   */
-  private async syncLocalTrackerNode(p2p: any): Promise<void> {
-    const nodeId: string = p2p?.node?.nodeId
-    const rawToken: string = p2p?.node?.nodeToken
-    if (!nodeId || !rawToken) return
-
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
-
-    const cfgPublicUrl = resolvePublicUrl(p2p)
-
-    await prisma.tracker_node.upsert({
-      where: { nodeId },
-      update: {
-        // 仅更新必要字段,避免覆盖人工修改
-        nodeToken: tokenHash,
-        online: 1,
-        lastHeartbeat: new Date(),
-        ...(cfgPublicUrl && { publicUrl: cfgPublicUrl }),
-      },
-      create: {
-        nodeId,
-        nodeToken: tokenHash,
-        nodeName: p2p?.node?.nodeName || null,
-        // 仅当配置里显式给了真实可达 URL(非 loopback)才入库,避免污染
-        publicUrl: cfgPublicUrl || null,
-        version: 'smanga-adonis',
-        userAgent: 'local-sync',
-        online: 1,
-        lastHeartbeat: new Date(),
-      },
-    })
-
-    console.log(`[p2p] 已补录 tracker_node 记录 nodeId=${nodeId}`)
-  }
-
-  /**
-   * 选择 tracker url:
-   *  1. 节点配置的 trackers 列表中优先取第一个可达的
-   *  2. 若自身是 tracker 角色,且 publicUrl 非空则使用
-   *  3. 若自身是 tracker 且均为空,则尝试 http://127.0.0.1:{主服务端口}
+   * 选择 tracker url
    */
   pickTrackerUrl(p2p: any): string | null {
     const trackers: string[] = p2p?.node?.trackers || []
     if (trackers.length > 0) {
-      // 从可达列表中优先选择
       const reachable = trackerProbeService.getReachableTrackers()
       if (reachable.length > 0) return reachable[0]
-      return trackers[0] // 保底：全部不可达时也返回第一个，让调用方尝试
+      return trackers[0]
     }
 
     if (p2p?.role?.tracker) {
       const publicUrl = p2p?.tracker?.publicUrl
       if (publicUrl) return publicUrl
-      // 回落到本地主服务(AdonisJS 默认端口,通过 .env PORT 获取)
       const port = process.env.PORT || 3000
       return `http://127.0.0.1:${port}`
     }
@@ -515,7 +450,6 @@ class P2PIdentityService {
   getReachableTrackerUrls(p2p: any): string[] {
     const trackers: string[] = p2p?.node?.trackers || []
     if (trackers.length === 0) {
-      // 自身是 tracker 时回落到本地地址
       if (p2p?.role?.tracker) {
         const url = this.pickTrackerUrl(p2p)
         return url ? [url] : []
@@ -523,54 +457,6 @@ class P2PIdentityService {
       return []
     }
     return trackerProbeService.getReachableTrackers()
-  }
-
-  /**
-   * 将本节点身份广播(导入)到所有可达的 tracker
-   *
-   * 调用时机:
-   *  - ensureIdentity() 注册成功后
-   *  - 配置变更(trackers 列表变化)后
-   *
-   * 这是多 tracker 同步的关键:
-   *  - 节点在 tracker A 注册后,将相同的 nodeId+nodeToken 导入 tracker B C
-   *  - 之后心跳广播到所有 tracker,各 tracker 都能独立维护该节点的在线状态
-   *  - 导入失败不阻塞主流程,后续心跳会持续触发重试
-   */
-  async broadcastIdentity(): Promise<void> {
-    const config = get_config()
-    const p2p = config?.p2p
-    if (!p2p?.enable || !p2p?.role?.node) return
-
-    const nodeId = p2p.node?.nodeId
-    const nodeToken = p2p.node?.nodeToken
-    if (!nodeId || !nodeToken) return
-
-    const allUrls = this.getReachableTrackerUrls(p2p)
-    if (allUrls.length <= 1) return // 只有 0 或 1 个 tracker,无需广播
-
-    const nodeName = p2p.node?.nodeName || undefined
-    const publicUrl = resolvePublicUrl(p2p)
-
-    for (const url of allUrls) {
-      try {
-        const client = new TrackerClient(url)
-        await client.importNode({
-          nodeId,
-          nodeToken,
-          nodeName,
-          publicUrl,
-          version: 'smanga-adonis',
-        })
-        console.log(`[p2p] 节点身份已同步到 tracker: ${url}`)
-      } catch (e: any) {
-        // 导入失败不阻塞:心跳会持续尝试;
-        // 但如果导入返回 409/重复等,也属于正常(节点已存在)
-        if (process.env.P2P_DEBUG) {
-          console.warn(`[p2p] 节点身份同步到 ${url} 失败: ${e?.message}`)
-        }
-      }
-    }
   }
 }
 

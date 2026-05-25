@@ -56,7 +56,7 @@ export default class P2PTransfersController {
     if (!url) return '未配置 Tracker 地址'
 
     try {
-      const client = new TrackerClient(url, id.nodeId, id.nodeToken)
+      const client = new TrackerClient(url, id.nodeId)
       await client.heartbeat({})
       return null // 心跳成功,节点在线
     } catch (e: any) {

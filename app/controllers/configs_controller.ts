@@ -315,9 +315,10 @@ export default class ConfigsController {
       // 而不会生成新 nodeId,避免每次改配置都污染 tracker 节点表
       p2pIdentityService
         .manualRegister()
-        .then(({ identity, reused }) => {
+        .then(({ results, reused }) => {
+          const ok = results.filter((r) => r.success).length
           console.log(
-            `[p2p] 配置变更,${reused ? '已更新' : '已重新注册'}节点 nodeId=${identity?.nodeId}`
+            `[p2p] 配置变更,${reused ? '已更新' : '已重新注册'}节点,成功 ${ok}/${results.length}`
           )
         })
         .catch((err: any) => {
@@ -363,12 +364,14 @@ export default class ConfigsController {
     }
 
     try {
-      // 手动注册:若 tracker 已存在该节点则复用并更新信息,否则才生成新 nodeId
-      const { identity, reused } = await p2pIdentityService.manualRegister()
+      const { results, anySuccess, reused } = await p2pIdentityService.manualRegister()
+      const successCount = results.filter((r) => r.success).length
+      const failCount = results.filter((r) => !r.success).length
+      const nodeName = get_config()?.p2p?.node?.nodeName || ''
       return response.json({
         code: 200,
-        message: reused ? '节点信息已更新到 tracker' : '节点注册成功',
-        data: { nodeId: identity?.nodeId, nodeName: identity?.nodeName, reused },
+        message: `已完成注册: ${successCount} 成功, ${failCount} 失败`,
+        data: { results, anySuccess, reused, nodeName },
       })
     } catch (err: any) {
       const reason = err?.message || String(err) || '未知错误'

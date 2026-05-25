@@ -114,7 +114,7 @@ function buildClient(): TrackerClient | null {
   const url = p2pIdentityService.pickTrackerUrl(cfg)
   if (!url) return null
 
-  return new TrackerClient(url, id.nodeId, id.nodeToken)
+  return new TrackerClient(url, id.nodeId)
 }
 
 /**
@@ -128,7 +128,7 @@ function buildClients(): TrackerClient[] {
   if (!id) return []
 
   const urls = p2pIdentityService.getReachableTrackerUrls(cfg)
-  return urls.map((url) => new TrackerClient(url, id.nodeId, id.nodeToken))
+  return urls.map((url) => new TrackerClient(url, id.nodeId))
 }
 
 /**

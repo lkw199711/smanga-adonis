@@ -258,7 +258,7 @@ class TrackerSyncService {
         await prisma.tracker_node.create({
           data: {
             nodeId: n.nodeId,
-            nodeToken: crypto.randomBytes(32).toString('hex'), // 占位,心跳会更新
+            nodeToken: '',
             nodeName: n.nodeName || null,
             publicUrl: n.publicUrl || null,
             version: n.version || null,
@@ -341,7 +341,7 @@ class TrackerSyncService {
           await prisma.tracker_node.create({
             data: {
               nodeId: m.nodeId,
-              nodeToken: crypto.randomBytes(32).toString('hex'),
+              nodeToken: '',
               nodeName: m.nodeName || null,
               publicUrl: m.publicUrl || null,
               version: null,

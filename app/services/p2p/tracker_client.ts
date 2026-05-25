@@ -6,7 +6,8 @@
  *  - 群组创建/加入/退出/列表/成员
  *  - 共享索引上报
  *
- * 所有请求会自动携带 X-Node-Id / X-Node-Token 头(除 register 外)
+ * 所有请求会自动携带 X-Node-Id 头(除 register 外)
+ * 鉴权已简化为仅校验 nodeId = serverKey，不再使用 nodeToken
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
@@ -26,12 +27,10 @@ export class TrackerClient {
   private baseUrl: string
   private http: AxiosInstance
   private nodeId?: string
-  private nodeToken?: string
 
-  constructor(baseUrl: string, nodeId?: string, nodeToken?: string) {
+  constructor(baseUrl: string, nodeId?: string) {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
     this.nodeId = nodeId
-    this.nodeToken = nodeToken
     this.http = axios.create({
       baseURL: this.baseUrl,
       timeout: 15 * 1000,
@@ -40,18 +39,16 @@ export class TrackerClient {
   }
 
   /**
-   * 使用当前节点凭证填充鉴权头
+   * 使用当前节点 nodeId 填充鉴权头
    */
   private auth(config: AxiosRequestConfig = {}): AxiosRequestConfig {
     config.headers = config.headers || {}
     if (this.nodeId) (config.headers as any)['X-Node-Id'] = this.nodeId
-    if (this.nodeToken) (config.headers as any)['X-Node-Token'] = this.nodeToken
     return config
   }
 
-  setCredentials(nodeId: string, nodeToken: string) {
+  setCredentials(nodeId: string) {
     this.nodeId = nodeId
-    this.nodeToken = nodeToken
   }
 
   // ============ Node ============
@@ -81,7 +78,6 @@ export class TrackerClient {
    */
   async importNode(payload: {
     nodeId: string
-    nodeToken: string
     nodeName?: string
     publicUrl?: string
     version?: string
@@ -132,9 +128,6 @@ export class TrackerClient {
    *
    * 复用现有 /tracker/group/:groupNo/members 接口,
    * 返回 true / false;若 tracker 不可达或接口异常,**抛出异常**由调用方决定降级策略。
-   *
-   * 注意: 此处用当前节点的 X-Node-Token 去调 tracker,前提是当前节点已是该群成员,
-   * 否则 tracker 会返回 404(群组不存在/未加入),此时我们认为 "无法判定" → 抛错。
    */
   async checkMembership(groupNo: string, targetNodeId: string): Promise<boolean> {
     const members = (await this.groupMembers(groupNo)) as Array<{ nodeId: string }>
@@ -288,7 +281,8 @@ export function get_default_tracker_client(): TrackerClient | null {
   const url = reachable.length > 0 ? reachable[0] : (cfg?.node?.trackers || [])[0]
   if (!url) return null
 
-  return new TrackerClient(url, cfg.node?.nodeId, cfg.node?.nodeToken)
+  const nodeId = get_config()?.serverKey
+  return new TrackerClient(url, nodeId)
 }
 
 export default TrackerClient

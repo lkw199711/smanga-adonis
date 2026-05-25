@@ -3,7 +3,6 @@ import type { NextFn } from '@adonisjs/core/types/http'
 import prisma from '#start/prisma'
 import { SResponse } from '#interfaces/response'
 import { get_config } from '#utils/index'
-import crypto from 'crypto'
 
 function normalizeApiPath(url: string) {
   const path = url.split('?')[0] || '/'
@@ -14,8 +13,9 @@ function normalizeApiPath(url: string) {
 /**
  * Tracker 鉴权中间件
  * - 放行 /tracker/node/register (公开接口)
- * - 其他接口要求 Header: X-Node-Id + X-Node-Token
+ * - 其他接口要求 Header: X-Node-Id
  * - 命中后将 trackerNode 挂到 request 上,供控制器使用
+ * - 鉴权已精简为仅校验 nodeId(=serverKey),不再使用 nodeToken
  */
 export default class TrackerAuthMiddleware {
   async handle(ctx: HttpContext, next: NextFn) {
@@ -54,9 +54,8 @@ export default class TrackerAuthMiddleware {
     }
 
     const nodeId = request.header('x-node-id')
-    const nodeToken = request.header('x-node-token')
 
-    if (!nodeId || !nodeToken) {
+    if (!nodeId) {
       return response
         .status(401)
         .json(new SResponse({ code: 1, message: '缺少节点鉴权信息', status: 'unauthorized' }))
@@ -91,14 +90,6 @@ export default class TrackerAuthMiddleware {
           status: 'offline',
         })
       )
-    }
-
-    // 校验 token hash
-    const tokenHash = crypto.createHash('sha256').update(nodeToken).digest('hex')
-    if (tokenHash !== node.nodeToken) {
-      return response
-        .status(401)
-        .json(new SResponse({ code: 1, message: '节点令牌无效', status: 'unauthorized' }))
     }
 
     // 挂载节点上下文

@@ -41,7 +41,7 @@ function get_clients(): TrackerClient[] {
   if (!id) return []
 
   const urls = p2pIdentityService.getReachableTrackerUrls(cfg)
-  return urls.map((url) => new TrackerClient(url, id.nodeId, id.nodeToken))
+  return urls.map((url) => new TrackerClient(url, id.nodeId))
 }
 
 /**

@@ -378,18 +378,24 @@ class TrackerNodeService {
 
     // 优先使用客户端提供的 serverKey 作为 nodeId,保证同实例始终注册为同一节点
     const nodeId = payload.serverKey || uuidv4()
-    const rawToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '')
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 
     const persistUrl = isLoopback ? null : (decidedUrl || null)
 
-    await prisma.tracker_node.create({
-      data: {
+    await prisma.tracker_node.upsert({
+      where: { nodeId },
+      update: {
+        nodeName: payload.nodeName || undefined,
+        publicUrl: persistUrl || undefined,
+        version: payload.version || undefined,
+        userAgent: userAgent || undefined,
+        online: 1,
+        lastHeartbeat: new Date(),
+      },
+      create: {
         nodeId,
-        nodeToken: tokenHash,
+        nodeToken: '',
         nodeName: payload.nodeName || null,
-        // 本机自连情况下不入公网 url,避免污染 seeds 列表
-        publicUrl: persistUrl,
+        publicUrl: persistUrl || null,
         version: payload.version || null,
         userAgent: userAgent || null,
         online: 1,
@@ -405,7 +411,6 @@ class TrackerNodeService {
 
     return {
       nodeId,
-      nodeToken: rawToken,
       publicUrl: persistUrl || '',
     }
   }
@@ -566,26 +571,23 @@ class TrackerNodeService {
    * 导入节点(从其他 tracker 同步而来)
    *
    * 与 register 的区别:
-   *  - 使用调用方提供的 nodeId / nodeToken,不生成新 ID
+   *  - 使用调用方提供的 nodeId,不生成新 ID
    *  - 不做可达性验证(节点已由源 tracker 验证过)
    *  - 不做邀请码/节点上限等注册限制(这是同步,不是新注册)
    *  - upsert 语义:已存在则更新信息,不存在则创建
    */
   async importNode(payload: {
     nodeId: string
-    nodeToken: string
     nodeName?: string | null
     publicUrl?: string | null
     version?: string | null
     userAgent?: string | null
   }): Promise<{ nodeId: string; publicUrl: string }> {
-    const tokenHash = crypto.createHash('sha256').update(payload.nodeToken).digest('hex')
     const decidedUrl = decide_public_url(payload.publicUrl)
 
     await prisma.tracker_node.upsert({
       where: { nodeId: payload.nodeId },
       update: {
-        nodeToken: tokenHash,
         nodeName: payload.nodeName || undefined,
         publicUrl: decidedUrl || undefined,
         version: payload.version || undefined,
@@ -595,7 +597,7 @@ class TrackerNodeService {
       },
       create: {
         nodeId: payload.nodeId,
-        nodeToken: tokenHash,
+        nodeToken: '',
         nodeName: payload.nodeName || null,
         publicUrl: decidedUrl || null,
         version: payload.version || null,

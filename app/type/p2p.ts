@@ -46,7 +46,6 @@ export enum ConnectMode {
 // ============ 配置对象类型 ============
 export type P2PNodeConfig = {
   nodeId: string
-  nodeToken: string
   nodeName: string
   /**
    * 节点对外可达 URL(统一字段,替代旧的 publicHost + publicPort)
@@ -112,7 +111,6 @@ export type NodeRegisterPayload = {
 
 export type NodeRegisterResult = {
   nodeId: string
-  nodeToken: string
   /** tracker 入库的 publicUrl(本机 loopback 注册时为空) */
   publicUrl: string
 }

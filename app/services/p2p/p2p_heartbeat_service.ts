@@ -33,10 +33,10 @@ class P2PHeartbeatService {
     }
 
     // 首次确保身份存在
-    const identity = await p2pIdentityService.ensureIdentity()
-    if (!identity) {
+    const ok = await p2pIdentityService.ensureIdentity()
+    if (!ok) {
       console.warn(
-        '[p2p] 心跳服务启动失败:无有效身份 (具体原因见上方 [p2p] identity.* 日志)'
+        '[p2p] 心跳服务启动失败:所有 tracker 注册均失败'
       )
       return
     }
@@ -97,7 +97,7 @@ class P2PHeartbeatService {
     await Promise.all(
       list.map(async (url) => {
         try {
-          const client = new TrackerClient(url, identity.nodeId, identity.nodeToken)
+          const client = new TrackerClient(url, identity.nodeId)
           // publicUrl 完全信任用户配置:仅做 normalize(补 http://、去尾斜杠)
           // 不再拆分 host/port、不再用本机 listenPort 覆盖,避免与用户填的反代地址冲突
           let publicUrl: string | undefined = undefined
@@ -127,11 +127,11 @@ class P2PHeartbeatService {
           // 此时自动作废本地身份并重新注册,避免陷入"节点不存在"死循环
           if (status === 401 || status === 403) {
             console.warn(
-              `[p2p] 心跳 ${url} 返回 ${status} (${e?.response?.data?.message || ''}),自动重新注册节点`
+              `[p2p] 心跳 ${url} 返回 ${status} (${e?.response?.data?.message || ''}),自动重新注册`
             )
             try {
-              const fresh = await p2pIdentityService.invalidateAndReregister()
-              console.log(`[p2p] 节点已重新注册 nodeId=${fresh.nodeId}`)
+              const ok = await p2pIdentityService.invalidateAndReregister()
+              console.log(`[p2p] 节点重新注册${ok ? '成功' : '失败'}`)
             } catch (reErr: any) {
               console.warn(
                 `[p2p] 节点自动重新注册失败: ${reErr?.message || reErr}`

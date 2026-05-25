@@ -112,7 +112,7 @@ export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
 
   for (const url of trackerUrls) {
     try {
-      const tracker = new TrackerClient(url, id.nodeId, id.nodeToken)
+      const tracker = new TrackerClient(url, id.nodeId)
       const raw: any[] = await tracker.findSeeds(args.groupNo, queryParams)
       for (const r of raw || []) {
         const baseUrl = pickBaseUrl(r)
