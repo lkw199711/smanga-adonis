@@ -2,6 +2,7 @@ import prisma from '#start/prisma'
 import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
 import { get_config } from '#utils/index'
+import membershipCache from '#services/p2p/p2p_membership_cache'
 import {
   is_reportable_public_url,
   normalize_public_url,
@@ -37,6 +38,265 @@ function decide_public_url(reported: string | undefined | null): string | null {
  * 负责节点的注册/心跳/查询/注销等生命周期管理
  */
 class TrackerNodeService {
+  /**
+   * 管理员: 查看当前 tracker 注册节点列表.
+   */
+  async adminListAll(params: {
+    page?: number
+    pageSize?: number
+    keyword?: string
+    online?: number
+    banned?: number
+  }) {
+    const page = Math.max(1, Number(params.page) || 1)
+    const pageSize = Math.min(200, Math.max(1, Number(params.pageSize) || 20))
+    const where: any = {}
+
+    if (params.online !== undefined && params.online !== null && !Number.isNaN(Number(params.online))) {
+      where.online = Number(params.online)
+    }
+    if (params.banned !== undefined && params.banned !== null && !Number.isNaN(Number(params.banned))) {
+      where.banned = Number(params.banned)
+    }
+    if (params.keyword && params.keyword.trim()) {
+      const kw = params.keyword.trim()
+      where.OR = [
+        { nodeId: { contains: kw } },
+        { nodeName: { contains: kw } },
+        { publicUrl: { contains: kw } },
+        { version: { contains: kw } },
+        { userAgent: { contains: kw } },
+        { bannedReason: { contains: kw } },
+      ]
+    }
+
+    const [list, count] = await Promise.all([
+      prisma.tracker_node.findMany({
+        where,
+        orderBy: { updateTime: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          trackerNodeId: true,
+          nodeId: true,
+          nodeName: true,
+          publicUrl: true,
+          version: true,
+          userAgent: true,
+          online: true,
+          lastHeartbeat: true,
+          totalUpload: true,
+          totalDownload: true,
+          banned: true,
+          bannedReason: true,
+          createTime: true,
+          updateTime: true,
+        },
+      }),
+      prisma.tracker_node.count({ where }),
+    ])
+
+    const nodeIds = list.map((n) => n.nodeId)
+    const [membershipCounts, ownedGroupCounts, shareIndexCounts, shareManifestCounts] =
+      nodeIds.length
+        ? await Promise.all([
+            prisma.tracker_membership.groupBy({
+              by: ['nodeId'],
+              where: { nodeId: { in: nodeIds } },
+              _count: { nodeId: true },
+            }),
+            prisma.tracker_group.groupBy({
+              by: ['ownerNodeId'],
+              where: { ownerNodeId: { in: nodeIds } },
+              _count: { ownerNodeId: true },
+            }),
+            prisma.tracker_share_index.groupBy({
+              by: ['nodeId'],
+              where: { nodeId: { in: nodeIds } },
+              _count: { nodeId: true },
+            }),
+            prisma.tracker_share_manifest.groupBy({
+              by: ['nodeId'],
+              where: { nodeId: { in: nodeIds } },
+              _count: { nodeId: true },
+            }),
+          ])
+        : [[], [], [], []]
+
+    const membershipMap = new Map(membershipCounts.map((r) => [r.nodeId, r._count.nodeId]))
+    const ownedGroupMap = new Map(ownedGroupCounts.map((r) => [r.ownerNodeId, r._count.ownerNodeId]))
+    const shareIndexMap = new Map(shareIndexCounts.map((r) => [r.nodeId, r._count.nodeId]))
+    const shareManifestMap = new Map(shareManifestCounts.map((r) => [r.nodeId, r._count.nodeId]))
+
+    return {
+      list: list.map((n) => ({
+        ...n,
+        totalUpload: n.totalUpload.toString(),
+        totalDownload: n.totalDownload.toString(),
+        groupCount: membershipMap.get(n.nodeId) || 0,
+        ownedGroupCount: ownedGroupMap.get(n.nodeId) || 0,
+        shareIndexCount: shareIndexMap.get(n.nodeId) || 0,
+        shareManifestCount: shareManifestMap.get(n.nodeId) || 0,
+      })),
+      count,
+    }
+  }
+
+  /**
+   * 管理员: 节点详情,包含所在群组与拥有群组.
+   */
+  async adminDetail(nodeId: string) {
+    const node = await prisma.tracker_node.findUnique({
+      where: { nodeId },
+      select: {
+        trackerNodeId: true,
+        nodeId: true,
+        nodeName: true,
+        publicUrl: true,
+        version: true,
+        userAgent: true,
+        online: true,
+        lastHeartbeat: true,
+        totalUpload: true,
+        totalDownload: true,
+        banned: true,
+        bannedReason: true,
+        createTime: true,
+        updateTime: true,
+      },
+    })
+    if (!node) throw new Error('节点不存在')
+
+    const [memberships, ownedGroups, shareIndexCount, shareManifestCount] = await Promise.all([
+      prisma.tracker_membership.findMany({
+        where: { nodeId },
+        include: {
+          group: {
+            select: {
+              trackerGroupId: true,
+              groupNo: true,
+              groupName: true,
+              ownerNodeId: true,
+              enable: true,
+              memberCount: true,
+              createTime: true,
+              updateTime: true,
+            },
+          },
+        },
+        orderBy: { joinTime: 'desc' },
+      }),
+      prisma.tracker_group.findMany({
+        where: { ownerNodeId: nodeId },
+        select: {
+          trackerGroupId: true,
+          groupNo: true,
+          groupName: true,
+          enable: true,
+          memberCount: true,
+          createTime: true,
+          updateTime: true,
+        },
+        orderBy: { createTime: 'desc' },
+      }),
+      prisma.tracker_share_index.count({ where: { nodeId } }),
+      prisma.tracker_share_manifest.count({ where: { nodeId } }),
+    ])
+
+    return {
+      node: {
+        ...node,
+        totalUpload: node.totalUpload.toString(),
+        totalDownload: node.totalDownload.toString(),
+      },
+      memberships: memberships.map((m) => ({
+        trackerMembershipId: m.trackerMembershipId,
+        role: m.role,
+        joinTime: m.joinTime,
+        lastAnnounce: m.lastAnnounce,
+        group: m.group,
+      })),
+      ownedGroups,
+      shareIndexCount,
+      shareManifestCount,
+    }
+  }
+
+  /**
+   * 管理员: 封禁/解封节点.
+   */
+  async adminSetBan(nodeId: string, data: { banned: number; bannedReason?: string }) {
+    const banned = Number(data.banned) === 1 ? 1 : 0
+    return prisma.tracker_node.update({
+      where: { nodeId },
+      data: {
+        banned,
+        bannedReason: banned ? data.bannedReason || null : null,
+        ...(banned ? { online: 0 } : {}),
+      },
+    })
+  }
+
+  /**
+   * 管理员: 注销节点.
+   * 若该节点是群主,会同时删除其拥有的群组,否则 tracker_group.ownerNodeId 外键会阻止删除节点.
+   */
+  async adminDeregister(nodeId: string) {
+    const node = await prisma.tracker_node.findUnique({ where: { nodeId } })
+    if (!node) throw new Error('节点不存在')
+
+    const memberships = await prisma.tracker_membership.findMany({
+      where: { nodeId },
+      select: { trackerGroupId: true, group: { select: { groupNo: true } } },
+    })
+    const ownedGroups = await prisma.tracker_group.findMany({
+      where: { ownerNodeId: nodeId },
+      select: { trackerGroupId: true, groupNo: true },
+    })
+    const ownedGroupIds = ownedGroups.map((g) => g.trackerGroupId)
+    const ownedGroupIdSet = new Set(ownedGroupIds)
+    const memberGroupIds = Array.from(
+      new Set(memberships.map((m) => m.trackerGroupId).filter((id) => !ownedGroupIdSet.has(id)))
+    )
+
+    await prisma.$transaction(async (tx) => {
+      if (ownedGroupIds.length) {
+        await tx.tracker_share_manifest.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
+        await tx.tracker_share_index.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
+        await tx.tracker_invite.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
+        await tx.tracker_membership.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
+        await tx.tracker_group.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
+      }
+
+      await tx.tracker_share_manifest.deleteMany({ where: { nodeId } })
+      await tx.tracker_share_index.deleteMany({ where: { nodeId } })
+      await tx.tracker_membership.deleteMany({ where: { nodeId } })
+
+      for (const trackerGroupId of memberGroupIds) {
+        const memberCount = await tx.tracker_membership.count({ where: { trackerGroupId } })
+        await tx.tracker_group.update({
+          where: { trackerGroupId },
+          data: { memberCount },
+        })
+      }
+
+      await tx.tracker_node.delete({ where: { nodeId } })
+    })
+
+    for (const m of memberships) {
+      membershipCache.invalidate(nodeId, m.group.groupNo)
+    }
+    for (const g of ownedGroups) {
+      membershipCache.invalidateByGroup(g.groupNo)
+    }
+
+    return {
+      nodeId,
+      removedGroupCount: ownedGroups.length,
+      removedMembershipCount: memberships.length,
+    }
+  }
+
   /**
    * 节点注册
    *

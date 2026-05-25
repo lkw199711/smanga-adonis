@@ -63,6 +63,7 @@ const TrackerGroupsController = () => import('#controllers/tracker/tracker_group
 const TrackerSharesController = () => import('#controllers/tracker/tracker_shares_controller')
 const TrackerSyncController = () => import('#controllers/tracker/tracker_sync_controller')
 const TrackerAdminGroupsController = () => import('#controllers/tracker/tracker_admin_groups_controller')
+const TrackerAdminNodesController = () => import('#controllers/tracker/tracker_admin_nodes_controller')
 const P2PGroupsController = () => import('#controllers/p2p/p2p_groups_controller')
 const P2PSharesController = () => import('#controllers/p2p/p2p_shares_controller')
 const P2PPeersController = () => import('#controllers/p2p/p2p_peers_controller')
@@ -321,6 +322,10 @@ router.get('/tracker-admin/group/:groupNo', [TrackerAdminGroupsController, 'show
 router.get('/tracker-admin/group/:groupNo/members', [TrackerAdminGroupsController, 'members'])
 router.delete('/tracker-admin/group/:groupNo/member/:nodeId', [TrackerAdminGroupsController, 'kick'])
 router.delete('/tracker-admin/group/:groupNo', [TrackerAdminGroupsController, 'destroy'])
+router.get('/tracker-admin/node', [TrackerAdminNodesController, 'index'])
+router.put('/tracker-admin/node/:nodeId/ban', [TrackerAdminNodesController, 'ban'])
+router.get('/tracker-admin/node/:nodeId', [TrackerAdminNodesController, 'show'])
+router.delete('/tracker-admin/node/:nodeId', [TrackerAdminNodesController, 'destroy'])
 
 // 配置信息
 router.get('client-user-config', [UsersController, 'config'])

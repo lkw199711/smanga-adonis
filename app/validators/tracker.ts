@@ -12,6 +12,10 @@ export const trackerGroupKickParamValidator = vine.compile(
   })
 )
 
+export const trackerNodeIdParamValidator = vine.compile(
+  vine.object({ nodeId: vine.string().trim().minLength(1) })
+)
+
 // ========== tracker_groups ==========
 export const createTrackerGroupValidator = vine.compile(
   vine
@@ -139,6 +143,27 @@ export const listTrackerAdminGroupValidator = vine.compile(
       pageSize: vine.any().optional(),
       keyword: vine.string().trim().optional(),
       enable: vine.any().optional(),
+    })
+    .allowUnknownProperties()
+)
+
+export const listTrackerAdminNodeValidator = vine.compile(
+  vine
+    .object({
+      page: vine.any().optional(),
+      pageSize: vine.any().optional(),
+      keyword: vine.string().trim().optional(),
+      online: vine.any().optional(),
+      banned: vine.any().optional(),
+    })
+    .allowUnknownProperties()
+)
+
+export const banTrackerAdminNodeValidator = vine.compile(
+  vine
+    .object({
+      banned: vine.any(),
+      bannedReason: vine.string().trim().optional(),
     })
     .allowUnknownProperties()
 )
