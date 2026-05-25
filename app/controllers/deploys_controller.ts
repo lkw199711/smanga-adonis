@@ -75,7 +75,6 @@ export default class DeploysController {
       code: 200,
       message: '',
       data: {
-        deploy: !!config.sql?.deploy,
         sql: config.sql || null,
       },
     })
@@ -223,7 +222,13 @@ export default class DeploysController {
     }
     fs.writeFileSync(ENV_FILE, envContent, 'utf8')
 
-    // 4. 执行 Prisma 命令
+    // 4. 清理旧 Prisma 缓存，避免 Windows DLL 锁定
+    const prismaCacheDir = path.join(rootDir, 'node_modules', '.prisma', 'client')
+    if (fs.existsSync(prismaCacheDir)) {
+      try { fs.rmSync(prismaCacheDir, { recursive: true, force: true }) } catch {}
+    }
+
+    // 5. 执行 Prisma 命令
     const genResult = runNpxCommand('npx prisma generate --schema=' + schemaPath)
     if (!genResult.success) {
       return response.status(500).json({
@@ -239,11 +244,12 @@ export default class DeploysController {
       })
     }
 
-    // 返回成功，不设 deploy=true，不退出
-    return response.json({
+    // 数据库建表完成，退出让进程管理器重启，重启后 PrismaClient 正常加载
+    response.json({
       code: 200,
-      message: '数据库初始化完成',
+      message: '数据库初始化完成，服务即将重启',
     })
+    setTimeout(() => process.exit(0), 1000)
   }
 
   /**
