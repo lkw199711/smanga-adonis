@@ -96,9 +96,13 @@ router.any('/image', [ImagesController, 'index'])
 router.post('/image/upload', [ImagesController, 'upload'])
 
 // 部署
+router.get('/deploy/status', [DeploysController, 'status'])
+router.post('/deploy/test-connection', [DeploysController, 'testConnection'])
 router.get('/deploy/database-get', [DeploysController, 'database_get'])
 router.get('/deploy/database-test', [DeploysController, 'database_test'])
 router.get('/deploy/database-check', [DeploysController, 'database_check'])
+// 首次部署初始化（无鉴权）
+router.post('/deploy/init', [DeploysController, 'init'])
 
 // 收藏模块 collect
 router.get('/collect', [CollectsController, 'index'])

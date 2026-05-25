@@ -18,8 +18,8 @@
 import router from '@adonisjs/core/services/router'
 import server from '@adonisjs/core/services/server'
 import database_check from '../app/services/database_check_service.js'
-import init from './init.js'
-import { get_os } from '#utils/index'
+import init, { init_dirs_only } from './init.js'
+import { get_os, get_config } from '#utils/index'
 
 /**
  * The error handler is used to convert an exception
@@ -61,10 +61,19 @@ router.use([
 // 初始化数据库
 // linux中此步骤暂时在外部脚本中进行
 const os = get_os()
-if (os === 'Windows') {
-  await database_check()
+const config = get_config()
+
+if (!config.sql?.deploy) {
+  // ========== 初始化模式 ==========
+  // 只创建目录、检查配置版本，不加载 Prisma
+  await init_dirs_only()
+  // HTTP 服务启动，路由中只有 /deploy/init 等无鉴权接口可用
+} else {
+  // ========== 正常模式 ==========
+  if (os === 'Windows') {
+    await database_check()
+  }
+
+  // 项目启动初始化
+  await init()
 }
-
-
-// 项目启动初始化
-await init()

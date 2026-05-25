@@ -142,6 +142,22 @@ const defaultConfig = {
   },
 }
 
+/**
+ * 仅做目录创建与配置版本检查，不触碰 Prisma
+ * 用于首次部署初始化模式（sql.deploy=false）
+ */
+export async function init_dirs_only() {
+  const os = get_os()
+
+  if (['Windows', 'MacOS'].includes(os)) {
+    await create_dir_win()
+  } else {
+    await create_dir_linux()
+  }
+
+  await check_config_ver()
+}
+
 export default async function boot() {
   const os = get_os()
 
@@ -152,20 +168,6 @@ export default async function boot() {
   }
 
   await check_config_ver()
-
-  // 创建系统默认用户
-  const users = await prisma.user.findMany()
-  if (!users?.length) {
-    await prisma.user.create({
-      data: {
-        userName: 'smanga',
-        passWord: 'f7f1fe7186209906a97756ff912bb644',
-        role: 'admin',
-        mediaPermit: 'all',
-      },
-    })
-    console.log('Created default admin user')
-  }
 
   // 删除缓存文件
   const cachePath = path_cache()
