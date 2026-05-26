@@ -74,6 +74,7 @@ export type P2PNodeConfig = {
 
 export type P2PTrackerConfig = {
   publicUrl: string
+  peers?: string[]
   allowPublicRegister: boolean
   requireInviteToRegister: boolean
   maxNodes: number
@@ -82,6 +83,18 @@ export type P2PTrackerConfig = {
   offlineThresholdSec: number
   cleanupCron: string
   adminNodeIds: string[]
+  syncKey?: string
+  syncIntervalSec?: number
+}
+
+export type P2PPullConfig = {
+  timeoutMs?: {
+    root?: number
+    media?: number
+    manga?: number
+    chapter?: number
+    meta?: number
+  }
 }
 
 export type P2PConfig = {
@@ -92,6 +105,7 @@ export type P2PConfig = {
   }
   node: P2PNodeConfig
   tracker: P2PTrackerConfig
+  pull?: P2PPullConfig
 }
 
 // ============ Tracker 请求/响应载荷 ============

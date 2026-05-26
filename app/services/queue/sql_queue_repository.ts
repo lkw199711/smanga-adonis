@@ -212,6 +212,25 @@ export async function markJobCompleted(jobId: number) {
   await db.queue_job.deleteMany({ where: { id: jobId } })
 }
 
+export async function extendRunningJobLock(input: {
+  jobId: number
+  workerId: string
+  lockedUntil: Date
+}) {
+  const result = await db.queue_job.updateMany({
+    where: {
+      id: input.jobId,
+      status: 'running',
+      locked_by: input.workerId,
+    },
+    data: {
+      locked_until: input.lockedUntil,
+      updated_at: new Date(),
+    },
+  })
+  return result.count === 1
+}
+
 function retryDelay(attemptsMade: number) {
   const config = getQueueConfig()
   const exponent = Math.max(attemptsMade - 1, 0)

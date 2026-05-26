@@ -128,6 +128,7 @@ const defaultConfig = {
     },
     tracker: {
       publicUrl: '',
+      peers: [],
       allowPublicRegister: true,
       requireInviteToRegister: false,
       maxNodes: 1000,
@@ -138,6 +139,15 @@ const defaultConfig = {
       adminNodeIds: [],
       syncKey: '',
       syncIntervalSec: 300,
+    },
+    pull: {
+      timeoutMs: {
+        root: 6 * 60 * 60 * 1000,
+        media: 6 * 60 * 60 * 1000,
+        manga: 3 * 60 * 60 * 1000,
+        chapter: 30 * 60 * 1000,
+        meta: 10 * 60 * 1000,
+      },
     },
   },
 }
@@ -311,6 +321,18 @@ async function check_config_ver() {
     }
     if (config.p2p.tracker === undefined) {
       config.p2p.tracker = defaultConfig.p2p.tracker
+      changed = true
+    }
+    if (config.p2p.pull === undefined) {
+      config.p2p.pull = defaultConfig.p2p.pull
+      changed = true
+    }
+    if (config.p2p.tracker.peers === undefined) {
+      config.p2p.tracker.peers = defaultConfig.p2p.tracker.peers
+      changed = true
+    }
+    if (config.p2p.pull.timeoutMs === undefined) {
+      config.p2p.pull.timeoutMs = defaultConfig.p2p.pull.timeoutMs
       changed = true
     }
 

@@ -17,6 +17,7 @@ import { get_config } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
 import TrackerClient from '#services/p2p/tracker_client'
+import { getP2PPullTimeout } from '#services/p2p/pull/pull_timeout'
 import {
   listP2PTransferQueryValidator,
   pullP2PTransferValidator,
@@ -193,6 +194,7 @@ export default class P2PTransfersController {
         command: 'taskP2PPull',
         args: { transferId: transfer.p2pTransferId },
         priority,
+        timeout: getP2PPullTimeout('root'),
       })
 
       return response.json({ code: 200, message: '已加入队列', data: transfer })
@@ -307,6 +309,7 @@ export default class P2PTransfersController {
         command: 'taskP2PPull',
         args: { transferId: id },
         priority,
+        timeout: getP2PPullTimeout('root'),
       })
 
       return response.json({ code: 200, message: '已重新入队' })

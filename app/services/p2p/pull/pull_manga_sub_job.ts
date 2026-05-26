@@ -53,13 +53,21 @@ import {
   buildHeaders,
   resolveSeeds,
 } from './pull_shared.js'
-import { initTracker, notifyDone, transferSelfToChildren } from './pull_child_tracker.js'
+import {
+  attachQueueJobToTask,
+  initTracker,
+  markTransferTaskRunning,
+  notifyDone,
+  registerTransferTask,
+} from './pull_child_tracker.js'
 import { extractErrorMessage } from '#utils/p2p_log'
+import { getP2PPullTimeout } from './pull_timeout.js'
 
 export type PullMangaJobArgs = {
   transferId: number
   groupNo: string
   mangaId: number
+  taskKey?: string
   parentDir: string
   fallbackName?: string
   isSubTask?: boolean
@@ -75,8 +83,12 @@ export default class PullMangaJob {
   }
 
   async run(): Promise<void> {
-    const { transferId, mangaId, groupNo, parentDir, fallbackName, isSubTask, inheritedSeeds } = this.args
+    const { transferId, mangaId, groupNo, parentDir, fallbackName, isSubTask, inheritedSeeds, taskKey } = this.args
     const logTag = `p2p-pull-manga#${transferId}-m${mangaId}`
+
+    if (isSubTask && taskKey) {
+      await markTransferTaskRunning(transferId, taskKey)
+    }
 
     if (await isTransferCanceled(transferId)) {
       console.log(`[${logTag}] 已取消,跳过`)
@@ -84,7 +96,7 @@ export default class PullMangaJob {
         // 作为 media 子任务:需把"未派发出去的子任务"计数补回(否则 media tracker 永远等不到足额)
         // 简化处理:notifyDone 一次表示本 MangaJob 自己的入口位,MediaJob 需要把每个 manga
         // 的 expectedTotal 预留 1 个"manga 自身位" → 见 MediaJob
-        await notifyDone(transferId, { ok: false, downloadedBytes: 0, canceled: true })
+        await notifyDone(transferId, { ok: false, downloadedBytes: 0, canceled: true }, taskKey)
       }
       return
     }
@@ -111,7 +123,7 @@ export default class PullMangaJob {
       const errorMsg = extractErrorMessage(e)
       console.error(`[${logTag}] 获取 tree 失败: ${errorMsg}`)
       if (isSubTask) {
-        await notifyDone(transferId, { ok: false, downloadedBytes: 0, error: errorMsg })
+        await notifyDone(transferId, { ok: false, downloadedBytes: 0, error: errorMsg }, taskKey)
       } else {
         await this.failStandalone(transferId, errorMsg)
       }
@@ -121,7 +133,7 @@ export default class PullMangaJob {
     if (!tree || !tree.files?.length) {
       console.warn(`[${logTag}] tree 为空`)
       if (isSubTask) {
-        await notifyDone(transferId, { ok: true, downloadedBytes: 0 })
+        await notifyDone(transferId, { ok: true, downloadedBytes: 0 }, taskKey)
       } else {
         await this.finalizeStandalone(transferId, true, 0)
       }
@@ -134,12 +146,12 @@ export default class PullMangaJob {
 
     // 分支 1:单文件漫画,直接在本 Job 内拉完,不拆子任务
     if (tree.isSingleFile) {
-      await this.handleSingleFile(tree, baseDir, logTag, isSubTask, resolvedSeeds)
+      await this.handleSingleFile(tree, baseDir, logTag, isSubTask, resolvedSeeds, taskKey)
       return
     }
 
     // 分支 2:目录漫画 → 拆 Meta + Chapters 子任务
-    await this.handleDirectoryManga(tree, mangaId, baseDir, logTag, isSubTask, resolvedSeeds)
+    await this.handleDirectoryManga(tree, mangaId, baseDir, logTag, isSubTask, resolvedSeeds, taskKey)
   }
 
   /** 单文件漫画:直接起小池拉完(主文件 + sideFiles 一起下) */
@@ -148,7 +160,8 @@ export default class PullMangaJob {
     baseDir: string,
     logTag: string,
     isSubTask: boolean | undefined,
-    resolvedSeeds: Seed[]
+    resolvedSeeds: Seed[],
+    taskKey?: string
   ): Promise<void> {
     const { transferId, groupNo, mangaId, parentDir } = this.args
     const reporter = createThrottledProgressReporter(transferId)
@@ -186,7 +199,7 @@ export default class PullMangaJob {
     }
 
     if (isSubTask) {
-      await notifyDone(transferId, { ok, downloadedBytes, error: errorMsg })
+      await notifyDone(transferId, { ok, downloadedBytes, error: errorMsg }, taskKey)
     } else {
       await this.finalizeStandalone(transferId, ok, downloadedBytes, errorMsg)
     }
@@ -199,7 +212,8 @@ export default class PullMangaJob {
     baseDir: string,
     logTag: string,
     isSubTask: boolean | undefined,
-    resolvedSeeds: Seed[]
+    resolvedSeeds: Seed[],
+    taskKey?: string
   ): Promise<void> {
     const { transferId, groupNo, parentDir } = this.args
 
@@ -211,7 +225,7 @@ export default class PullMangaJob {
       const errorMsg = extractErrorMessage(e)
       console.error(`[${logTag}] 获取 chapters 失败: ${errorMsg}`)
       if (isSubTask) {
-        await notifyDone(transferId, { ok: false, downloadedBytes: 0, error: errorMsg })
+        await notifyDone(transferId, { ok: false, downloadedBytes: 0, error: errorMsg }, taskKey)
       } else {
         await this.failStandalone(transferId, errorMsg)
       }
@@ -269,19 +283,25 @@ export default class PullMangaJob {
     //    此处调用 transferSelfToChildren 把"本 MangaJob 的 1 个预期位"替换为 expectedTotal 个
     if (!isSubTask) {
       initTracker(transferId, expectedTotal, Number(tree.totalBytes || 0))
-    } else {
-      await transferSelfToChildren(transferId, expectedTotal)
     }
 
     // 6) 派发 MetaJob(透传已发现的 seeds + sideFiles)
     //    sideFiles 的 relPath 以 parentDir 为根,所以 sideBaseDir = parentDir
-    await addTask({
+    const metaTaskKey = `meta:${mangaId}`
+    await registerTransferTask({
+      transferId,
+      taskKey: metaTaskKey,
+      taskType: 'meta',
+      parentKey: taskKey ?? null,
+    })
+    const metaJob = await addTask({
       taskName: `p2p-pull-meta-${mangaId}`,
       command: 'taskP2PPullMeta',
       args: {
         transferId,
         groupNo,
         mangaId,
+        taskKey: metaTaskKey,
         files: metaFiles,
         baseDir,
         sideFiles,
@@ -290,7 +310,9 @@ export default class PullMangaJob {
         inheritedSeeds: resolvedSeeds,
       },
       priority: TaskPriority.p2pPullMeta,
+      timeout: getP2PPullTimeout('meta'),
     })
+    await attachQueueJobToTask(transferId, metaTaskKey, Number((metaJob as any)?.id || 0) || null)
 
     // 7) 为每个 chapter 派发 ChapterJob(透传已发现的 seeds)
     //    单文件章节(.zip/.cbz/.cbr/.rar/.7z/.pdf/.epub):chBaseDir = baseDir,
@@ -302,28 +324,43 @@ export default class PullMangaJob {
       const chBaseDir = isSingleFileChapter
         ? baseDir
         : path.join(baseDir, safeName(ch.chapterName || `chapter_${ch.chapterId}`))
-      await addTask({
+      const chapterTaskKey = `chapter:${ch.chapterId}`
+      await registerTransferTask({
+        transferId,
+        taskKey: chapterTaskKey,
+        taskType: 'chapter',
+        parentKey: taskKey ?? null,
+      })
+      const chapterJob = await addTask({
         taskName: `p2p-pull-chapter-${ch.chapterId}`,
         command: 'taskP2PPullChapter',
         args: {
           transferId,
           groupNo,
           chapterId: ch.chapterId,
+          taskKey: chapterTaskKey,
           baseDir: chBaseDir,
           mangaId,
           isSubTask: true,
           inheritedSeeds: resolvedSeeds,
         },
         priority: TaskPriority.p2pPullChapter,
+        timeout: getP2PPullTimeout('chapter'),
       })
+      await attachQueueJobToTask(
+        transferId,
+        chapterTaskKey,
+        Number((chapterJob as any)?.id || 0) || null
+      )
     }
 
     console.log(
       `[${logTag}] 已派发 ${expectedTotal} 个子任务 (1 meta + ${chapters.length} chapters)`
     )
 
-    // 7) MangaJob 到此返回。真正的完成由各子 Job 通过 tracker 聚合父 transfer 状态
-    //    作为 media 子任务时:MangaJob 本身不通知 tracker(expectedTotal 已包含 meta+chapters)
+    if (isSubTask) {
+      await notifyDone(transferId, { ok: true, downloadedBytes: 0 }, taskKey)
+    }
   }
 
   private async fetchChapters(

@@ -118,15 +118,21 @@ async function announce_group(groupNo: string) {
       }),
     }
 
-    // 向所有可达 tracker 广播，取第一个成功的结果用于版本回写
+    // 向所有可达 tracker 广播，至少一个成功就算本次 announce 成功
     let result: AnnounceResult | undefined
+    let successCount = 0
     for (const c of clients) {
       try {
-        result = (await c.announceShares(groupNo, payload)) as AnnounceResult | undefined
-        break // 第一个成功即可
+        const current = (await c.announceShares(groupNo, payload)) as AnnounceResult | undefined
+        if (!result && current) result = current
+        successCount += 1
       } catch (e: any) {
         log_p2p_error('announce_group.tracker', e)
       }
+    }
+
+    if (successCount === 0) {
+      throw new Error('announce failed on all trackers')
     }
 
     // 把 tracker 返回的 version 回写到本地 manifest 缓存
