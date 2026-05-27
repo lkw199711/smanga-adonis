@@ -451,8 +451,14 @@ class TrackerNodeService {
 
     if (!isLoopback) {
       if (!decidedUrl) {
-        online = 0
-        verifyReason = '缺少 publicUrl'
+        // 心跳缺 publicUrl 但节点此前已存有效 publicUrl 且在线 → 不降级
+        // (例如 checkNodeOnline 发送的探测心跳不应导致下线)
+        if (existing.publicUrl && is_reportable_public_url(existing.publicUrl) && !wasOffline) {
+          // 保持 online=1，仅刷新时间戳
+        } else {
+          online = 0
+          verifyReason = '缺少 publicUrl'
+        }
       } else if (endpointChanged || wasOffline) {
         const check = await trackerReachabilityService.verify({
           baseUrl: decidedUrl,

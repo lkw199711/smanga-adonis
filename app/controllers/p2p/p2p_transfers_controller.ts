@@ -15,8 +15,6 @@ import { TaskPriority } from '#type/index'
 import path from 'path'
 import { get_config } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
-import p2pIdentityService from '#services/p2p/p2p_identity_service'
-import TrackerClient from '#services/p2p/tracker_client'
 import { getP2PPullTimeout } from '#services/p2p/pull/pull_timeout'
 import {
   listP2PTransferQueryValidator,
@@ -26,55 +24,6 @@ import {
 } from '#validators/p2p'
 
 export default class P2PTransfersController {
-  /**
-   * 校验本机节点在 Tracker 端是否在线
-   * - 本机即 tracker:直接查 tracker_node 表
-   * - 远端 tracker:向所有可达 tracker 发心跳探测，任一在线即通过
-   * @returns 错误消息,若为 null 则表示在线
-   */
-  private async checkNodeOnline(): Promise<string | null> {
-    const config = get_config()
-    const p2p = config?.p2p
-    if (!p2p?.enable || !p2p?.role?.node) {
-      return 'P2P 未启用或本机非节点角色'
-    }
-
-    const id = p2pIdentityService.getIdentity()
-    if (!id) {
-      return '本机节点身份缺失,请先等待自动注册或检查 P2P 配置'
-    }
-
-    // 本机即 tracker:直接查数据库
-    if (p2p.role?.tracker) {
-      const node = await prisma.tracker_node.findUnique({ where: { nodeId: id.nodeId } })
-      if (!node) return '本机节点在 Tracker 数据库中不存在'
-      if (node.online !== 1) return '本机节点离线,请检查心跳服务是否正常运行'
-      return null
-    }
-
-    // 远端 tracker:向所有可达 tracker 发心跳探测，任一在线即通过
-    const urls = p2pIdentityService.getReachableTrackerUrls(p2p)
-    if (!urls.length) return '未配置 Tracker 地址'
-
-    let lastError: string | null = null
-    for (const url of urls) {
-      try {
-        const client = new TrackerClient(url, id.nodeId)
-        await client.heartbeat({})
-        return null // 任一心跳成功,节点在线
-      } catch (e: any) {
-        const status = e?.response?.status
-        const remoteMsg: string = e?.response?.data?.message || ''
-        if (status === 401 || status === 403) {
-          lastError = `本机节点在 Tracker 端已失效(${url}): ${remoteMsg || '身份无效或被封禁'}`
-        } else {
-          lastError = `无法连接 Tracker(${url}): ${remoteMsg || e?.message || '网络错误'}`
-        }
-      }
-    }
-    return lastError || '所有 Tracker 均不可达'
-  }
-
   /**
    * GET /api/p2p/transfer?status=xxx&groupNo=xxx
    */
@@ -126,12 +75,6 @@ export default class P2PTransfersController {
    * 策略下载每一个文件。
    */
   async pull({ request, response }: HttpContext) {
-    // 节点在线校验:离线节点不允许发起新拉取任务
-    const onlineError = await this.checkNodeOnline()
-    if (onlineError) {
-      return response.status(403).json({ code: 403, message: onlineError, status: 'offline' })
-    }
-
     const body = await pullP2PTransferValidator.validate(request.all())
 
     if (!body.groupNo) {
@@ -288,12 +231,6 @@ export default class P2PTransfersController {
    * POST /api/p2p/transfer/:id/retry
    */
   async retry({ params, response }: HttpContext) {
-    // 节点在线校验:离线节点不允许重试任务
-    const onlineError = await this.checkNodeOnline()
-    if (onlineError) {
-      return response.status(403).json({ code: 403, message: onlineError, status: 'offline' })
-    }
-
     const { id } = await idParamP2PValidator.validate(params)
     const item = await prisma.p2p_transfer.findUnique({ where: { p2pTransferId: id } })
     if (!item) {
