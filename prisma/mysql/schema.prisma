@@ -595,8 +595,31 @@ model p2p_transfer {
   updateTime      DateTime  @default(now()) @updatedAt @db.DateTime(6)
   startTime       DateTime? @db.DateTime(6)
   endTime         DateTime? @db.DateTime(6)
+  tasks           p2p_transfer_task[]
 
   @@map("p2p_transfer")
+}
+
+/// P2P 传输子任务追踪（用于多级任务编排）
+model p2p_transfer_task {
+  id           Int             @id @default(autoincrement()) @db.UnsignedInt
+  transfer     p2p_transfer    @relation(fields: [transferId], references: [p2pTransferId], onDelete: Cascade)
+  transferId   Int             @db.UnsignedInt @map("transfer_id")
+  parentKey    String?         @db.VarChar(255) @map("parent_key")
+  taskKey      String          @db.VarChar(255) @map("task_key")
+  taskType     String          @db.VarChar(64) @map("task_type")
+  queueJobId   Int?            @db.UnsignedInt @map("queue_job_id")
+  status       String          @default("pending") @db.VarChar(32) @map("status")
+  errorMessage String?         @db.Text @map("error_message")
+  startedAt    DateTime?       @db.DateTime(6) @map("started_at")
+  finishedAt   DateTime?       @db.DateTime(6) @map("finished_at")
+  createdAt    DateTime        @default(now()) @db.DateTime(6) @map("created_at")
+  updatedAt    DateTime        @default(now()) @updatedAt @db.DateTime(6) @map("updated_at")
+
+  @@unique([transferId, taskKey])
+  @@index([transferId, status])
+  @@index([queueJobId])
+  @@map("p2p_transfer_task")
 }
 
 
