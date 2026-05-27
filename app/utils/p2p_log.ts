@@ -17,12 +17,24 @@
  * 提取 axios / 普通 Error 的结构化关键字段
  */
 function extract_error_fields(err: any) {
+  // AggregateError(Axios 网络层聚合错误)的子错误细节：包含实际 socket 错误码(ECONNREFUSED/ENOTFOUND 等)
+  let aggregateErrors: any[] | undefined
+  if (err instanceof AggregateError && Array.isArray(err.errors) && err.errors.length) {
+    aggregateErrors = err.errors.map((e: any) => ({
+      message: e?.message,
+      code: e?.code,
+      stack: e?.stack?.split('\n')[0],
+    }))
+  }
+
   return {
     message: err?.message,
+    code: err?.code,                              // 网络错误码(ECONNREFUSED/ENOTFOUND/ETIMEDOUT 等)
     remoteMessage: err?.response?.data?.message,
     remoteStatus: err?.response?.status,
     remoteData: err?.response?.data,
     stack: err?.stack,
+    aggregateErrors,                              // AggregateError 子错误列表
   }
 }
 
@@ -52,22 +64,30 @@ export function log_tracker_error(tag: string, err: any) {
 export function extractErrorMessage(err: any): string {
   if (!err) return '未知错误'
 
-  // AggregateError (Promise.any / 部分 Prisma 批处理)
+  // AggregateError (Axios 网络层 / Promise.any / 部分 Prisma 批处理)
   if (err instanceof AggregateError && Array.isArray(err.errors) && err.errors.length) {
     const parts = err.errors.map((e: any) => {
       if (e?.response?.data?.message) return e.response.data.message
-      if (e?.message) return e.message
-      return String(e)
+      const code = e?.code ? `[${e.code}] ` : ''
+      if (e?.message) return code + e.message
+      return code + String(e)
     })
     // 去重后拼接
     const unique = [...new Set(parts)]
     return unique.join('; ')
   }
 
-  // axios 风格错误
+  // axios 风格错误(有远端响应)
   if (err?.response?.data?.message) {
     const ctx = err?.config?.url ? `[${err.config.url}] ` : ''
     return `${ctx}${err.response.data.message}`
+  }
+
+  // axios 网络层错误(无远端响应,有 code)
+  if (err?.code) {
+    const ctx = err?.config?.url ? `[${err.config.url}] ` : ''
+    const msg = err?.message || err.code
+    return `${ctx}[${err.code}] ${msg}`
   }
 
   // 普通 Error

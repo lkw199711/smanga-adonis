@@ -437,8 +437,9 @@ class P2PIdentityService {
     if (p2p?.role?.tracker) {
       const publicUrl = p2p?.tracker?.publicUrl
       if (publicUrl) return publicUrl
-      const port = process.env.PORT || 3000
-      return `http://127.0.0.1:${port}`
+      const port = process.env.PORT || '9797'
+      // AdonisJS 路由统一挂载在 /api 前缀下
+      return `http://127.0.0.1:${port}/api`
     }
 
     return null

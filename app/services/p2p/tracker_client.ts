@@ -29,13 +29,36 @@ export class TrackerClient {
   private nodeId?: string
 
   constructor(baseUrl: string, nodeId?: string) {
-    this.baseUrl = baseUrl.replace(/\/+$/, '')
+    this.baseUrl = this.normalizeTrackerUrl(baseUrl)
     this.nodeId = nodeId
     this.http = axios.create({
       baseURL: this.baseUrl,
       timeout: 15 * 1000,
       headers: { 'Content-Type': 'application/json; charset=UTF-8' },
     })
+  }
+
+  /**
+   * 规范化 tracker URL：确保包含 /api 前缀
+   * - smanga-adonis 所有路由均挂载在 /api 下
+   * - 用户配置的 tracker 地址可能是裸 host:port（如 http://1.2.3.4:9797）
+   * - 自动补充 /api 以匹配 AdonisJS 路由前缀
+   */
+  private normalizeTrackerUrl(raw: string): string {
+    let url = raw.replace(/\/+$/, '')
+    if (!url) return url
+
+    // 已以 /api 结尾则直接返回
+    if (url.endsWith('/api')) return url
+
+    try {
+      const parsed = new URL(url)
+      // 若 pathname 只有根路径 /，补 /api
+      if (parsed.pathname === '/' || parsed.pathname === '') {
+        return `${parsed.origin}/api`
+      }
+    } catch {}
+    return url
   }
 
   /**
@@ -278,6 +301,7 @@ export function get_default_tracker_client(): TrackerClient | null {
   if (!cfg?.enable || !cfg?.role?.node) return null
 
   const reachable = trackerProbeService.getReachableTrackers()
+  // reachable 列表中的 URL 已由 trackerProbeService 补全 /api 前缀(本地 tracker 场景)
   const url = reachable.length > 0 ? reachable[0] : (cfg?.node?.trackers || [])[0]
   if (!url) return null
 

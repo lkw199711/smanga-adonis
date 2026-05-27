@@ -42,8 +42,9 @@ class TrackerProbeService {
     if (cfg?.role?.tracker) {
       const publicUrl = cfg?.tracker?.publicUrl
       if (publicUrl) return [publicUrl]
-      const port = process.env.PORT || 3000
-      return [`http://127.0.0.1:${port}`]
+      const port = process.env.PORT || '9797'
+      // AdonisJS 路由统一挂载在 /api 前缀下,本地 tracker URL 必须包含 /api
+      return [`http://127.0.0.1:${port}/api`]
     }
 
     return []

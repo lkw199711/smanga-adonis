@@ -88,8 +88,23 @@ export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
   if (!id) throw new Error('本节点身份未就绪')
 
   const urls = trackerProbeService.getReachableTrackers()
-  const trackerUrls = urls.length > 0 ? urls : (cfg?.node?.trackers || []).slice(0, 1)
+  let trackerUrls = urls.length > 0 ? urls : (cfg?.node?.trackers || []).slice(0, 1)
   if (!trackerUrls.length) throw new Error('未配置 tracker,无法发现 seeds')
+
+  // 确保 tracker URL 包含 /api 前缀（用户可能配置了不带 /api 的裸地址）
+  trackerUrls = trackerUrls.map((u: string) => {
+    if (!u) return u
+    // 若已以 /api 结尾则直接使用
+    if (u.endsWith('/api') || u.endsWith('/api/')) return u.replace(/\/+$/, '')
+    // 若 host 后面没有其他路径则补 /api
+    try {
+      const parsed = new URL(u)
+      if (parsed.pathname === '/' || parsed.pathname === '') {
+        return `${parsed.origin}/api`
+      }
+    } catch {}
+    return u
+  })
 
   const queryParams: {
     shareType: 'media' | 'manga' | 'chapter'
@@ -139,7 +154,14 @@ export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
   }
 
   if (seedMap.size === 0) {
-    if (lastError) throw lastError
+    if (lastError) {
+      // 包装错误,附带诊断信息:tracker URL + 错误码
+      const code = lastError?.code ? `[${lastError.code}] ` : ''
+      const urlsStr = trackerUrls.join(', ')
+      throw new Error(
+        `${code}seeds 发现失败: 所有 tracker(${urlsStr}) 均不可达,最后一错误: ${lastError?.message || lastError}`
+      )
+    }
     return []
   }
 
