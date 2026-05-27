@@ -8,6 +8,9 @@ import { resolvePathShareMangas } from '../path_share_resolver.js'
 import { safeName } from './pull_context.js'
 
 const ARCHIVE_EXTS = new Set(['.zip', '.cbz', '.cbr', '.epub', '.rar', '.7z', '.pdf'])
+// Hard switch for pull-success local import/share finalization.
+// Keep disabled while validating the basic pull pipeline.
+const ENABLE_PULL_AUTO_LOCAL_SHARE_FINALIZE = false
 
 function isArchiveLike(filePath: string) {
   return ARCHIVE_EXTS.has(path.extname(filePath).toLowerCase())
@@ -209,6 +212,11 @@ async function upsertTransferShare(transfer: {
 }
 
 export async function finalizePulledTransferToLocalShare(transferId: number) {
+  if (!ENABLE_PULL_AUTO_LOCAL_SHARE_FINALIZE) {
+    console.log(`[p2p] auto local-share finalize disabled, skip transferId=${transferId}`)
+    return false
+  }
+
   const transfer = await prisma.p2p_transfer.findUnique({
     where: { p2pTransferId: transferId },
     select: {
