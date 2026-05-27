@@ -119,7 +119,7 @@ class P2PHeartbeatService {
 
           // 动态发现新 tracker:合并 heartbeat 回参中的 knownTrackers
           if (hb && Array.isArray(hb.knownTrackers) && hb.knownTrackers.length > 0) {
-            mergeUnknownTrackers(hb.knownTrackers)
+            // mergeUnknownTrackers(hb.knownTrackers)
           }
         } catch (e: any) {
           const status = e?.response?.status

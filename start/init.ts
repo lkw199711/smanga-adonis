@@ -345,14 +345,15 @@ async function check_config_ver() {
       delete config.p2p.tracker.listenPort
       changed = true
     }
-
-    if (config.p2p.enable && config.p2p.role?.node && !config.p2p.role?.tracker) {
+/*
+    if (config.p2p.enable && config.p2p.role?.node && !config.p2p.role?.tracker && config.sql.deploy === false) {
       if (!Array.isArray(config.p2p.node.trackers)) {
         config.p2p.node.trackers = []
       }
       const trackers: string[] = config.p2p.node.trackers
       const added: string[] = []
       for (const url of DEFAULT_TRACKER_URLS) {
+        console.log(`[p2p] 检测到本机不是tracker服务器，自动补入缺失的默认tracker地址: ${!trackers.includes(url) && config.sql.deploy === false}`)
         if (!trackers.includes(url)) {
           trackers.push(url)
           added.push(url)
@@ -367,7 +368,7 @@ async function check_config_ver() {
         changed = true
       }
     }
-
+*/
     if (changed) {
       console.log('配置文件 p2p 子字段不完整，补齐默认值')
       set_config(config)

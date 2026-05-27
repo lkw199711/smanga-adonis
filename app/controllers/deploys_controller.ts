@@ -188,7 +188,7 @@ export default class DeploysController {
       username: username || '',
       password: password || '',
       database: database || 'smanga',
-      deploy: false,
+      deploy: config.sql?.deploy ?? false,
     }
     set_config(config)
 
