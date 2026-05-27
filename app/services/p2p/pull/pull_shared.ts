@@ -94,9 +94,7 @@ export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
   // 确保 tracker URL 包含 /api 前缀（用户可能配置了不带 /api 的裸地址）
   trackerUrls = trackerUrls.map((u: string) => {
     if (!u) return u
-    // 若已以 /api 结尾则直接使用
     if (u.endsWith('/api') || u.endsWith('/api/')) return u.replace(/\/+$/, '')
-    // 若 host 后面没有其他路径则补 /api
     try {
       const parsed = new URL(u)
       if (parsed.pathname === '/' || parsed.pathname === '') {
@@ -123,7 +121,7 @@ export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
 
   // 从所有 tracker 合并 seeds（按 nodeId 去重）
   const seedMap = new Map<string, Seed>()
-  let lastError: any = null
+  const errors: Array<{ url: string; detail: string }> = []
 
   for (const url of trackerUrls) {
     try {
@@ -139,27 +137,48 @@ export async function discoverSeeds(args: DiscoverSeedsArgs): Promise<Seed[]> {
         })
       }
     } catch (e: any) {
-      lastError = e
-      // 检测 "群组不存在/已停用" → 触发单群对账兜底
+      // 提取详细错误信息
       const status = e?.response?.status
       const remoteMsg: string = e?.response?.data?.message || ''
+      const code = e?.code || ''
+      const msg = e?.message || String(e)
+
+      let detail = `${code ? `[${code}] ` : ''}${msg}`
+      if (status) detail = `HTTP ${status}: ${remoteMsg || msg}`
+
+      // 检测 AggregateError 的子错误（DNS/网络层多地址聚合失败）
+      if (e instanceof AggregateError && Array.isArray(e.errors) && e.errors.length) {
+        const subErrors = e.errors.map((se: any) => {
+          const sc = se?.code ? `[${se.code}] ` : ''
+          return sc + (se?.message || String(se))
+        }).join('; ')
+        if (subErrors) detail = `AggregateError: ${subErrors}`
+      }
+
+      errors.push({ url, detail })
+
+      // 检测 "群组不存在/已停用" → 触发单群对账兜底
       const isGroupMissing =
         status === 404 ||
         /群组不存在|已停用|group.*not.*found/i.test(remoteMsg)
       if (isGroupMissing) {
         reconcileSingleGroupIfMissing(args.groupNo).catch(() => {})
       }
+
+      // 网络层不可达 → 标记 tracker,后续探测跳过
+      if (code === 'ETIMEDOUT' || code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'ECONNABORTED') {
+        trackerProbeService.markUnreachable(url)
+      }
+
       log_p2p_error(`discoverSeeds(url=${url})`, e)
     }
   }
 
   if (seedMap.size === 0) {
-    if (lastError) {
-      // 包装错误,附带诊断信息:tracker URL + 错误码
-      const code = lastError?.code ? `[${lastError.code}] ` : ''
-      const urlsStr = trackerUrls.join(', ')
+    if (errors.length > 0) {
+      const urlsStr = errors.map((e) => `\n  ${e.url}: ${e.detail}`).join('')
       throw new Error(
-        `${code}seeds 发现失败: 所有 tracker(${urlsStr}) 均不可达,最后一错误: ${lastError?.message || lastError}`
+        `seeds 发现失败: 所有 tracker 均不可达 (共 ${errors.length} 个)${urlsStr}`
       )
     }
     return []

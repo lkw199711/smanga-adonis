@@ -14,6 +14,7 @@ enum TaskPriority {
   p2pPullChapter = 620000,
   p2pPullMeta = 615000,
   clearCompress = 1000000,
+  announceP2P = 950000,
   default = 900000,
 }
 

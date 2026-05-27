@@ -157,6 +157,14 @@ export default class ScanPathJob {
         priority: TaskPriority.createMediaPoster,
       })
     }
+
+    // 扫描完成后自动触发 P2P announce,更新共享信息中的 mangaCount
+    await addTask({
+      taskName: `announce_after_scan_${this.pathInfo.mediaId}`,
+      command: 'announceAfterScan',
+      args: { mediaId: this.pathInfo.mediaId },
+      priority: TaskPriority.announceP2P,
+    })
   }
 
   /**

@@ -17,6 +17,7 @@ import PullMediaJob from '../p2p/pull/pull_media_sub_job.js'
 import PullMangaJob from '../p2p/pull/pull_manga_sub_job.js'
 import PullChapterJob from '../p2p/pull/pull_chapter_sub_job.js'
 import PullMetaJob from '../p2p/pull/pull_meta_sub_job.js'
+import AnnounceAfterScanJob from '../announce_after_scan_job.js'
 
 export async function runJobCommand(command: string, args: any) {
   switch (command) {
@@ -76,6 +77,9 @@ export async function runJobCommand(command: string, args: any) {
       break
     case 'taskP2PPullMeta':
       await new PullMetaJob(args).run()
+      break
+    case 'announceAfterScan':
+      await new AnnounceAfterScanJob(args).run()
       break
     default:
       console.warn(`[queue] unknown command: ${command}`)
