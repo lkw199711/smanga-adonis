@@ -63,22 +63,73 @@
       "background": {
         "enabled": true,
         "queues": ["scan", "sync", "default"],
-        "concurrency": 1
+        "concurrency": 3
       },
       "p2p": {
         "enabled": false,
         "queues": ["p2p"],
-        "concurrency": 3
+        "concurrency": 10
       },
       "compress": {
         "enabled": true,
         "queues": ["compress"],
-        "concurrency": 1
+        "concurrency": 2
       }
     }
   },
   "sync": {
     "interval": "0 0 23,10 * * *"
+  },
+  "serverKey": "",
+  "p2p": {
+    "enable": false,
+    "role": {
+      "node": true,
+      "tracker": false
+    },
+    "node": {
+      "nodeId": "",
+      "nodeToken": "",
+      "nodeName": "",
+      "publicUrl": "",
+      "trackers": [
+        "http://117.72.27.9:9797/api"
+      ],
+      "heartbeatInterval": 30,
+      "announceInterval": 300,
+      "allowLan": true,
+      "lanHost": "",
+      "lanPort": 9797,
+      "maxConcurrentPulls": 2,
+      "maxConcurrentServes": 4,
+      "maxUploadKbps": 0,
+      "maxDownloadKbps": 0,
+      "defaultReceivedPath": "",
+      "autoPullOnNewShare": false
+    },
+    "tracker": {
+      "publicUrl": "",
+      "peers": [],
+      "allowPublicRegister": true,
+      "requireInviteToRegister": false,
+      "maxNodes": 1000,
+      "maxGroupsPerNode": 10,
+      "maxMembersPerGroup": 50,
+      "offlineThresholdSec": 90,
+      "cleanupCron": "0 */10 * * * *",
+      "adminNodeIds": [],
+      "syncKey": "",
+      "syncIntervalSec": 300
+    },
+    "pull": {
+      "timeoutMs": {
+        "root": 21600000,
+        "media": 21600000,
+        "manga": 10800000,
+        "chapter": 1800000,
+        "meta": 600000
+      }
+    }
   },
   "opds": {
     "enabled": 1,
