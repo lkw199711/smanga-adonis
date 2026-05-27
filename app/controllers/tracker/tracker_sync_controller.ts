@@ -11,6 +11,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { get_config } from '#utils/index'
 import { log_tracker_error } from '#utils/p2p_log'
+import trackerShareService from '#services/tracker/tracker_share_service'
 
 function checkSyncAuth(ctx: HttpContext): boolean {
   const syncKey = get_config()?.p2p?.tracker?.syncKey
@@ -101,7 +102,7 @@ export default class TrackerSyncController {
         orderBy: { joinTime: 'asc' },
       })
 
-      const members = memberships.map((m) => ({
+      const members = memberships.map((m: any) => ({
         nodeId: m.nodeId,
         nodeName: m.node?.nodeName || null,
         role: m.role,
@@ -113,6 +114,42 @@ export default class TrackerSyncController {
       return response.json({ code: 200, message: '', list: members, count: members.length })
     } catch (err: any) {
       log_tracker_error('sync.groupMembers', err)
+      return response.status(500).json({ code: 500, message: err.message })
+    }
+  }
+
+  async groupShares({ params, request, response }: HttpContext) {
+    if (!checkSyncAuth({ request, response } as HttpContext)) {
+      return response.status(401).json({ code: 401, message: 'sync key invalid' })
+    }
+    try {
+      const data = await trackerShareService.listGroupShares(params.groupNo, {
+        page: 1,
+        pageSize: 100000,
+      })
+      return response.json({ code: 200, message: '', list: data.list, count: data.count })
+    } catch (err: any) {
+      log_tracker_error('sync.groupShares', err)
+      return response.status(500).json({ code: 500, message: err.message })
+    }
+  }
+
+  async groupManifests({ params, request, response }: HttpContext) {
+    if (!checkSyncAuth({ request, response } as HttpContext)) {
+      return response.status(401).json({ code: 401, message: 'sync key invalid' })
+    }
+    try {
+      const group = await prisma.tracker_group.findUnique({ where: { groupNo: params.groupNo } })
+      if (!group) {
+        return response.status(404).json({ code: 404, message: 'group not found' })
+      }
+      const list = await prisma.tracker_share_manifest.findMany({
+        where: { trackerGroupId: group.trackerGroupId },
+        orderBy: { updateTime: 'desc' },
+      })
+      return response.json({ code: 200, message: '', list, count: list.length, serverTime: Date.now() })
+    } catch (err: any) {
+      log_tracker_error('sync.groupManifests', err)
       return response.status(500).json({ code: 500, message: err.message })
     }
   }

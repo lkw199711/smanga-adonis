@@ -314,6 +314,8 @@ router.get('/tracker/sync/groups', [TrackerSyncController, 'groups'])
 router.get('/tracker/sync/nodes', [TrackerSyncController, 'nodes'])
 router.get('/tracker/sync/peers', [TrackerSyncController, 'peers'])
 router.get('/tracker/sync/group/:groupNo/members', [TrackerSyncController, 'groupMembers'])
+router.get('/tracker/sync/group/:groupNo/shares', [TrackerSyncController, 'groupShares'])
+router.get('/tracker/sync/group/:groupNo/manifests', [TrackerSyncController, 'groupManifests'])
 
 // ============================================================
 // Tracker 管理员路由 (/tracker-admin/*)

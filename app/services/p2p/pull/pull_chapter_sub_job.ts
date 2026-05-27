@@ -30,13 +30,14 @@ import {
   buildHeaders,
   resolveSeeds,
 } from './pull_shared.js'
-import { notifyDone } from './pull_child_tracker.js'
+import { markTransferTaskRunning, notifyDone } from './pull_child_tracker.js'
 import { extractErrorMessage } from '#utils/p2p_log'
 
 export type PullChapterJobArgs = {
   transferId: number
   groupNo: string
   chapterId: number
+  taskKey?: string
   baseDir: string
   mangaId: number
   isSubTask?: boolean
@@ -52,13 +53,17 @@ export default class PullChapterJob {
   }
 
   async run(): Promise<void> {
-    const { transferId, chapterId, baseDir, groupNo, mangaId, isSubTask, inheritedSeeds } = this.args
+    const { transferId, chapterId, baseDir, groupNo, mangaId, isSubTask, inheritedSeeds, taskKey } = this.args
     const logTag = `p2p-pull-chapter#${transferId}-c${chapterId}`
+
+    if (taskKey) {
+      await markTransferTaskRunning(transferId, taskKey)
+    }
 
     if (await isTransferCanceled(transferId)) {
       console.log(`[${logTag}] 已取消,跳过`)
       if (isSubTask) {
-        await notifyDone(transferId, { ok: false, downloadedBytes: 0, canceled: true })
+        await notifyDone(transferId, { ok: false, downloadedBytes: 0, canceled: true }, taskKey)
       }
       return
     }
@@ -117,7 +122,7 @@ export default class PullChapterJob {
         ok,
         downloadedBytes,
         error: errorMsg,
-      })
+      }, taskKey)
     } else {
       await this.finalizeStandalone(transferId, ok, downloadedBytes, errorMsg)
     }

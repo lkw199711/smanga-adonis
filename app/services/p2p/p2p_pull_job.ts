@@ -17,6 +17,7 @@ import prisma from '#start/prisma'
 import { addTask } from '#services/queue_service'
 import { TaskPriority } from '../../type/index.js'
 import { extractErrorMessage } from '#utils/p2p_log'
+import { getP2PPullTimeout } from './pull/pull_timeout.js'
 
 type P2PPullArgs = {
   transferId: number
@@ -67,6 +68,7 @@ export default class P2PPullJob {
             isSubTask: false,
           },
           priority: TaskPriority.p2pPullChapter,
+          timeout: getP2PPullTimeout('chapter'),
         })
       } else if (transfer.transferType === 'manga') {
         if (!transfer.remoteMangaId) throw new Error('remoteMangaId 缺失')
@@ -83,6 +85,7 @@ export default class P2PPullJob {
             isSubTask: false,
           },
           priority: TaskPriority.p2pPullManga,
+          timeout: getP2PPullTimeout('manga'),
         })
       } else if (transfer.transferType === 'media') {
         if (!transfer.remoteMediaId) throw new Error('remoteMediaId 缺失')
@@ -97,6 +100,7 @@ export default class P2PPullJob {
             parentDir: transfer.receivedPath,
           },
           priority: TaskPriority.p2pPullMedia,
+          timeout: getP2PPullTimeout('media'),
         })
       } else {
         throw new Error(`暂不支持的 transferType: ${transfer.transferType}`)

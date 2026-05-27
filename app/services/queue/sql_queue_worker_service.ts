@@ -6,6 +6,7 @@ import path from 'node:path'
 import { getQueueConfig, getWorkerConfig, type QueueWorkerGroup } from './queue_config.js'
 import {
   claimNextJob,
+  extendRunningJobLock,
   heartbeatWorker,
   markJobCompleted,
   markJobFailedOrRetry,
@@ -13,6 +14,7 @@ import {
   stopWorker,
   decodeJson,
 } from './sql_queue_repository.js'
+import { handleP2PQueueJobFailure } from '../p2p/pull/pull_child_tracker.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -151,6 +153,24 @@ export class SqlQueueWorkerService {
         process.stdout.write(`[child-${job.id}] ${data}`)
       })
 
+      const lockRenewIntervalMs = Math.max(5000, Math.floor(config.worker.stalledAfterMs / 3))
+      const lockRenewTimer = setInterval(async () => {
+        try {
+          const lockedUntil = new Date(Date.now() + config.worker.stalledAfterMs)
+          const ok = await extendRunningJobLock({
+            jobId: job.id,
+            workerId: this.workerId,
+            lockedUntil,
+          })
+          if (!ok) {
+            console.warn(`[queue] job ${job.id} lock renew lost, stopping child process`)
+            child.kill('SIGTERM')
+          }
+        } catch (error) {
+          console.error(`[queue] job ${job.id} lock renew failed`, error)
+        }
+      }, lockRenewIntervalMs)
+
       const timeoutMs = job.timeout_ms || config.timeout
       const timeoutId = setTimeout(() => {
         console.warn(`[queue] job ${job.id} timeout after ${timeoutMs}ms, killing child process`)
@@ -163,6 +183,7 @@ export class SqlQueueWorkerService {
 
       child.on('exit', async (code, signal) => {
         clearTimeout(timeoutId)
+        clearInterval(lockRenewTimer)
         try {
           if (code === 0) {
             await markJobCompleted(job.id)
@@ -170,6 +191,7 @@ export class SqlQueueWorkerService {
             const reason = signal
               ? `killed by signal ${signal}`
               : stderr.trim() || `exit code ${code}`
+            await handleP2PQueueJobFailure(args, new Error(reason))
             await markJobFailedOrRetry(job, new Error(reason))
           }
         } catch (err) {
@@ -181,7 +203,9 @@ export class SqlQueueWorkerService {
 
       child.on('error', async (err) => {
         clearTimeout(timeoutId)
+        clearInterval(lockRenewTimer)
         try {
+          await handleP2PQueueJobFailure(args, err)
           await markJobFailedOrRetry(job, err)
         } catch {}
         finally {

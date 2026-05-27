@@ -29,10 +29,15 @@ class TrackerShareService {
 
     const shares = payload.shares || []
 
-    // 全量覆盖策略: 先删除该节点在该群的旧 index 记录, 再插入新记录
-    await prisma.tracker_share_index.deleteMany({
-      where: { trackerGroupId: group.trackerGroupId, nodeId },
-    })
+    // 全量覆盖策略: index 和 manifest 一起替换,避免残留 stale manifest
+    await prisma.$transaction([
+      prisma.tracker_share_manifest.deleteMany({
+        where: { trackerGroupId: group.trackerGroupId, nodeId },
+      }),
+      prisma.tracker_share_index.deleteMany({
+        where: { trackerGroupId: group.trackerGroupId, nodeId },
+      }),
+    ])
 
     let accepted = 0
     const result: AnnounceResult['shares'] = []

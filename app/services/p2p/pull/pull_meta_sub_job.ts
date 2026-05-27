@@ -24,7 +24,7 @@ import {
   createThrottledProgressReporter,
   runChildDownload,
 } from './pull_shared.js'
-import { notifyDone } from './pull_child_tracker.js'
+import { markTransferTaskRunning, notifyDone } from './pull_child_tracker.js'
 import { extractErrorMessage } from '#utils/p2p_log'
 
 /** 判断 relPath 是否为元数据文件 */
@@ -57,6 +57,7 @@ export type PullMetaJobArgs = {
   transferId: number
   groupNo: string
   mangaId: number
+  taskKey?: string
   /** 元数据文件清单(以 baseDir 为根) */
   files: TreeFileEntry[]
   /** 元数据落盘根目录(通常 = 漫画目录) */
@@ -83,13 +84,17 @@ export default class PullMetaJob {
   }
 
   async run(): Promise<void> {
-    const { transferId, mangaId, groupNo, files, baseDir, sideFiles, sideBaseDir, isSubTask, inheritedSeeds } = this.args
+    const { transferId, mangaId, groupNo, files, baseDir, sideFiles, sideBaseDir, isSubTask, inheritedSeeds, taskKey } = this.args
     const logTag = `p2p-pull-meta#${transferId}-m${mangaId}`
+
+    if (taskKey) {
+      await markTransferTaskRunning(transferId, taskKey)
+    }
 
     if (await isTransferCanceled(transferId)) {
       console.log(`[${logTag}] 已取消,跳过`)
       if (isSubTask) {
-        await notifyDone(transferId, { ok: false, downloadedBytes: 0, canceled: true })
+        await notifyDone(transferId, { ok: false, downloadedBytes: 0, canceled: true }, taskKey)
       }
       return
     }
@@ -99,7 +104,7 @@ export default class PullMetaJob {
     if (!totalFiles) {
       console.log(`[${logTag}] 元数据+sideFiles 清单均为空,直接完成`)
       if (isSubTask) {
-        await notifyDone(transferId, { ok: true, downloadedBytes: 0 })
+        await notifyDone(transferId, { ok: true, downloadedBytes: 0 }, taskKey)
       } else {
         await this.finalizeStandalone(transferId, true, 0)
       }
@@ -146,7 +151,7 @@ export default class PullMetaJob {
     }
 
     if (isSubTask) {
-      await notifyDone(transferId, { ok, downloadedBytes, error: errorMsg })
+      await notifyDone(transferId, { ok, downloadedBytes, error: errorMsg }, taskKey)
     } else {
       await this.finalizeStandalone(transferId, ok, downloadedBytes, errorMsg)
     }
