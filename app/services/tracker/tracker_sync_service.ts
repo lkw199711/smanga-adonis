@@ -196,7 +196,7 @@ class TrackerSyncService {
               lastHeartbeat: node.lastHeartbeat ? new Date(node.lastHeartbeat) : existing.lastHeartbeat,
             },
           })
-          .catch(() => {})
+          .catch((err: any) => log_p2p_error(`tracker-sync-mergeNode.update(${node.nodeId})`, err))
         continue
       }
 
@@ -213,7 +213,7 @@ class TrackerSyncService {
             lastHeartbeat: node.lastHeartbeat ? new Date(node.lastHeartbeat) : null,
           },
         })
-        .catch(() => {})
+        .catch((err: any) => log_p2p_error(`tracker-sync-mergeNode.create(${node.nodeId})`, err))
     }
   }
 
@@ -243,7 +243,7 @@ class TrackerSyncService {
             updateTime: new Date(),
           },
         })
-        .catch(() => {})
+        .catch((err: any) => log_p2p_error(`tracker-sync-mergeGroup(${group.groupNo})`, err))
     }
   }
 
@@ -252,7 +252,7 @@ class TrackerSyncService {
     if (!group) return
 
     for (const member of members) {
-      const node = await prisma.tracker_node.findUnique({ where: { nodeId: member.nodeId } })
+      let node = await prisma.tracker_node.findUnique({ where: { nodeId: member.nodeId } })
       if (!node) {
         await prisma.tracker_node
           .create({
@@ -267,7 +267,20 @@ class TrackerSyncService {
               lastHeartbeat: null,
             },
           })
-          .catch(() => {})
+          .catch((err: any) =>
+            log_p2p_error(`tracker-sync-mergeMember.createNode(${member.nodeId})`, err)
+          )
+
+        // 节点创建可能失败(如唯一约束冲突),重新检查是否存在
+        node = await prisma.tracker_node.findUnique({ where: { nodeId: member.nodeId } })
+        if (!node) {
+          // 节点不存在,跳过该成员的 membership upsert(否则 FK 约束会失败)
+          log_p2p_error(
+            `tracker-sync-mergeMember.skip(${groupNo}/${member.nodeId})`,
+            new Error('节点创建失败或不存在,跳过成员关系同步')
+          )
+          continue
+        }
       }
 
       await prisma.tracker_membership
@@ -288,7 +301,24 @@ class TrackerSyncService {
             updateTime: new Date(),
           },
         })
-        .catch(() => {})
+        .catch((err: any) =>
+          log_p2p_error(`tracker-sync-mergeMember.upsert(${groupNo}/${member.nodeId})`, err)
+        )
+    }
+
+    // 同步完成后矫正 memberCount = 实际成员关系数
+    const actualCount = await prisma.tracker_membership.count({
+      where: { trackerGroupId: group.trackerGroupId },
+    })
+    if (actualCount !== group.memberCount) {
+      await prisma.tracker_group
+        .update({
+          where: { trackerGroupId: group.trackerGroupId },
+          data: { memberCount: actualCount },
+        })
+        .catch((err: any) =>
+          log_p2p_error(`tracker-sync-fixMemberCount(${groupNo})`, err)
+        )
     }
   }
 

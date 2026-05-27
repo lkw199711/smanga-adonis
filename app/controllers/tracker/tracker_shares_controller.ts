@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import trackerShareService from '#services/tracker/tracker_share_service'
+import trackerGroupService from '#services/tracker/tracker_group_service'
 import { log_tracker_error } from '#utils/p2p_log'
 import {
   announceTrackerShareValidator,
@@ -41,7 +42,19 @@ export default class TrackerSharesController {
    */
   async seeds({ params, request, response }: HttpContext) {
     try {
+      const nodeId = (request as any).trackerNodeId as string
       const { groupNo } = await trackerGroupNoParamValidator.validate(params)
+
+      // 校验调用者是否为该群组成员(集中鉴权,下游 seed 不再重复校验)
+      const isMember = await trackerGroupService.isMember(nodeId, groupNo)
+      if (!isMember) {
+        return response.status(403).json({
+          code: 403,
+          message: '当前节点不是该群组成员或已被移除',
+          status: 'forbidden',
+        })
+      }
+
       const { shareType, remoteMediaId, remoteMangaId } =
         await seedsTrackerShareValidator.validate(request.qs())
       const { list, count } = await trackerShareService.findSeeds(groupNo, {
