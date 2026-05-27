@@ -7,14 +7,25 @@
  *
  * 流程:
  *  1) 取本地 p2p_peer_share_manifest 中该群最大 updateTime 作为 since(增量基线)
- *  2) 调 tracker /tracker/group/:groupNo/manifests?since=...
+ *  2) 向所有可达 tracker 查询 manifests，合并去重
  *  3) upsert 到 p2p_peer_share_manifest
  *
  * 并发保护:每群同时只有一个同步任务在跑,重复触发直接合并
  */
 
 import prisma from '#start/prisma'
-import { get_default_tracker_client } from '../tracker_client.js'
+import { get_config } from '#utils/index'
+import TrackerClient from '../tracker_client.js'
+import p2pIdentityService from '../p2p_identity_service.js'
+
+function build_clients(): TrackerClient[] {
+  const cfg = get_config()?.p2p
+  if (!cfg?.enable || !cfg?.role?.node) return []
+  const id = p2pIdentityService.getIdentity()
+  if (!id) return []
+  const urls = p2pIdentityService.getReachableTrackerUrls(cfg)
+  return urls.map((url) => new TrackerClient(url, id.nodeId))
+}
 
 class ManifestSyncService {
   /** 每群在跑的同步任务 (groupNo → Promise) */
@@ -36,8 +47,8 @@ class ManifestSyncService {
   }
 
   private async _doSync(groupNo: string): Promise<void> {
-    const tracker = get_default_tracker_client()
-    if (!tracker) return
+    const clients = build_clients()
+    if (!clients.length) return
 
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) return
@@ -50,20 +61,26 @@ class ManifestSyncService {
     })
     const since = lastest?.updateTime ? lastest.updateTime.getTime() : 0
 
-    let result
-    try {
-      result = await tracker.listManifests(groupNo, { since: since > 0 ? since : undefined })
-    } catch (e: any) {
-      if (process.env.P2P_DEBUG) {
-        console.warn(`[p2p] manifest 同步失败 groupNo=${groupNo}`, e?.message)
+    // 从所有 tracker 合并 manifest 摘要(按唯一键去重)
+    const mergedMap = new Map<string, any>()
+    for (const tracker of clients) {
+      try {
+        const result = await tracker.listManifests(groupNo, { since: since > 0 ? since : undefined })
+        for (const m of result?.list || []) {
+          const key = `${m.nodeId || ''}|${m.shareType || ''}|${m.remoteMediaId ?? ''}|${m.remoteMangaId ?? ''}`
+          if (!mergedMap.has(key)) mergedMap.set(key, m)
+        }
+      } catch (e: any) {
+        if (process.env.P2P_DEBUG) {
+          console.warn(`[p2p] manifest 同步失败 tracker=${(tracker as any).baseUrl} groupNo=${groupNo}`, e?.message)
+        }
       }
-      return
     }
 
-    if (!result?.list?.length) return
+    if (!mergedMap.size) return
 
     let upserted = 0
-    for (const m of result.list) {
+    for (const m of mergedMap.values()) {
       try {
         await prisma.p2p_peer_share_manifest.upsert({
           where: {

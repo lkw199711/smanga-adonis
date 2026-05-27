@@ -236,7 +236,10 @@ class P2PIdentityService {
   /**
    * 快速验证身份在 tracker 侧是否仍有效
    * - 本地 tracker：查 tracker_node 表
-   * - 远程 tracker：发 heartbeat 探测，401/403 视为失效
+   * - 远程 tracker：向所有可达 tracker 发 heartbeat 探测
+   *   - 任一 tracker 确认有效(200) → true
+   *   - 全部 tracker 返回 401/403 → false（身份在所有 tracker 上均已失效）
+   *   - 部分网络不可达 → true（保留身份，避免误清）
    */
   private async verifyIdentityQuick(
     p2p: any,
@@ -252,17 +255,29 @@ class P2PIdentityService {
       }
     }
 
-    const url = this.pickTrackerUrl(p2p)
-    if (!url) return true
-    try {
-      const client = new TrackerClient(url, nodeId)
-      await client.heartbeat({ publicUrl })
-      return true
-    } catch (e: any) {
-      const status = e?.response?.status
-      if (status === 401 || status === 403) return false
-      return true // 网络错误保留身份
+    const urls = trackerProbeService.getReachableTrackers()
+    if (!urls.length) return true
+
+    let authFailureCount = 0
+    for (const url of urls) {
+      try {
+        const client = new TrackerClient(url, nodeId)
+        await client.heartbeat({ publicUrl })
+        return true // 任一 tracker 确认有效
+      } catch (e: any) {
+        const status = e?.response?.status
+        if (status === 401 || status === 403) {
+          authFailureCount += 1
+        }
+        // 网络错误：保留身份，不计数为失效
+      }
     }
+
+    // 所有 tracker 均返回 401/403 → 身份在所有 tracker 上均已失效
+    if (authFailureCount > 0 && authFailureCount === urls.length) {
+      return false
+    }
+    return true // 部分不可达或有 tracker 返回其他错误，保留身份
   }
 
   /**

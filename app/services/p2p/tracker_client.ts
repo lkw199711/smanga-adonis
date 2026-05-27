@@ -293,20 +293,4 @@ export class TrackerClient {
   }
 }
 
-/**
- * 根据配置选择 "首选可达 tracker" 生成一个默认客户端(若未配置返回 null)
- */
-export function get_default_tracker_client(): TrackerClient | null {
-  const cfg = get_config()?.p2p
-  if (!cfg?.enable || !cfg?.role?.node) return null
-
-  const reachable = trackerProbeService.getReachableTrackers()
-  // reachable 列表中的 URL 已由 trackerProbeService 补全 /api 前缀(本地 tracker 场景)
-  const url = reachable.length > 0 ? reachable[0] : (cfg?.node?.trackers || [])[0]
-  if (!url) return null
-
-  const nodeId = get_config()?.serverKey
-  return new TrackerClient(url, nodeId)
-}
-
 export default TrackerClient

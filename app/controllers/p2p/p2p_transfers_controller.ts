@@ -29,7 +29,7 @@ export default class P2PTransfersController {
   /**
    * 校验本机节点在 Tracker 端是否在线
    * - 本机即 tracker:直接查 tracker_node 表
-   * - 远端 tracker:发一次心跳探测(心跳豁免在线检查,且成功后自动恢复 online=1)
+   * - 远端 tracker:向所有可达 tracker 发心跳探测，任一在线即通过
    * @returns 错误消息,若为 null 则表示在线
    */
   private async checkNodeOnline(): Promise<string | null> {
@@ -52,22 +52,27 @@ export default class P2PTransfersController {
       return null
     }
 
-    // 远端 tracker:发心跳探测
-    const url = p2pIdentityService.pickTrackerUrl(p2p)
-    if (!url) return '未配置 Tracker 地址'
+    // 远端 tracker:向所有可达 tracker 发心跳探测，任一在线即通过
+    const urls = p2pIdentityService.getReachableTrackerUrls(p2p)
+    if (!urls.length) return '未配置 Tracker 地址'
 
-    try {
-      const client = new TrackerClient(url, id.nodeId)
-      await client.heartbeat({})
-      return null // 心跳成功,节点在线
-    } catch (e: any) {
-      const status = e?.response?.status
-      const remoteMsg: string = e?.response?.data?.message || ''
-      if (status === 401 || status === 403) {
-        return `本机节点在 Tracker 端已失效: ${remoteMsg || '身份无效或被封禁'}`
+    let lastError: string | null = null
+    for (const url of urls) {
+      try {
+        const client = new TrackerClient(url, id.nodeId)
+        await client.heartbeat({})
+        return null // 任一心跳成功,节点在线
+      } catch (e: any) {
+        const status = e?.response?.status
+        const remoteMsg: string = e?.response?.data?.message || ''
+        if (status === 401 || status === 403) {
+          lastError = `本机节点在 Tracker 端已失效(${url}): ${remoteMsg || '身份无效或被封禁'}`
+        } else {
+          lastError = `无法连接 Tracker(${url}): ${remoteMsg || e?.message || '网络错误'}`
+        }
       }
-      return `无法连接 Tracker (${remoteMsg || e?.message || '网络错误'}),请检查网络或 Tracker 服务`
     }
+    return lastError || '所有 Tracker 均不可达'
   }
 
   /**

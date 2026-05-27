@@ -31,24 +31,6 @@ function get_clients(): TrackerClient[] {
   return urls.map((url) => new TrackerClient(url, id.nodeId))
 }
 
-/** 依次尝试每个可达 tracker，第一个成功即返回 */
-async function invoke_first_success<T>(
-  fn: (client: TrackerClient) => Promise<T>
-): Promise<T> {
-  const clients = get_clients()
-  if (!clients.length) throw new Error('P2P 未启用')
-
-  let lastError: any = null
-  for (const client of clients) {
-    try {
-      return await fn(client)
-    } catch (e: any) {
-      lastError = e
-      log_p2p_error('invoke_first_success', e)
-    }
-  }
-  throw lastError || new Error('所有 tracker 均不可达')
-}
 
 export default class P2PPeersController {
   /**
@@ -345,26 +327,43 @@ export default class P2PPeersController {
   /**
    * GET /api/p2p/peer/manifest/:groupNo?nodeId=&shareType=&remoteMediaId=&remoteMangaId=
    * 拉取单个 manifest 完整 payload
+   * - 从所有可达 tracker 查询，返回第一个非空结果
+   * - 所有 tracker 均失败才报错
    */
   async manifest({ params, request, response }: HttpContext) {
     const { groupNo } = await groupNoParamValidator.validate(params)
     const { nodeId, shareType, remoteMediaId, remoteMangaId } =
       await peerManifestQueryValidator.validate(request.qs())
 
-    try {
-      const data = await invoke_first_success((c) => c.getManifest(groupNo, {
-        nodeId,
-        shareType,
-        remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
-        remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
-      }))
-      return response.json({ code: 200, message: '', data })
-    } catch (e: any) {
-      log_p2p_error('peer.manifest', e)
-      return response.status(500).json(
-        { code: 500, message: e?.response?.data?.message || e?.message || '查询失败' }
-      )
+    const clients = get_clients()
+    if (!clients.length) {
+      return response.status(400).json({ code: 400, message: 'P2P 未启用' })
     }
+
+    const queryParams = {
+      nodeId,
+      shareType,
+      remoteMediaId: remoteMediaId ? Number(remoteMediaId) : null,
+      remoteMangaId: remoteMangaId ? Number(remoteMangaId) : null,
+    }
+
+    let lastError: any = null
+    for (const client of clients) {
+      try {
+        const data = await client.getManifest(groupNo, queryParams)
+        if (data) {
+          return response.json({ code: 200, message: '', data })
+        }
+      } catch (e: any) {
+        lastError = e
+        log_p2p_error('peer.manifest.tracker', e)
+      }
+    }
+
+    log_p2p_error('peer.manifest', lastError)
+    return response.status(500).json(
+      { code: 500, message: lastError?.response?.data?.message || lastError?.message || '查询失败' }
+    )
   }
 
   /**

@@ -102,22 +102,6 @@ export async function purgeLocalGroupByGroupNo(groupNo: string): Promise<{
 }
 
 /**
- * 构建一个用于对账的 TrackerClient(带本节点凭证)
- */
-function buildClient(): TrackerClient | null {
-  const cfg = get_config()?.p2p
-  if (!cfg?.enable || !cfg?.role?.node) return null
-
-  const id = p2pIdentityService.getIdentity()
-  if (!id) return null
-
-  const url = p2pIdentityService.pickTrackerUrl(cfg)
-  if (!url) return null
-
-  return new TrackerClient(url, id.nodeId)
-}
-
-/**
  * 获取所有可达 tracker 对应的客户端列表
  */
 function buildClients(): TrackerClient[] {
@@ -248,27 +232,38 @@ export async function reconcileGroupsWithTracker(): Promise<ReconcileResult> {
 /**
  * 单群对账兜底:用于 "拉取/上报时收到群组不存在错误" 的场景
  *
- * 调用方传入 groupNo,本函数主动到 tracker 验证 → 不存在则就地清理本地数据。
- * 失败/不可达均返回 false,不做误删。
+ * 调用方传入 groupNo,本函数主动向所有 tracker 验证:
+ *  - 任一 tracker 仍返回该群 → 不清理
+ *  - 所有可达 tracker 均未返回该群 → 就地清理本地数据
+ *  - 所有 tracker 均不可达 → 不做误删,返回 false
  */
 export async function reconcileSingleGroupIfMissing(groupNo: string): Promise<boolean> {
-  const client = buildClient()
-  if (!client) return false
-  try {
-    const myGroups: any[] = await client.myGroups()
-    const stillExist = (myGroups || []).some((g) => g?.groupNo === groupNo)
-    if (stillExist) return false
-    const r = await purgeLocalGroupByGroupNo(groupNo)
-    if (r.groupExisted) {
-      console.log(
-        `[p2p] 单群对账清理: ${r.groupName}(${groupNo}) ` +
-        `共享=${r.removedShares} peer=${r.removedPeers} transfer=${r.removedTransfers}`
-      )
-      return true
+  const clients = buildClients()
+  if (!clients.length) return false
+
+  let anySucceeded = false
+  for (const client of clients) {
+    try {
+      const myGroups: any[] = await client.myGroups()
+      const stillExist = (myGroups || []).some((g) => g?.groupNo === groupNo)
+      if (stillExist) return false // 至少一个 tracker 仍有该群
+      anySucceeded = true
+    } catch (e: any) {
+      log_p2p_error(`group.reconcile.single(${groupNo})`, e)
     }
-    return false
-  } catch (e: any) {
-    log_p2p_error(`group.reconcile.single(${groupNo})`, e)
-    return false
   }
+
+  // 所有 tracker 均不可达 → 不做误删
+  if (!anySucceeded) return false
+
+  // 所有可达 tracker 均未返回该群 → 清理本地
+  const r = await purgeLocalGroupByGroupNo(groupNo)
+  if (r.groupExisted) {
+    console.log(
+      `[p2p] 单群对账清理: ${r.groupName}(${groupNo}) ` +
+      `共享=${r.removedShares} peer=${r.removedPeers} transfer=${r.removedTransfers}`
+    )
+    return true
+  }
+  return false
 }
