@@ -62,6 +62,7 @@ import {
 } from './pull_child_tracker.js'
 import { extractErrorMessage } from '#utils/p2p_log'
 import { getP2PPullTimeout } from './pull_timeout.js'
+import { finalizePulledTransferToLocalShare } from './pull_local_share_finalize.js'
 
 export type PullMangaJobArgs = {
   transferId: number
@@ -427,6 +428,9 @@ export default class PullMangaJob {
           speedBps: 0,
         },
       })
+      if (ok && !isCanceled) {
+        await finalizePulledTransferToLocalShare(transferId)
+      }
     } catch (e: any) {
       console.warn(`[${tag}] finalize 失败: ${e?.message || e}`)
     }

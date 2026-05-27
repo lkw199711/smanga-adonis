@@ -122,6 +122,9 @@ export const createP2PShareValidator = vine.compile(
       shareType: vine.string().trim().minLength(1),
       mediaId: vine.any().optional(),
       mangaId: vine.any().optional(),
+      remoteMediaId: vine.any().optional(),
+      remoteMangaId: vine.any().optional(),
+      sharePath: vine.string().trim().optional(),
       shareName: vine.string().trim().optional(),
     })
     .allowUnknownProperties()
@@ -132,6 +135,11 @@ export const updateP2PShareValidator = vine.compile(
     .object({
       enable: vine.any().optional(),
       shareName: vine.string().trim().optional(),
+      mediaId: vine.any().optional(),
+      mangaId: vine.any().optional(),
+      remoteMediaId: vine.any().optional(),
+      remoteMangaId: vine.any().optional(),
+      sharePath: vine.string().trim().optional(),
     })
     .allowUnknownProperties()
 )

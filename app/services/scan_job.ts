@@ -98,7 +98,7 @@ export default class ScanPathJob {
     }
 
     mangaListSql = await prisma.manga.findMany({ where: { pathId: this.pathId } })
-    const delMangaList = mangaListSql.filter((manga) => {
+    const delMangaList = mangaListSql.filter((manga: any) => {
       return !mangaList.some((item) => {
         return this.normalize_scan_path(item.mangaPath) === this.normalize_scan_path(manga.mangaPath)
       })
@@ -165,6 +165,46 @@ export default class ScanPathJob {
       args: { mediaId: this.pathInfo.mediaId },
       priority: TaskPriority.announceP2P,
     })
+
+    const normalizedPath = this.normalize_scan_path(this.pathInfo.pathContent)
+    const pathShares = await prisma.p2p_local_share.findMany({
+      where: {
+        enable: 1,
+        sharePath: { not: null },
+      },
+      select: {
+        p2pGroupId: true,
+        sharePath: true,
+      },
+    })
+    const matchedGroupIds = [
+      ...new Set(
+        pathShares
+          .filter((share: { p2pGroupId: number; sharePath: string | null }) => {
+            const sharePath = this.normalize_scan_path(share.sharePath)
+            return (
+              sharePath === normalizedPath ||
+              sharePath.startsWith(`${normalizedPath}${path.sep}`)
+            )
+          })
+          .map((share: { p2pGroupId: number }) => share.p2pGroupId)
+      ),
+    ]
+
+    if (matchedGroupIds.length) {
+      const groups = await prisma.p2p_group.findMany({
+        where: { p2pGroupId: { in: matchedGroupIds } },
+        select: { groupNo: true },
+      })
+      for (const group of groups) {
+        await addTask({
+          taskName: `announce_after_scan_group_${group.groupNo}_${this.pathId}`,
+          command: 'announceAfterScan',
+          args: { groupNo: group.groupNo },
+          priority: TaskPriority.announceP2P,
+        })
+      }
+    }
   }
 
   /**

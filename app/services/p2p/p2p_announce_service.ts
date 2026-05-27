@@ -31,6 +31,9 @@ type ShareRecord = {
   shareType: string
   mediaId: number | null
   mangaId: number | null
+  remoteMediaId: number | null
+  remoteMangaId: number | null
+  sharePath: string | null
   shareName: string
   enable: number
 }
@@ -82,8 +85,14 @@ export async function announce_group(groupNo: string) {
           shareType: s.shareType,
           mediaId: s.mediaId,
           mangaId: s.mangaId,
+          remoteMediaId: s.remoteMediaId,
+          remoteMangaId: s.remoteMangaId,
+          sharePath: s.sharePath,
           shareName: s.shareName,
         })
+        if (mangaCount === undefined && s.shareType === 'media' && manifest) {
+          mangaCount = manifest.payload.stats.mangaCount
+        }
 
         let changed = false
         if (manifest) {
@@ -99,8 +108,8 @@ export async function announce_group(groupNo: string) {
       shares: built.map(({ share: s, mangaCount, manifest, changed }) => {
         const item: AnnouncePayload['shares'][number] = {
           shareType: s.shareType,
-          remoteMediaId: s.mediaId || undefined,
-          remoteMangaId: s.mangaId || undefined,
+          remoteMediaId: s.remoteMediaId || s.mediaId || undefined,
+          remoteMangaId: s.remoteMangaId || s.mangaId || undefined,
           shareName: s.shareName,
           mangaCount,
         }
@@ -144,7 +153,7 @@ export async function announce_group(groupNo: string) {
 
     for (const { share: s, manifest, changed } of built) {
       if (!manifest || !changed) continue
-      const key = `${s.shareType}|${s.mediaId ?? ''}|${s.mangaId ?? ''}`
+      const key = `${s.shareType}|${s.remoteMediaId ?? s.mediaId ?? ''}|${s.remoteMangaId ?? s.mangaId ?? ''}`
       const fromTracker = versionByKey.get(key)
       const version = BigInt(fromTracker?.version || Date.now())
       const contentHash = fromTracker?.contentHash || manifest.contentHash

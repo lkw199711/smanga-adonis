@@ -16,6 +16,12 @@ import path from 'path'
 import { image_files, is_img } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
 import {
+  resolvePathChapterByRemoteId,
+  resolvePathMangaByRemoteId,
+  resolvePathShareMangas,
+  resolveShareByRemoteMediaId,
+} from '#services/p2p/path_share_resolver'
+import {
   mediaIdParamValidator,
   mangaIdParamValidator,
   chapterIdParamValidator,
@@ -117,6 +123,135 @@ function walk_dir_files(
   return result
 }
 
+function buildMangaTreePayload(input: { mangaId: number; mangaName: string; mangaPath: string }) {
+  const mangaPath = input.mangaPath
+  if (!fs.existsSync(mangaPath)) {
+    return { error: `manga path not found: ${mangaPath}` }
+  }
+
+  const stat = fs.statSync(mangaPath)
+  let rootDir: string
+  let isSingleFile: boolean
+  let files: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
+  const sideFiles: Array<{ absPath: string; relPath: string; size: number; mtime: number }> = []
+
+  const mangaBaseName = stat.isFile()
+    ? path.basename(mangaPath).replace(/\.(cbr|cbz|zip|7z|epub|rar|pdf)$/i, '')
+    : path.basename(mangaPath)
+  const mangaParentDir = path.dirname(mangaPath)
+
+  if (stat.isFile()) {
+    isSingleFile = true
+    rootDir = mangaParentDir
+    files = [
+      {
+        absPath: mangaPath,
+        relPath: path.basename(mangaPath),
+        size: stat.size,
+        mtime: stat.mtimeMs,
+      },
+    ]
+  } else {
+    isSingleFile = false
+    rootDir = mangaPath
+    files = walk_dir_files(mangaPath)
+  }
+
+  list_side_cover_files(mangaParentDir, mangaBaseName, sideFiles)
+
+  const smangaInfoDir = path.join(mangaParentDir, `${mangaBaseName}-smanga-info`)
+  if (fs.existsSync(smangaInfoDir) && fs.statSync(smangaInfoDir).isDirectory()) {
+    const infoFiles = walk_dir_files(smangaInfoDir)
+    for (const f of infoFiles) {
+      sideFiles.push({
+        absPath: f.absPath,
+        relPath: `${mangaBaseName}-smanga-info/${f.relPath}`,
+        size: f.size,
+        mtime: f.mtime,
+      })
+    }
+  }
+
+  const totalBytes =
+    files.reduce((acc, f) => acc + (f.size || 0), 0) +
+    sideFiles.reduce((acc, f) => acc + (f.size || 0), 0)
+
+  return {
+    data: {
+      mangaId: input.mangaId,
+      mangaName: input.mangaName,
+      mangaPath,
+      isSingleFile,
+      rootDir,
+      parentDir: mangaParentDir,
+      fileCount: files.length,
+      totalBytes,
+      files,
+      sideFiles,
+    },
+  }
+}
+
+function buildChapterTreePayload(input: {
+  chapterId: number
+  chapterName: string
+  chapterPath: string
+}) {
+  const chapterPath = input.chapterPath
+  if (!fs.existsSync(chapterPath)) {
+    return { error: `chapter path not found: ${chapterPath}` }
+  }
+
+  const stat = fs.statSync(chapterPath)
+  let rootDir: string
+  let isSingleFile: boolean
+  let files: Array<{ absPath: string; relPath: string; size: number; mtime: number }>
+  const sideFiles: Array<{ absPath: string; relPath: string; size: number; mtime: number }> = []
+
+  const chParentDir = path.dirname(chapterPath)
+  let chBaseName = path.basename(chapterPath)
+  const extMatch = /\.(cbr|cbz|zip|7z|epub|rar|pdf)$/i.exec(chBaseName)
+  if (extMatch) chBaseName = chBaseName.slice(0, chBaseName.length - extMatch[0].length)
+
+  if (stat.isFile()) {
+    isSingleFile = true
+    rootDir = chParentDir
+    files = [
+      {
+        absPath: chapterPath,
+        relPath: path.basename(chapterPath),
+        size: stat.size,
+        mtime: stat.mtimeMs,
+      },
+    ]
+  } else {
+    isSingleFile = false
+    rootDir = chapterPath
+    files = walk_dir_files(chapterPath)
+  }
+
+  list_side_cover_files(chParentDir, chBaseName, sideFiles)
+
+  const totalBytes =
+    files.reduce((acc, f) => acc + (f.size || 0), 0) +
+    sideFiles.reduce((acc, f) => acc + (f.size || 0), 0)
+
+  return {
+    data: {
+      chapterId: input.chapterId,
+      chapterName: input.chapterName,
+      chapterPath,
+      isSingleFile,
+      rootDir,
+      parentDir: chParentDir,
+      fileCount: files.length,
+      totalBytes,
+      files,
+      sideFiles,
+    },
+  }
+}
+
 export default class P2PServeController {
   /**
    * GET /p2p/serve/ping
@@ -147,6 +282,24 @@ export default class P2PServeController {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
       const { mediaId } = await mediaIdParamValidator.validate(params)
 
+      const pathShare = groupNo ? await resolveShareByRemoteMediaId(groupNo, mediaId) : null
+      if (pathShare?.sharePath) {
+        const mangas = await resolvePathShareMangas(pathShare)
+        const list = mangas.map((manga) => ({
+          mangaId: manga.remoteMangaId,
+          mangaName: manga.mangaName,
+          mangaPath: manga.mangaPath,
+          mangaCover: manga.mangaCover,
+          describe: manga.describe,
+          author: manga.author,
+          chapterCount: manga.chapterCount,
+        }))
+        console.log(
+          `[p2p-serve] mangas 200(path) | caller=${callerNodeId} groupNo=${groupNo} mediaId=${mediaId} count=${list.length}`
+        )
+        return response.json({ code: 200, message: '', list, count: list.length })
+      }
+
       const mangas = await prisma.manga.findMany({
         where: { mediaId },
         orderBy: { mangaName: 'asc' },
@@ -168,6 +321,21 @@ export default class P2PServeController {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
       const { mangaId } = await mangaIdParamValidator.validate(params)
+
+      const resolved = groupNo ? await resolvePathMangaByRemoteId(groupNo, mangaId) : null
+      if (resolved) {
+        const chapters = resolved.manga.chapters.map((chapter) => ({
+          chapterId: chapter.remoteChapterId,
+          chapterName: chapter.chapterName,
+          chapterType: chapter.chapterType,
+          chapterPath: chapter.chapterPath,
+          picNum: chapter.imageCount,
+        }))
+        console.log(
+          `[p2p-serve] chapters 200(path) | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId} count=${chapters.length}`
+        )
+        return response.json({ code: 200, message: '', list: chapters, count: chapters.length })
+      }
 
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
       if (!manga) {
@@ -198,6 +366,16 @@ export default class P2PServeController {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
       const { chapterId } = await chapterIdParamValidator.validate(params)
+
+      const resolved = groupNo ? await resolvePathChapterByRemoteId(groupNo, chapterId) : null
+      if (resolved) {
+        const images = image_files(resolved.chapter.chapterPath)
+        console.log(
+          `[p2p-serve] images 200(path) | caller=${callerNodeId} groupNo=${groupNo} ` +
+            `chapterId=${chapterId} path=${resolved.chapter.chapterPath} count=${images.length}`
+        )
+        return response.json({ code: 200, message: '', list: images, count: images.length })
+      }
 
       const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
       if (!chapter) {
@@ -233,6 +411,32 @@ export default class P2PServeController {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
       const { mangaId } = await mangaIdParamValidator.validate(params)
+
+      const resolved = groupNo ? await resolvePathMangaByRemoteId(groupNo, mangaId) : null
+      if (resolved) {
+        const built = buildMangaTreePayload({
+          mangaId: resolved.manga.remoteMangaId,
+          mangaName: resolved.manga.mangaName,
+          mangaPath: resolved.manga.mangaPath,
+        })
+        if (!('data' in built)) {
+          console.warn(`[p2p-serve] tree 404 path manga not found | mangaId=${mangaId} path=${resolved.manga.mangaPath}`)
+          return response.status(404).json({ code: 404, message: built.error, status: 'not found' })
+        }
+        const data = built.data!
+
+        console.log(
+          `[p2p-serve] tree 200(path) | caller=${callerNodeId} groupNo=${groupNo} ` +
+            `mangaId=${mangaId} isSingleFile=${data.isSingleFile} fileCount=${data.files.length} ` +
+            `sideFileCount=${data.sideFiles.length} totalBytes=${data.totalBytes}`
+        )
+
+        return response.json({
+          code: 200,
+          message: '',
+          data,
+        })
+      }
 
       const manga = await prisma.manga.findUnique({ where: { mangaId } })
       if (!manga) {
@@ -345,6 +549,31 @@ export default class P2PServeController {
     try {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
       const { chapterId } = await chapterIdParamValidator.validate(params)
+
+      const resolved = groupNo ? await resolvePathChapterByRemoteId(groupNo, chapterId) : null
+      if (resolved) {
+        const built = buildChapterTreePayload({
+          chapterId: resolved.chapter.remoteChapterId,
+          chapterName: resolved.chapter.chapterName,
+          chapterPath: resolved.chapter.chapterPath,
+        })
+        if (!('data' in built)) {
+          return response.status(404).json({ code: 404, message: built.error, status: 'not found' })
+        }
+        const data = built.data!
+
+        console.log(
+          `[p2p-serve] chapter_tree 200(path) | caller=${callerNodeId} groupNo=${groupNo} ` +
+            `chapterId=${chapterId} isSingleFile=${data.isSingleFile} fileCount=${data.files.length} ` +
+            `sideFileCount=${data.sideFiles.length} totalBytes=${data.totalBytes}`
+        )
+
+        return response.json({
+          code: 200,
+          message: '',
+          data,
+        })
+      }
 
       const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
       if (!chapter) {

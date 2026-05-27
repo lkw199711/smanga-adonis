@@ -1,6 +1,6 @@
 CREATE TABLE `p2p_transfer_task` (
   `id` INT NOT NULL AUTO_INCREMENT,
-  `transfer_id` INT NOT NULL,
+  `transfer_id` INT UNSIGNED NOT NULL,
   `parent_key` VARCHAR(255) NULL,
   `task_key` VARCHAR(255) NOT NULL,
   `task_type` VARCHAR(64) NOT NULL,

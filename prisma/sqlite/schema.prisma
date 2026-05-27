@@ -536,6 +536,9 @@ model p2p_local_share {
   shareType       String    @default("media")
   mediaId         Int?
   mangaId         Int?
+  remoteMediaId   Int?
+  remoteMangaId   Int?
+  sharePath       String?
   shareName       String
   enable          Int       @default(1)
   announceHash    String?
@@ -543,7 +546,7 @@ model p2p_local_share {
   updateTime      DateTime  @default(now()) @updatedAt
   group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
 
-  @@unique([p2pGroupId, shareType, mediaId, mangaId], map: "uniqueGroupShare")
+  @@index([p2pGroupId, shareType], map: "idxP2PLocalShareGroupType")
   @@map("p2p_local_share")
 }
 

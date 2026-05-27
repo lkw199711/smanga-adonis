@@ -1,5 +1,6 @@
 import prisma from '#start/prisma'
 import { get_config } from '#utils/index'
+import { finalizePulledTransferToLocalShare } from './pull_local_share_finalize.js'
 
 type ChildOutcome = {
   ok: boolean
@@ -262,6 +263,12 @@ export async function finalizeTransferIfReady(transferId: number) {
       speedBps: 0,
     },
   })
+
+  if (finalStatus === 'success') {
+    await finalizePulledTransferToLocalShare(transferId).catch((error) => {
+      console.warn(`[pull-tracker] finalize local share failed transferId=${transferId}`, error)
+    })
+  }
 
   console.log(`[pull-tracker] finalize transferId=${transferId} => ${finalStatus}`)
   return true

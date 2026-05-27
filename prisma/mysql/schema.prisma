@@ -542,13 +542,16 @@ model p2p_local_share {
   shareType       String    @default("media") @db.VarChar(32)
   mediaId         Int?      @db.UnsignedInt
   mangaId         Int?      @db.UnsignedInt
+  remoteMediaId   Int?      @db.UnsignedInt
+  remoteMangaId   Int?      @db.UnsignedInt
+  sharePath       String?   @db.VarChar(500)
   shareName       String    @db.VarChar(191)
   enable          Int       @default(1) @db.UnsignedInt
   announceHash    String?   @db.VarChar(64)
   createTime      DateTime  @default(now()) @db.DateTime(6)
   updateTime      DateTime  @default(now()) @updatedAt @db.DateTime(6)
 
-  @@unique([p2pGroupId, shareType, mediaId, mangaId], map: "uniqueGroupShare")
+  @@index([p2pGroupId, shareType], map: "idxP2PLocalShareGroupType")
   @@map("p2p_local_share")
 }
 
