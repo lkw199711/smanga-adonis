@@ -1,7 +1,7 @@
 import { get_config } from '#utils/index'
 
 export type QueueWorkerMode = 'embedded' | 'external' | 'disabled'
-export type QueueWorkerGroup = 'background' | 'compress'
+export type QueueWorkerGroup = 'background' | 'p2p' | 'compress'
 
 export type QueueWorkerConfig = {
   enabled: boolean
@@ -39,7 +39,7 @@ const defaultQueueConfig: QueueConfig = {
     jitter: true,
   },
   worker: {
-    mode: 'embedded',
+    mode: 'external',
     stalledAfterMs: 60000,
     heartbeatIntervalMs: 10000,
     gracefulShutdownMs: 30000,
@@ -47,8 +47,13 @@ const defaultQueueConfig: QueueConfig = {
   workers: {
     background: {
       enabled: true,
-      queues: ['scan', 'sync', 'p2p', 'default'],
+      queues: ['scan', 'sync', 'default'],
       concurrency: 1,
+    },
+    p2p: {
+      enabled: false,
+      queues: ['p2p'],
+      concurrency: 3,
     },
     compress: {
       enabled: true,
@@ -102,6 +107,11 @@ export function getQueueConfig(): QueueConfig {
         enabled: raw.workers?.background?.enabled ?? defaultQueueConfig.workers.background.enabled,
         queues: raw.workers?.background?.queues || defaultQueueConfig.workers.background.queues,
         concurrency: positiveNumber(raw.workers?.background?.concurrency, defaultQueueConfig.workers.background.concurrency),
+      },
+      p2p: {
+        enabled: raw.workers?.p2p?.enabled ?? defaultQueueConfig.workers.p2p.enabled,
+        queues: raw.workers?.p2p?.queues || defaultQueueConfig.workers.p2p.queues,
+        concurrency: positiveNumber(raw.workers?.p2p?.concurrency, defaultQueueConfig.workers.p2p.concurrency),
       },
       compress: {
         enabled: raw.workers?.compress?.enabled ?? defaultQueueConfig.workers.compress.enabled,

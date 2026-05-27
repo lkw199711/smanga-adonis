@@ -9,7 +9,7 @@ import { SqlQueueWorkerService } from '#services/queue/sql_queue_worker_service'
 function parseWorkerGroup(): QueueWorkerGroup {
   const arg = process.argv.find((item) => item.startsWith('--worker='))
   const worker = arg?.split('=')[1]
-  if (worker === 'background' || worker === 'compress') return worker
+  if (worker === 'background' || worker === 'p2p' || worker === 'compress') return worker
   return 'background'
 }
 

@@ -78,7 +78,7 @@ const defaultConfig = {
       jitter: true,
     },
     worker: {
-      mode: 'embedded',
+      mode: 'external',
       stalledAfterMs: 60000,
       heartbeatIntervalMs: 10000,
       gracefulShutdownMs: 30000,
@@ -86,8 +86,13 @@ const defaultConfig = {
     workers: {
       background: {
         enabled: true,
-        queues: ['scan', 'sync', 'p2p', 'default'],
+        queues: ['scan', 'sync', 'default'],
         concurrency: 1,
+      },
+      p2p: {
+        enabled: false,
+        queues: ['p2p'],
+        concurrency: 3,
       },
       compress: {
         enabled: true,
@@ -448,6 +453,13 @@ function ensure_queue_config(config: any) {
     }
     changed = true
   }
+  if (config.queue.workers.p2p === undefined) {
+    config.queue.workers.p2p = {
+      ...defaultConfig.queue.workers.p2p,
+      concurrency: legacyConcurrency * 3,
+    }
+    changed = true
+  }
   if (config.queue.workers.compress === undefined) {
     config.queue.workers.compress = {
       ...defaultConfig.queue.workers.compress,
@@ -459,6 +471,10 @@ function ensure_queue_config(config: any) {
     config.queue.workers.background.concurrency = legacyConcurrency
     changed = true
   }
+  if (config.queue.workers.p2p.concurrency === undefined) {
+    config.queue.workers.p2p.concurrency = legacyConcurrency * 3
+    changed = true
+  }
   if (config.queue.workers.compress.concurrency === undefined) {
     config.queue.workers.compress.concurrency = legacyConcurrency
     changed = true
@@ -467,12 +483,20 @@ function ensure_queue_config(config: any) {
     config.queue.workers.background.enabled = defaultConfig.queue.workers.background.enabled
     changed = true
   }
+  if (config.queue.workers.p2p.enabled === undefined) {
+    config.queue.workers.p2p.enabled = defaultConfig.queue.workers.p2p.enabled
+    changed = true
+  }
   if (config.queue.workers.compress.enabled === undefined) {
     config.queue.workers.compress.enabled = defaultConfig.queue.workers.compress.enabled
     changed = true
   }
   if (config.queue.workers.background.queues === undefined) {
     config.queue.workers.background.queues = defaultConfig.queue.workers.background.queues
+    changed = true
+  }
+  if (config.queue.workers.p2p.queues === undefined) {
+    config.queue.workers.p2p.queues = defaultConfig.queue.workers.p2p.queues
     changed = true
   }
   if (config.queue.workers.compress.queues === undefined) {

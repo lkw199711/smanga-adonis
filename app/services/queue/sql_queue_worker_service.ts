@@ -227,7 +227,12 @@ export async function startEmbeddedQueueWorkers() {
 
   if (embeddedWorkers.length > 0) return
 
-  for (const workerGroup of ['background', 'compress'] as QueueWorkerGroup[]) {
+  for (const workerGroup of ['background', 'p2p', 'compress'] as QueueWorkerGroup[]) {
+    const wc = getWorkerConfig(workerGroup)
+    if (!wc.enabled) {
+      console.log(`[queue] worker ${workerGroup} disabled, skipping`)
+      continue
+    }
     const worker = new SqlQueueWorkerService(workerGroup, 'embedded')
     await worker.start()
     embeddedWorkers.push(worker)

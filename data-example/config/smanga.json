@@ -54,7 +54,7 @@
       "jitter": true
     },
     "worker": {
-      "mode": "embedded",
+      "mode": "external",
       "stalledAfterMs": 60000,
       "heartbeatIntervalMs": 10000,
       "gracefulShutdownMs": 30000
@@ -62,8 +62,13 @@
     "workers": {
       "background": {
         "enabled": true,
-        "queues": ["scan", "sync", "p2p", "default"],
+        "queues": ["scan", "sync", "default"],
         "concurrency": 1
+      },
+      "p2p": {
+        "enabled": false,
+        "queues": ["p2p"],
+        "concurrency": 3
       },
       "compress": {
         "enabled": true,
