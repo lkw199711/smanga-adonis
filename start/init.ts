@@ -31,7 +31,7 @@ const defaultConfig = {
     password: 'smanga',
     database: 'smanga',
     file: './data/smanga.db',
-    deploy: true,
+    deploy: false,
   },
   imagick: {
     memory: '1gb',
