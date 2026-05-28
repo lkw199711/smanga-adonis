@@ -147,7 +147,33 @@ export default class TrackerSyncController {
         where: { trackerGroupId: group.trackerGroupId },
         orderBy: { updateTime: 'desc' },
       })
-      return response.json({ code: 200, message: '', list, count: list.length, serverTime: Date.now() })
+      const data = list.map((item: any) => ({
+        trackerShareManifestId: item.trackerShareManifestId,
+        nodeId: item.nodeId,
+        shareType: item.shareType,
+        remoteMediaId: item.remoteMediaId,
+        remoteMangaId: item.remoteMangaId,
+        version: Number(item.version),
+        contentHash: item.contentHash,
+        payloadTruncated: item.payloadTruncated,
+        payloadSize: item.payloadSize,
+        shareName: item.shareName,
+        coverUrl: item.coverUrl,
+        coverSize: item.coverSize,
+        describe: item.describe,
+        mangaCount: item.mangaCount,
+        chapterCount: item.chapterCount,
+        totalSize: item.totalSize !== null ? item.totalSize.toString() : null,
+        payload: item.payload,
+        updateTime: item.updateTime.getTime(),
+      }))
+      return response.json({
+        code: 200,
+        message: '',
+        list: data,
+        count: data.length,
+        serverTime: Date.now(),
+      })
     } catch (err: any) {
       log_tracker_error('sync.groupManifests', err)
       return response.status(500).json({ code: 500, message: err.message })

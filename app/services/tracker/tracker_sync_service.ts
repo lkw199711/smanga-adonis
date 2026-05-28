@@ -145,30 +145,39 @@ class TrackerSyncService {
     await this.mergeGroups(groups)
 
     for (const group of groups) {
-      try {
-        const [membersRes, sharesRes, manifestsRes] = await Promise.all([
-          axios.get(`${baseUrl}/tracker/sync/group/${encodeURIComponent(group.groupNo)}/members`, {
-            headers,
-            timeout: 10_000,
-          }),
-          axios.get(`${baseUrl}/tracker/sync/group/${encodeURIComponent(group.groupNo)}/shares`, {
-            headers,
-            timeout: 10_000,
-          }),
-          axios.get(
-            `${baseUrl}/tracker/sync/group/${encodeURIComponent(group.groupNo)}/manifests`,
-            {
-              headers,
-              timeout: 10_000,
-            }
-          ),
-        ])
+      const groupNo = group.groupNo
+      const encodedGroupNo = encodeURIComponent(groupNo)
+      const [membersRes, sharesRes, manifestsRes] = await Promise.allSettled([
+        axios.get(`${baseUrl}/tracker/sync/group/${encodedGroupNo}/members`, {
+          headers,
+          timeout: 10_000,
+        }),
+        axios.get(`${baseUrl}/tracker/sync/group/${encodedGroupNo}/shares`, {
+          headers,
+          timeout: 10_000,
+        }),
+        axios.get(`${baseUrl}/tracker/sync/group/${encodedGroupNo}/manifests`, {
+          headers,
+          timeout: 10_000,
+        }),
+      ])
 
-        await this.mergeGroupMembers(group.groupNo, membersRes.data?.list || [], group.ownerNodeId)
-        await this.mergeShares(group.groupNo, sharesRes.data?.list || [])
-        await this.mergeManifests(group.groupNo, manifestsRes.data?.list || [])
-      } catch (error) {
-        log_p2p_error(`tracker-sync-group(${peerUrl}/${group.groupNo})`, error)
+      if (membersRes.status === 'fulfilled') {
+        await this.mergeGroupMembers(groupNo, membersRes.value.data?.list || [], group.ownerNodeId)
+      } else {
+        log_p2p_error(`tracker-sync-members(${peerUrl}/${groupNo})`, membersRes.reason)
+      }
+
+      if (sharesRes.status === 'fulfilled') {
+        await this.mergeShares(groupNo, sharesRes.value.data?.list || [])
+      } else {
+        log_p2p_error(`tracker-sync-shares(${peerUrl}/${groupNo})`, sharesRes.reason)
+      }
+
+      if (manifestsRes.status === 'fulfilled') {
+        await this.mergeManifests(groupNo, manifestsRes.value.data?.list || [])
+      } else {
+        log_p2p_error(`tracker-sync-manifests(${peerUrl}/${groupNo})`, manifestsRes.reason)
       }
     }
 
@@ -286,7 +295,7 @@ class TrackerSyncService {
       await prisma.tracker_membership
         .upsert({
           where: {
-            uniqueTrackerMembership: {
+            trackerGroupId_nodeId: {
               trackerGroupId: group.trackerGroupId,
               nodeId: member.nodeId,
             },
