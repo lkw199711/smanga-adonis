@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+import { get_config } from '#utils/index'
 import {
   getQueueConfig,
   getWorkerConfig,
@@ -16,6 +17,11 @@ function parseWorkerGroup(): QueueWorkerGroup {
 function sleepForever(reason: string) {
   console.log(`[queue] ${reason}; sleeping`)
   setInterval(() => undefined, 60 * 60 * 1000)
+}
+
+const appConfig = get_config()
+if (!appConfig?.sql?.deploy) {
+  sleepForever('deploy not completed, Prisma not initialized')
 }
 
 const workerGroup = parseWorkerGroup()
