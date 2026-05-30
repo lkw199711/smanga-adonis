@@ -1,6 +1,5 @@
 import { join } from 'node:path'
 import * as fs from 'node:fs'
-import prisma from './prisma.js'
 import {
   path_compress,
   path_poster,
@@ -189,16 +188,6 @@ export default async function boot() {
   fs.readdirSync(cachePath).forEach((file: any) => {
     const filePath = join(cachePath, file)
     s_delete(filePath)
-  })
-
-  // 将中断的任务重置
-  await prisma.task.updateMany({
-    where: {
-      status: 'in-progress',
-    },
-    data: {
-      status: 'pending',
-    },
   })
 
   // 设置路径自动扫描cron任务

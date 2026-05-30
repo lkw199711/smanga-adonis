@@ -3,6 +3,9 @@ import prisma from '#start/prisma'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { create_scan_cron } from '#services/cron_service'
+import ScanDiscoveryService from '#services/scan/scan_discovery_service'
+import ScanReportService from '#services/scan/scan_report_service'
+import { get_config } from '#utils/index'
 import fs from 'fs'
 import {
   listPathValidator,
@@ -10,9 +13,13 @@ import {
   createPathValidator,
   updatePathValidator,
   batchIdsParamPathValidator,
+  previewPathValidator,
 } from '#validators/path'
 
 export default class PathsController {
+  private discoveryService = new ScanDiscoveryService()
+  private reportService = new ScanReportService()
+
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
@@ -53,6 +60,62 @@ export default class PathsController {
     return response.json({ code: 200, message: '', data: path })
   }
 
+  private async buildDiscoveryInputFromPath(pathId: number) {
+    const pathInfo = await prisma.path.findUnique({
+      where: { pathId },
+      include: { media: true },
+    })
+
+    if (!pathInfo || !pathInfo.media) return null
+
+    return {
+      mediaId: pathInfo.mediaId,
+      pathId: pathInfo.pathId,
+      pathContent: pathInfo.pathContent,
+      mediaType: pathInfo.media.mediaType,
+      directoryFormat: pathInfo.media.directoryFormat,
+      include: pathInfo.include,
+      exclude: pathInfo.exclude,
+      ignoreHiddenFiles: get_config().scan?.ignoreHiddenFiles === 1,
+      isCloudMedia: pathInfo.media.isCloudMedia,
+    }
+  }
+
+  public async preview({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
+    const { pathId } = await idParamPathValidator.validate(params)
+    const input = await this.buildDiscoveryInputFromPath(pathId)
+    if (!input) {
+      return response.status(404).json({ code: 404, message: '路径或媒体库不存在' })
+    }
+
+    const result = this.discoveryService.discoverPath(input)
+    return response.json({ code: 200, message: '', data: result })
+  }
+
+  public async preview_unsaved({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+
+    const data = await previewPathValidator.validate(request.all())
+    const media = data.mediaId
+      ? await prisma.media.findUnique({ where: { mediaId: data.mediaId } })
+      : null
+
+    const result = this.discoveryService.discoverPath({
+      mediaId: data.mediaId,
+      pathContent: data.pathContent,
+      mediaType: data.mediaType ?? media?.mediaType ?? 0,
+      directoryFormat: data.directoryFormat ?? media?.directoryFormat ?? 0,
+      include: data.include,
+      exclude: data.exclude,
+      ignoreHiddenFiles: get_config().scan?.ignoreHiddenFiles === 1,
+      isCloudMedia: data.isCloudMedia ?? media?.isCloudMedia ?? 0,
+    })
+
+    return response.json({ code: 200, message: '', data: result })
+  }
+
   public async create({ request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
@@ -89,15 +152,27 @@ export default class PathsController {
       create_scan_cron()
     }
 
+    const scanRun = await this.reportService.createRun({
+      runType: 'incremental',
+      triggerType: 'createPath',
+      mediaId: path.mediaId,
+      pathId: path.pathId,
+      pathContent: path.pathContent,
+    })
+
     // 扫描路径
     await addTask({
       taskName: `scan_path_${path.pathId}`,
       command: 'taskScanPath',
-      args: { pathId: path.pathId },
+      args: { pathId: path.pathId, scanRunId: scanRun.scanRunId },
       priority: TaskPriority.scan,
     })
 
-    return response.json({ code: 200, message: '新增成功,扫描任务已提交', data: path })
+    return response.json({
+      code: 200,
+      message: '新增成功,扫描任务已提交',
+      data: { ...path, scanRunId: scanRun.scanRunId },
+    })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -159,21 +234,55 @@ export default class PathsController {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathId } = await idParamPathValidator.validate(params)
+    const path = await prisma.path.findUnique({ where: { pathId } })
+    if (!path) {
+      return response.status(404).json({ code: 404, message: '路径不存在' })
+    }
 
-    await addTask({
+    const scanRun = await this.reportService.createRun({
+      runType: 'incremental',
+      triggerType: 'manual',
+      mediaId: path.mediaId,
+      pathId: path.pathId,
+      pathContent: path.pathContent,
+    })
+
+    const task = await addTask({
       taskName: `scan_path_${pathId}`,
       command: 'taskScanPath',
-      args: { pathId },
+      args: { pathId, scanRunId: scanRun.scanRunId },
       priority: TaskPriority.scan,
     })
 
-    return response.json({ code: 200, message: '扫描任务已提交', data: { pathId } })
+    if (!task) {
+      await this.reportService.finishFailed(scanRun.scanRunId, '路径正在被扫描，任务未重复提交')
+    }
+
+    return response.json({
+      code: 200,
+      message: task ? '扫描任务已提交' : '路径正在被扫描，未重复提交',
+      data: { pathId, scanRunId: scanRun.scanRunId },
+    })
   }
 
   public async re_scan({ params, request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathId } = await idParamPathValidator.validate(params)
+    const path = await prisma.path.findUnique({ where: { pathId } })
+    if (!path) {
+      return response.status(404).json({ code: 404, message: '路径不存在' })
+    }
+
+    const scanRun = await this.reportService.createRun({
+      runType: 'rescan',
+      triggerType: 'manual',
+      mediaId: path.mediaId,
+      pathId: path.pathId,
+      pathContent: path.pathContent,
+      message: '重新扫描会先删除路径下已有漫画，再按当前目录重新创建',
+    })
+
     const mangas = await prisma.manga.findMany({ where: { pathId } })
     // 删除此路径现有漫画
     for (const manga of mangas) {
@@ -189,10 +298,14 @@ export default class PathsController {
     await addTask({
       taskName: `scan_path_${pathId}`,
       command: 'taskScanPath',
-      args: { pathId },
+      args: { pathId, scanRunId: scanRun.scanRunId },
       priority: TaskPriority.scan,
     })
 
-    return response.json({ code: 200, message: '重新扫描任务已提交', data: pathId })
+    return response.json({
+      code: 200,
+      message: '重新扫描任务已提交',
+      data: { pathId, scanRunId: scanRun.scanRunId },
+    })
   }
 }

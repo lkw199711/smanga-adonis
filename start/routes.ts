@@ -40,6 +40,7 @@ const LatestsController = () => import('#controllers/latests_controller')
 const LogsController = () => import('#controllers/logs_controller')
 const LoginController = () => import('#controllers/login_controller')
 const TasksController = () => import('#controllers/tasks_controller')
+const ScanRunsController = () => import('#controllers/scan_runs_controller')
 const MediaController = () => import('#controllers/media_controller')
 const PathsController = () => import('#controllers/paths_controller')
 const BookmarksController = () => import('#controllers/bookmarks_controller')
@@ -175,6 +176,11 @@ router.delete('/task/:taskId', [TasksController, 'destroy'])
 router.delete('/task', [TasksController, 'destroy_all'])
 router.delete('/task/:taskIds/batch', [TasksController, 'destroy_batch'])
 
+// 扫描报告
+router.get('/scan-run', [ScanRunsController, 'index'])
+router.get('/scan-run/:scanRunId', [ScanRunsController, 'show'])
+router.get('/scan-run/:scanRunId/items', [ScanRunsController, 'items'])
+
 // 媒体库
 router.get('/media', [MediaController, 'index'])
 router.get('/media/:mediaId', [MediaController, 'show'])
@@ -187,6 +193,8 @@ router.put('/media/:mediaId/scan', [MediaController, 'scan'])
 
 // 路径
 router.get('/path', [PathsController, 'index'])
+router.post('/path/scan-preview', [PathsController, 'preview_unsaved'])
+router.get('/path/:pathId/scan-preview', [PathsController, 'preview'])
 router.get('/path/:pathId', [PathsController, 'show'])
 router.post('/path', [PathsController, 'create'])
 router.put('/path/:pathId', [PathsController, 'update'])

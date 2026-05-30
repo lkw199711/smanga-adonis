@@ -282,19 +282,46 @@ model path {
   @@unique([mediaId, pathContent], map: "opath")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
-model scan {
-  scanId      Int      @default(autoincrement()) @db.UnsignedInt
-  scanStatus  String   @db.VarChar(191)
-  targetPath  String?  @db.VarChar(191)
-  pathId      Int      @unique(map: "uniquePath") @db.UnsignedInt
-  scanCount   Int?     @db.UnsignedInt
-  scanIndex   Int?     @default(0)
-  createTime  DateTime @default(now()) @db.DateTime(6)
-  updateTime  DateTime @default(now()) @updatedAt @db.DateTime(6)
-  pathContent String   @db.VarChar(191)
+model scanRun {
+  scanRunId      Int       @id @default(autoincrement()) @db.UnsignedInt
+  runType        String    @db.VarChar(32)
+  triggerType    String    @db.VarChar(32)
+  status         String    @db.VarChar(32)
+  mediaId        Int?      @db.UnsignedInt
+  pathId         Int?      @db.UnsignedInt
+  pathContent    String?   @db.Text
+  configSnapshot String?   @db.Text
+  summaryJson    String?   @db.Text
+  message        String?   @db.Text
+  error          String?   @db.Text
+  startedAt      DateTime? @db.DateTime(6)
+  finishedAt     DateTime? @db.DateTime(6)
+  createTime     DateTime  @default(now()) @db.DateTime(6)
+  updateTime     DateTime  @default(now()) @updatedAt @db.DateTime(6)
 
-  @@id([scanId, pathId])
+  @@index([mediaId], map: "scanRunMedia")
+  @@index([pathId], map: "scanRunPath")
+  @@index([status], map: "scanRunStatus")
+  @@index([createTime], map: "scanRunCreateTime")
+}
+
+model scanRunItem {
+  scanRunItemId Int      @id @default(autoincrement()) @db.UnsignedInt
+  scanRunId     Int      @db.UnsignedInt
+  level         String   @db.VarChar(32)
+  category      String   @db.VarChar(32)
+  targetType    String   @db.VarChar(32)
+  action        String?  @db.VarChar(32)
+  reasonCode    String?  @db.VarChar(64)
+  reason        String?  @db.Text
+  targetName    String?  @db.VarChar(255)
+  targetPath    String?  @db.Text
+  extraJson     String?  @db.Text
+  createTime    DateTime @default(now()) @db.DateTime(6)
+
+  @@index([scanRunId], map: "scanRunItemRun")
+  @@index([level], map: "scanRunItemLevel")
+  @@index([reasonCode], map: "scanRunItemReason")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -307,52 +334,6 @@ model tag {
   createTime  DateTime   @default(now()) @db.DateTime(6)
   updateTime  DateTime   @default(now()) @updatedAt @db.DateTime(6)
   mangaTags   mangaTag[]
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
-model task {
-  taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
-  taskName   String    @default("") @db.VarChar(191)
-  command    String    @db.Text
-  createTime DateTime  @default(now()) @db.DateTime(6)
-  updateTime DateTime  @default(now()) @updatedAt @db.DateTime(6)
-  status     String    @default("pending") @db.VarChar(191)
-  args       Json?
-  startTime  DateTime? @db.Timestamp(0)
-  endTime    DateTime? @db.Timestamp(0)
-  error      String?   @db.Text
-  priority   Int       @default(10)
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
-model taskFailed {
-  taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
-  taskName   String    @default("") @db.VarChar(191)
-  status     String    @db.VarChar(191)
-  command    String    @db.Text
-  args       Json?
-  startTime  DateTime? @db.Timestamp(0)
-  endTime    DateTime? @db.Timestamp(0)
-  error      String?   @db.Text
-  createTime DateTime  @default(now()) @db.DateTime(6)
-  updateTime DateTime  @default(now()) @updatedAt @db.DateTime(6)
-
-  @@map("taskFailed")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
-model taskSuccess {
-  taskId     Int       @id @default(autoincrement()) @db.UnsignedInt
-  taskName   String    @default("") @db.VarChar(191)
-  status     String    @db.VarChar(191)
-  command    String    @db.Text
-  args       Json?
-  startTime  DateTime? @db.Timestamp(0)
-  endTime    DateTime? @db.Timestamp(0)
-  createTime DateTime  @default(now()) @db.DateTime(6)
-  updateTime DateTime  @default(now()) @updatedAt @db.DateTime(6)
-
-  @@map("taskSuccess")
 }
 
 model queue_job {

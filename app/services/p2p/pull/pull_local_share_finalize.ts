@@ -212,10 +212,10 @@ async function upsertTransferShare(transfer: {
 }
 
 export async function finalizePulledTransferToLocalShare(transferId: number) {
-  if (!ENABLE_PULL_AUTO_LOCAL_SHARE_FINALIZE) {
-    console.log(`[p2p] auto local-share finalize disabled, skip transferId=${transferId}`)
-    return false
-  }
+  // if (!ENABLE_PULL_AUTO_LOCAL_SHARE_FINALIZE) {
+  //   console.log(`[p2p] auto local-share finalize disabled, skip transferId=${transferId}`)
+  //   return false
+  // }
 
   const transfer = await prisma.p2p_transfer.findUnique({
     where: { p2pTransferId: transferId },

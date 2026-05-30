@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS `scan`;
+DROP TABLE IF EXISTS `task`;
+DROP TABLE IF EXISTS `taskFailed`;
+DROP TABLE IF EXISTS `taskSuccess`;

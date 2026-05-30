@@ -282,17 +282,46 @@ model path {
   @@unique([mediaId, pathContent], map: "opath")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
-model scan {
-  scanId      Int      @id @default(autoincrement())
-  scanStatus  String
-  targetPath  String?
-  pathId      Int      @unique(map: "uniquePath")
-  scanCount   Int?
-  scanIndex   Int?     @default(0)
-  createTime  DateTime @default(now())
-  updateTime  DateTime @default(now()) @updatedAt
-  pathContent String
+model scanRun {
+  scanRunId      Int      @id @default(autoincrement())
+  runType        String
+  triggerType    String
+  status         String
+  mediaId        Int?
+  pathId         Int?
+  pathContent    String?
+  configSnapshot String?
+  summaryJson    String?
+  message        String?
+  error          String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createTime     DateTime @default(now())
+  updateTime     DateTime @default(now()) @updatedAt
+
+  @@index([mediaId], map: "scanRunMedia")
+  @@index([pathId], map: "scanRunPath")
+  @@index([status], map: "scanRunStatus")
+  @@index([createTime], map: "scanRunCreateTime")
+}
+
+model scanRunItem {
+  scanRunItemId Int      @id @default(autoincrement())
+  scanRunId     Int
+  level         String
+  category      String
+  targetType    String
+  action        String?
+  reasonCode    String?
+  reason        String?
+  targetName    String?
+  targetPath    String?
+  extraJson     String?
+  createTime    DateTime @default(now())
+
+  @@index([scanRunId], map: "scanRunItemRun")
+  @@index([level], map: "scanRunItemLevel")
+  @@index([reasonCode], map: "scanRunItemReason")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -305,52 +334,6 @@ model tag {
   createTime  DateTime   @default(now())
   updateTime  DateTime   @default(now()) @updatedAt
   mangaTags   mangaTag[]
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
-model task {
-  taskId     Int       @id @default(autoincrement())
-  taskName   String    @default("")
-  command    String
-  createTime DateTime  @default(now())
-  updateTime DateTime  @default(now()) @updatedAt
-  status     String    @default("pending")
-  args       String?
-  startTime  DateTime?
-  endTime    DateTime?
-  error      String?
-  priority   Int       @default(10)
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
-model taskFailed {
-  taskId     Int       @id @default(autoincrement())
-  taskName   String    @default("")
-  status     String
-  command    String
-  args       String?
-  startTime  DateTime?
-  endTime    DateTime?
-  error      String?
-  createTime DateTime  @default(now())
-  updateTime DateTime  @default(now()) @updatedAt
-
-  @@map("taskFailed")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
-model taskSuccess {
-  taskId     Int       @id @default(autoincrement())
-  taskName   String    @default("")
-  status     String
-  command    String
-  args       String?
-  startTime  DateTime?
-  endTime    DateTime?
-  createTime DateTime  @default(now())
-  updateTime DateTime  @default(now()) @updatedAt
-
-  @@map("taskSuccess")
 }
 
 model queue_job {

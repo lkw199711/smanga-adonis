@@ -3,6 +3,7 @@ import prisma from '#start/prisma'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import CreateMediaPosterJob from '#services/create_media_poster_job'
+import ScanReportService from '#services/scan/scan_report_service'
 import {
   listMediaValidator,
   idParamMediaValidator,
@@ -12,6 +13,8 @@ import {
 } from '#validators/media'
 
 export default class MediaController {
+  private reportService = new ScanReportService()
+
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
@@ -170,15 +173,29 @@ export default class MediaController {
       where: { mediaId, deleteFlag: 0 },
     })
 
+    const scanRunIds: number[] = []
     for (const p of paths) {
-      await addTask({
+      const scanRun = await this.reportService.createRun({
+        runType: 'media',
+        triggerType: 'manual',
+        mediaId,
+        pathId: p.pathId,
+        pathContent: p.pathContent,
+      })
+      scanRunIds.push(scanRun.scanRunId)
+
+      const task = await addTask({
         taskName: `scan_path_${p.pathId}`,
         command: 'taskScanPath',
-        args: { pathId: p.pathId },
+        args: { pathId: p.pathId, scanRunId: scanRun.scanRunId },
         priority: TaskPriority.scan,
       })
+
+      if (!task) {
+        await this.reportService.finishFailed(scanRun.scanRunId, '路径正在被扫描，任务未重复提交')
+      }
     }
 
-    return response.json({ code: 200, message: '已加入扫描队列' })
+    return response.json({ code: 200, message: '已加入扫描队列', data: { scanRunIds } })
   }
 }

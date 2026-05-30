@@ -27,6 +27,19 @@ export const createPathValidator = vine.compile(
   })
 )
 
+export const previewPathValidator = vine.compile(
+  vine.object({
+    pathContent: vine.string().trim().minLength(1),
+    mediaId: vine.number().positive().optional(),
+    autoScan: vine.number().optional(),
+    include: vine.string().optional(),
+    exclude: vine.string().optional(),
+    mediaType: vine.number().optional(),
+    directoryFormat: vine.number().optional(),
+    isCloudMedia: vine.number().optional(),
+  })
+)
+
 export const updatePathValidator = vine.compile(
   vine.object({
     autoScan: vine.number().optional(),
