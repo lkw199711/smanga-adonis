@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "name": "SeriesJson单本漫画 - series title",
+    "alias": "series.json alias",
+    "authors": [
+      "Series Fixture Author"
+    ],
+    "tags": "series-json,metadata,fixture",
+    "description_text": "This manga uses series.json metadata.",
+    "year": 2025,
+    "publisher": "Series Fixture Publisher",
+    "status": "ongoing"
+  }
+}

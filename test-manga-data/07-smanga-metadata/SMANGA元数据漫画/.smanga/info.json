@@ -1,0 +1,32 @@
+{
+  "title": "SMANGA元数据漫画 - metadata title",
+  "subTitle": "smanga custom metadata sample",
+  "author": "SMANGA Fixture Author",
+  "star": 4,
+  "describe": "This manga uses .smanga/info.json and metadata images.",
+  "publishDate": "2024-01-15",
+  "classify": "fixture",
+  "finished": false,
+  "updateDate": "2026-05-30",
+  "publisher": "Fixture Studio",
+  "status": "ongoing",
+  "tags": [
+    "smanga",
+    "metadata",
+    "fixture"
+  ],
+  "character": [
+    {
+      "name": "character1.jpg",
+      "description": "Character image used to verify character metadata import."
+    }
+  ],
+  "chapters": [
+    {
+      "title": "第01话 起点"
+    },
+    {
+      "title": "第02话 转折"
+    }
+  ]
+}
