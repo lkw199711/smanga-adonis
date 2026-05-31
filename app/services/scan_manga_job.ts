@@ -23,6 +23,8 @@ import { error_log, insert_manga_scan_log } from '#utils/log'
 import { path as sqlPathType, media as sqlMediaType } from '@prisma/client'
 import { metaKeyType } from '../type/index.js'
 import { comicinfo_transform } from '#utils/meta'
+import type { DiscoveredChapter } from './scan/scan_types.js'
+import { normalizeMetadataProfile } from './scan/scan_template_service.js'
 type pathType = sqlPathType & { media: sqlMediaType }
 const logModule = '[manga scan]'
 
@@ -47,6 +49,7 @@ export default class ScanMangaJob {
   private alreadyExistManga: boolean = false
   private shouldSmangaMetaUpdate: boolean = true
   private shouldChapterUpdate: boolean = true
+  private discoveredChapters: DiscoveredChapter[] = []
 
   constructor({
     pathId,
@@ -54,6 +57,7 @@ export default class ScanMangaJob {
     mangaName,
     parentPath,
     isCloudMedia,
+    chapters,
   }: {
     pathId: number
     pathInfo: any
@@ -62,12 +66,14 @@ export default class ScanMangaJob {
     mangaName: string
     parentPath: string
     isCloudMedia: boolean
+    chapters?: DiscoveredChapter[]
   }) {
     this.pathId = pathId
     this.mangaPath = mangaPath
     this.mangaName = mangaName
     this.parentPath = parentPath || path.dirname(mangaPath)
     this.isCloudMedia = isCloudMedia
+    this.discoveredChapters = Array.isArray(chapters) ? chapters : []
 
     const config = get_config()
     this.ignoreHiddenFiles = config.scan?.ignoreHiddenFiles === 1
@@ -76,6 +82,138 @@ export default class ScanMangaJob {
 
   private normalize_scan_path(filePath: string | null | undefined) {
     return filePath ? path.normalize(filePath) : ''
+  }
+
+  private metadata_profile() {
+    return normalizeMetadataProfile((this.pathInfo as any)?.metadataProfileKey)
+  }
+
+  private should_scan_smanga_meta() {
+    const profile = this.metadata_profile()
+    return profile === 'auto' || profile === 'smanga'
+  }
+
+  private should_scan_series_meta() {
+    const profile = this.metadata_profile()
+    return profile === 'auto' || profile === 'series-json'
+  }
+
+  private should_scan_comicinfo_meta() {
+    const profile = this.metadata_profile()
+    return profile === 'auto' || profile === 'comicinfo'
+  }
+
+  private async scan_discovered_chapters(mangaInsert: Prisma.mangaCreateInput, subTitle: string, reloadCover: number) {
+    const pathId = this.pathId
+    const mangaPath = this.mangaPath
+
+    if (!this.mangaRecord) {
+      mangaInsert.chapterCount = this.discoveredChapters.length || 1
+      this.mangaRecord = await prisma.manga.create({ data: mangaInsert })
+    }
+
+    await this.meta_scan()
+    await this.meta_scan_series()
+
+    if (!this.mangaRecord.mangaCover || this.shouldSmangaMetaUpdate || reloadCover) {
+      await this.manga_poster(mangaPath)
+    }
+
+    if (!this.shouldChapterUpdate) {
+      return
+    }
+
+    if (this.mangaRecord.deleteFlag) {
+      await prisma.manga.update({
+        where: { mangaId: this.mangaRecord.mangaId },
+        data: { deleteFlag: 0 },
+      })
+    }
+
+    const chapterList = this.discoveredChapters
+    const chapterListSql: any = await prisma.chapter.findMany({
+      where: { mangaId: this.mangaRecord.mangaId },
+    })
+
+    const newChapterList = chapterList.filter((item: any) => {
+      return !chapterListSql.some(
+        (sqlItem: any) =>
+          this.normalize_scan_path(sqlItem.chapterPath) ===
+          this.normalize_scan_path(item.chapterPath)
+      )
+    })
+    const delChapterList = chapterListSql.filter((item: any) => {
+      return !chapterList.some(
+        (scanItem: any) =>
+          this.normalize_scan_path(scanItem.chapterPath) ===
+          this.normalize_scan_path(item.chapterPath)
+      )
+    })
+
+    for (let index = 0; index < newChapterList.length; index++) {
+      const item = newChapterList[index]
+      let chapterSubTitle = item.chapterName || subTitle
+      if (/[\u4e00-\u9fa5]/.test(item.chapterName)) {
+        const sName = S.t2s(item.chapterName)
+        const tName = S.s2t(item.chapterName)
+        chapterSubTitle = `${sName}/${tName}`
+      }
+
+      const chapterInsert: Prisma.chapterCreateInput = {
+        manga: {
+          connect: {
+            mangaId: this.mangaRecord.mangaId,
+          },
+        },
+        media: {
+          connect: {
+            mediaId: this.mediaRecord!.mediaId,
+          },
+        },
+        pathId,
+        chapterName: item.chapterName,
+        chapterPath: item.chapterPath,
+        browseType: this.mediaRecord!.browseType,
+        subTitle: chapterSubTitle,
+        chapterType: this.compress_type(item.chapterPath),
+        chapterNumber: this.chapter_index(item.chapterName),
+      }
+
+      try {
+        this.chapterRecord = await prisma.chapter.create({ data: chapterInsert })
+      } catch (e) {
+        console.log('章节插入失败', item.chapterName)
+        console.log(e)
+        return
+      }
+
+      if (!this.chapterRecord.chapterCover || reloadCover) {
+        await this.chapter_poster(item.chapterPath)
+      }
+
+      await this.meta_scan_comicinfo()
+    }
+
+    for (let index = 0; index < delChapterList.length; index++) {
+      const element = delChapterList[index]
+      await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
+    }
+
+    if (newChapterList.length || delChapterList.length) {
+      await prisma.manga.update({
+        data: {
+          updateTime: new Date(),
+          chapterCount: chapterList.length,
+        },
+        where: { mangaId: this.mangaRecord.mangaId },
+      })
+    }
+
+    await insert_manga_scan_log({
+      mangaId: this.mangaRecord.mangaId,
+      mangaName: this.mangaRecord.mangaName,
+      newChapters: newChapterList.length,
+    })
   }
 
   async run() {
@@ -156,6 +294,11 @@ export default class ScanMangaJob {
       this.alreadyExistManga = true
       this.shouldSmangaMetaUpdate = await this.should_smanga_meta_update()
       this.shouldChapterUpdate = await this.should_chapter_update()
+    }
+
+    if (this.discoveredChapters.length) {
+      await this.scan_discovered_chapters(mangaInsert, subTitle, reloadCover)
+      return
     }
 
     if (this.mediaRecord.mediaType == 1) {
@@ -447,6 +590,8 @@ export default class ScanMangaJob {
    * @returns
    */
   async meta_scan() {
+    if (!this.should_scan_smanga_meta()) return false
+
     // 云盘库必须扫描既有缓存元数据 否则不执行
     if (this.alreadyExistManga && this.isCloudMedia && !this.hasDataMeta) return false
 
@@ -608,6 +753,8 @@ export default class ScanMangaJob {
    * @returns
    */
   async meta_scan_series() {
+    if (!this.should_scan_series_meta()) return false
+
     // 漫画为smanga定制格式 不扫描 series.json
     if (this.smangaMetaFolder) return false
     // 云漫画不扫描 series.json
@@ -1057,6 +1204,8 @@ export default class ScanMangaJob {
    * @returns
    */
   async meta_scan_comicinfo() {
+    if (!this.should_scan_comicinfo_meta()) return false
+
     // 漫画为smanga定制格式 不扫描 comicinfo
     if (this.smangaMetaFolder) return false
     // 云漫画不扫描 comicinfo

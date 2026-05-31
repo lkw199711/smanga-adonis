@@ -13,6 +13,8 @@ type mangaItem = {
   mangaName: string
   mangaType: string
   parentPath: string
+  chapters?: any[]
+  scanTemplateKey?: string
 }
 
 export default class ScanPathJob {
@@ -99,13 +101,18 @@ export default class ScanPathJob {
     // 数据库中的漫画
     let mangaListSql = []
 
-    if (this.scanRunId) {
+    const shouldUseTemplateDiscovery = true
+    if (shouldUseTemplateDiscovery) {
       const discovery = this.discoveryService.discoverPath({
         mediaId: this.pathInfo.mediaId,
         pathId: this.pathInfo.pathId,
         pathContent: this.pathInfo.pathContent,
         mediaType: this.mediaInfo.mediaType,
         directoryFormat: this.mediaInfo.directoryFormat,
+        scanTemplateKey: this.pathInfo.scanTemplateKey,
+        scanTemplateConfig: this.pathInfo.scanTemplateConfig,
+        metadataProfileKey: this.pathInfo.metadataProfileKey,
+        metadataProfileConfig: this.pathInfo.metadataProfileConfig,
         include: this.pathInfo.include,
         exclude: this.pathInfo.exclude,
         ignoreHiddenFiles: this.ignoreHiddenFiles,

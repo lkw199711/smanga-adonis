@@ -271,6 +271,10 @@ model path {
   autoScan     Int       @default(0)
   include      String?
   exclude      String?
+  scanTemplateKey      String?
+  scanTemplateConfig   String?
+  metadataProfileKey   String?
+  metadataProfileConfig String?
   lastScanTime DateTime?
   deleteFlag   Int       @default(0)
   createTime   DateTime  @default(now())

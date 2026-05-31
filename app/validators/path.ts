@@ -24,6 +24,10 @@ export const createPathValidator = vine.compile(
     autoScan: vine.number().optional(),
     include: vine.string().optional(),
     exclude: vine.string().optional(),
+    scanTemplateKey: vine.string().optional(),
+    scanTemplateConfig: vine.string().optional(),
+    metadataProfileKey: vine.string().optional(),
+    metadataProfileConfig: vine.string().optional(),
   })
 )
 
@@ -36,6 +40,10 @@ export const previewPathValidator = vine.compile(
     exclude: vine.string().optional(),
     mediaType: vine.number().optional(),
     directoryFormat: vine.number().optional(),
+    scanTemplateKey: vine.string().optional(),
+    scanTemplateConfig: vine.string().optional(),
+    metadataProfileKey: vine.string().optional(),
+    metadataProfileConfig: vine.string().optional(),
     isCloudMedia: vine.number().optional(),
   })
 )
@@ -45,6 +53,10 @@ export const updatePathValidator = vine.compile(
     autoScan: vine.number().optional(),
     include: vine.string().optional(),
     exclude: vine.string().optional(),
+    scanTemplateKey: vine.string().optional(),
+    scanTemplateConfig: vine.string().optional(),
+    metadataProfileKey: vine.string().optional(),
+    metadataProfileConfig: vine.string().optional(),
   })
 )
 
