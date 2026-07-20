@@ -29,6 +29,48 @@ export function is_img(file: string) {
   )
 }
 
+const imagePathCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base',
+})
+
+export function normalize_archive_entry_path(filePath: string) {
+  return filePath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, '')
+}
+
+export function is_archive_image(filePath: string) {
+  const normalizedPath = normalize_archive_entry_path(filePath)
+  const parts = normalizedPath.split('/')
+  const fileName = parts[parts.length - 1] || ''
+
+  return (
+    is_img(normalizedPath) &&
+    !parts.some((part) => part === '__MACOSX' || part.startsWith('.')) &&
+    !fileName.startsWith('._')
+  )
+}
+
+export function compare_archive_entry_paths(a: string, b: string) {
+  return imagePathCollator.compare(normalize_archive_entry_path(a), normalize_archive_entry_path(b))
+}
+
+export function sorted_archive_images(filePaths: string[]) {
+  return filePaths.filter(is_archive_image).sort(compare_archive_entry_paths)
+}
+
+export function first_archive_image(filePaths: string[]) {
+  return sorted_archive_images(filePaths)[0] || ''
+}
+
+export function first_archive_cover_or_image(filePaths: string[]) {
+  const images = sorted_archive_images(filePaths)
+  const coverImage = images.find((filePath) =>
+    /cover/i.test(normalize_archive_entry_path(filePath))
+  )
+
+  return coverImage || images[0] || ''
+}
+
 export function get_env() {
   return process.env.NODE_ENV
 }
@@ -108,7 +150,11 @@ export function get_config() {
 
 export function set_config(config: object) {
   if (platform === 'win32' || platform === 'darwin') {
-    fs.writeFileSync(path.join(rootDir, 'data', 'config', 'smanga.json'), JSON.stringify(config, null, 2), 'utf-8')
+    fs.writeFileSync(
+      path.join(rootDir, 'data', 'config', 'smanga.json'),
+      JSON.stringify(config, null, 2),
+      'utf-8'
+    )
   } else if (platform === 'linux') {
     fs.writeFileSync('/data/config/smanga.json', JSON.stringify(config, null, 2), 'utf-8')
   } else {

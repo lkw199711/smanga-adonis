@@ -1,5 +1,5 @@
 import Seven from 'node-7z'
-import { is_img } from './index.js'
+import { first_archive_cover_or_image } from './index.js'
 import * as path from 'path'
 
 // async function extract7z(filePath: string, outputDir: string) {
@@ -57,7 +57,7 @@ export async function first_image_7z(filePath: string, outputDir: string) {
   console.log('first_image_7z', filePath, outputDir)
 
   const fileList = await list7zContents(filePath)
-  let image = fileList.find((file: string) => is_img(file))
+  let image = first_archive_cover_or_image(fileList)
 
   if (!image) return false
 
@@ -100,15 +100,8 @@ export class Un7z {
   ) {
     console.log('first_image_7z', filePath, outputDir)
 
-    let fileList = await list7zContents(filePath)
-
-    // 优先查找文件名包含 cover 的图片
-    const coverNameImg = fileList.find((file: string) => /cover/i.test(file) && is_img(file))
-    if (coverNameImg) {
-      fileList = [coverNameImg]
-    }
-
-    let image = fileList.find((file: string) => is_img(file))
+    const fileList = await list7zContents(filePath)
+    let image = first_archive_cover_or_image(fileList)
 
     if (!image) return false
 
