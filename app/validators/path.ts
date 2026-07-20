@@ -3,6 +3,10 @@
  */
 import vine from '@vinejs/vine'
 import { paginationFields, csvIdsField } from './shared.js'
+import { METADATA_PROFILE_KEYS, SCAN_TEMPLATE_KEYS } from '#services/scan/scan_types'
+
+const scanTemplateKeyField = vine.enum([...SCAN_TEMPLATE_KEYS]).optional()
+const metadataProfileKeyField = vine.enum([...METADATA_PROFILE_KEYS]).optional()
 
 export const listPathValidator = vine.compile(
   vine.object({
@@ -24,9 +28,9 @@ export const createPathValidator = vine.compile(
     autoScan: vine.number().optional(),
     include: vine.string().optional(),
     exclude: vine.string().optional(),
-    scanTemplateKey: vine.string().optional(),
+    scanTemplateKey: scanTemplateKeyField,
     scanTemplateConfig: vine.string().optional(),
-    metadataProfileKey: vine.string().optional(),
+    metadataProfileKey: metadataProfileKeyField,
     metadataProfileConfig: vine.string().optional(),
   })
 )
@@ -40,9 +44,9 @@ export const previewPathValidator = vine.compile(
     exclude: vine.string().optional(),
     mediaType: vine.number().optional(),
     directoryFormat: vine.number().optional(),
-    scanTemplateKey: vine.string().optional(),
+    scanTemplateKey: scanTemplateKeyField,
     scanTemplateConfig: vine.string().optional(),
-    metadataProfileKey: vine.string().optional(),
+    metadataProfileKey: metadataProfileKeyField,
     metadataProfileConfig: vine.string().optional(),
     isCloudMedia: vine.number().optional(),
   })
@@ -53,9 +57,9 @@ export const updatePathValidator = vine.compile(
     autoScan: vine.number().optional(),
     include: vine.string().optional(),
     exclude: vine.string().optional(),
-    scanTemplateKey: vine.string().optional(),
+    scanTemplateKey: scanTemplateKeyField,
     scanTemplateConfig: vine.string().optional(),
-    metadataProfileKey: vine.string().optional(),
+    metadataProfileKey: metadataProfileKeyField,
     metadataProfileConfig: vine.string().optional(),
   })
 )

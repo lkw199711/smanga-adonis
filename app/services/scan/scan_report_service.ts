@@ -16,6 +16,20 @@ export default class ScanReportService {
     status?: string
     message?: string
   }) {
+    const pathConfig = input.pathId
+      ? await this.client.path.findUnique({
+          where: { pathId: input.pathId },
+          select: {
+            scanTemplateKey: true,
+            scanTemplateConfig: true,
+            metadataProfileKey: true,
+            metadataProfileConfig: true,
+            include: true,
+            exclude: true,
+          },
+        })
+      : null
+
     const run = await this.client.scanRun.create({
       data: {
         runType: input.runType,
@@ -27,6 +41,7 @@ export default class ScanReportService {
         message: input.message,
         configSnapshot: JSON.stringify({
           scan: get_config()?.scan || {},
+          path: pathConfig,
         }),
       },
     })
@@ -103,12 +118,19 @@ export default class ScanReportService {
     })
   }
 
-  async listRuns(query: { page?: number; pageSize?: number; pathId?: number; mediaId?: number }) {
+  async listRuns(query: {
+    page?: number
+    pageSize?: number
+    pathId?: number
+    mediaId?: number
+    status?: 'pending' | 'running' | 'success' | 'failed'
+  }) {
     const page = query.page || 1
     const pageSize = query.pageSize || 20
     const where = {
       ...(query.pathId && { pathId: query.pathId }),
       ...(query.mediaId && { mediaId: query.mediaId }),
+      ...(query.status && { status: query.status }),
     }
 
     const [list, count] = await Promise.all([

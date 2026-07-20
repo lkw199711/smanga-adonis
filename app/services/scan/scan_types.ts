@@ -1,17 +1,22 @@
 export type ScanReportLevel = 'info' | 'warning' | 'error'
 export type ScanReportCategory = 'found' | 'change' | 'skipped' | 'warning' | 'error' | 'summary'
 
-export type ScanTemplateKey =
-  | 'legacy'
-  | 'auto'
-  | 'manga_chapter_image'
-  | 'manga_image'
-  | 'category_manga_chapter_image'
-  | 'category_manga_image'
-  | 'manga_volume_chapter_image'
-  | 'category_manga_volume_chapter_image'
+export const SCAN_TEMPLATE_KEYS = [
+  'legacy',
+  'auto',
+  'manga_chapter_image',
+  'manga_image',
+  'category_manga_chapter_image',
+  'category_manga_image',
+  'manga_volume_chapter_image',
+  'category_manga_volume_chapter_image',
+] as const
 
-export type MetadataProfileKey = 'auto' | 'smanga' | 'series-json' | 'comicinfo' | 'none'
+export type ScanTemplateKey = (typeof SCAN_TEMPLATE_KEYS)[number]
+
+export const METADATA_PROFILE_KEYS = ['auto', 'smanga', 'series-json', 'comicinfo', 'none'] as const
+
+export type MetadataProfileKey = (typeof METADATA_PROFILE_KEYS)[number]
 
 export type ScanTemplateInfo = {
   key: ScanTemplateKey

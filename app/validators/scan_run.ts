@@ -6,6 +6,7 @@ export const listScanRunValidator = vine.compile(
     ...paginationFields,
     mediaId: vine.number().positive().optional(),
     pathId: vine.number().positive().optional(),
+    status: vine.enum(['pending', 'running', 'success', 'failed']).optional(),
   })
 )
 
