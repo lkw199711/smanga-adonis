@@ -1,7 +1,7 @@
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 import * as path from 'path'
-import { is_img } from './index.js'
+import { first_archive_cover_or_image } from './index.js'
 const unrar = require('node-unrar-js')
 
 export async function extractRar(rarFilePath: string, outputDir: string) {
@@ -31,20 +31,18 @@ export async function extractFirstImageFromRAROrder(
     },
   })
 
-  let first = false
+  const list: any = extractor.getFileList()
+  const fileHeaders = [...list.fileHeaders]
+  const firstImage = first_archive_cover_or_image(
+    fileHeaders
+      .filter((fileHeader: any) => !fileHeader.flags?.directory)
+      .map((fileHeader: any) => fileHeader.name)
+  )
+
+  if (!firstImage) return false
+
   const extractored: any = extractor.extract({
-    files: (fileHeader: any) => {
-      console.log('fileHeader:', fileHeader)
-
-      if (first) return false
-
-      if (is_img(fileHeader.name)) {
-        first = true
-        return true
-      }
-
-      return false
-    },
+    files: [firstImage],
   })
 
   const abc = [...extractored.files]
@@ -75,37 +73,18 @@ export class Unrar {
       },
     })
 
-    let first = false
-    let hasCover = false
-    const exteactorCover: any = extractor.extract({
-      files: (fileHeader: any) => {
-        if (hasCover) return false
+    const list: any = extractor.getFileList()
+    const fileHeaders = [...list.fileHeaders]
+    const firstImage = first_archive_cover_or_image(
+      fileHeaders
+        .filter((fileHeader: any) => !fileHeader.flags?.directory)
+        .map((fileHeader: any) => fileHeader.name)
+    )
 
-        if (/cover/i.test(fileHeader.name) && is_img(fileHeader.name)) {
-          hasCover = true
-          return true
-        }
-
-        return false
-      },
-    })
-
-    if (hasCover) {
-      const abc = [...exteactorCover.files]
-      return abc?.length > 0
-    }
+    if (!firstImage) return false
 
     const extractored: any = extractor.extract({
-      files: (fileHeader: any) => {
-        if (first) return false
-
-        if (is_img(fileHeader.name)) {
-          first = true
-          return true
-        }
-
-        return false
-      },
+      files: [firstImage],
     })
 
     const abc = [...extractored.files]

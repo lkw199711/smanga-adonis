@@ -28,9 +28,7 @@ export default class MediaController {
     const userId = (request as any).userId
     const user = await prisma.user.findUnique({ where: { userId } })
     if (!user) {
-      return response
-        .status(401)
-        .json({ code: 401, message: '用户不存在', status: 'token error' })
+      return response.status(401).json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons =
@@ -61,9 +59,7 @@ export default class MediaController {
     const userId = (request as any).userId
     const user = await prisma.user.findUnique({ where: { userId } })
     if (!user) {
-      return response
-        .status(401)
-        .json({ code: 401, message: '用户不存在', status: 'token error' })
+      return response.status(401).json({ code: 401, message: '用户不存在', status: 'token error' })
     }
     const isAdmin = user.role === 'admin' || user.mediaPermit === 'all'
     const mediaPermissons =
@@ -182,7 +178,7 @@ export default class MediaController {
         pathId: p.pathId,
         pathContent: p.pathContent,
       })
-      scanRunIds.push(scanRun.scanRunId)
+      if (scanRun.scanRunId) scanRunIds.push(scanRun.scanRunId)
 
       const task = await addTask({
         taskName: `scan_path_${p.pathId}`,

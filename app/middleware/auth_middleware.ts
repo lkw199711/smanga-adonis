@@ -49,7 +49,7 @@ export default class AuthMiddleware {
 
     // 用 "全等 或 以 prefix/ 开头" 的方式精确匹配,避免 /p2p 误命中 /api/p2p,或 /tracker 误命中 /trackerxxx
     const url = normalizeApiPath(rawUrl)
-    console.log('url', url)
+
     const isSkipped = skipRoutes.some((prefix) => url === prefix || url.startsWith(prefix + '/'))
     if (isSkipped) {
       // 部署/测试/登录/资源/分析/对外接口/对等节点接口 跳过用户 token 校验
