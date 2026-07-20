@@ -1,6 +1,9 @@
 import type { MetadataProfileKey, ScanTemplateInfo, ScanTemplateKey } from './scan_types.js'
 
-export const SCAN_TEMPLATES: Record<Exclude<ScanTemplateKey, 'legacy' | 'auto'>, ScanTemplateInfo> = {
+export const SCAN_TEMPLATES: Record<
+  Exclude<ScanTemplateKey, 'legacy' | 'auto' | 'custom'>,
+  ScanTemplateInfo
+> = {
   manga_chapter_image: {
     key: 'manga_chapter_image',
     label: '漫画 > 章节 > 图片',
@@ -60,15 +63,26 @@ const LEGACY_TEMPLATE: ScanTemplateInfo = {
   singleChapter: false,
 }
 
-export const METADATA_PROFILES: Array<{ key: MetadataProfileKey; label: string; description: string }> = [
-  { key: 'auto', label: '自动识别', description: '.smanga 优先，其次 series.json 和 ComicInfo.xml' },
+export const METADATA_PROFILES: Array<{
+  key: MetadataProfileKey
+  label: string
+  description: string
+}> = [
+  {
+    key: 'auto',
+    label: '自动识别',
+    description: '.smanga 优先，其次 series.json 和 ComicInfo.xml',
+  },
   { key: 'smanga', label: 'SMANGA 元数据', description: '只扫描 .smanga 或 *-smanga-info' },
   { key: 'series-json', label: 'series.json', description: '只扫描漫画目录中的 series.json' },
   { key: 'comicinfo', label: 'ComicInfo.xml', description: '只扫描压缩章节内的 ComicInfo.xml' },
   { key: 'none', label: '不扫描元数据', description: '只建立漫画和章节' },
 ]
 
-export function legacyScanTemplateKey(mediaType = 0, directoryFormat = 0): Exclude<ScanTemplateKey, 'legacy' | 'auto'> {
+export function legacyScanTemplateKey(
+  mediaType = 0,
+  directoryFormat = 0
+): Exclude<ScanTemplateKey, 'legacy' | 'auto' | 'custom'> {
   if (directoryFormat === 1 && mediaType === 1) return 'category_manga_image'
   if (directoryFormat === 1) return 'category_manga_chapter_image'
   if (mediaType === 1) return 'manga_image'
@@ -95,7 +109,19 @@ export function resolveScanTemplate(input: {
     }
   }
 
-  return SCAN_TEMPLATES[key as Exclude<ScanTemplateKey, 'legacy' | 'auto'>] || SCAN_TEMPLATES.manga_chapter_image
+  if (key === 'custom') {
+    return {
+      ...LEGACY_TEMPLATE,
+      key: 'custom',
+      label: '自定义模板规则',
+      pattern: 'custom',
+    }
+  }
+
+  return (
+    SCAN_TEMPLATES[key as Exclude<ScanTemplateKey, 'legacy' | 'auto' | 'custom'>] ||
+    SCAN_TEMPLATES.manga_chapter_image
+  )
 }
 
 export function listConcreteScanTemplates() {
@@ -103,5 +129,7 @@ export function listConcreteScanTemplates() {
 }
 
 export function normalizeMetadataProfile(key?: string | null): MetadataProfileKey {
-  return METADATA_PROFILES.some((profile) => profile.key === key) ? (key as MetadataProfileKey) : 'auto'
+  return METADATA_PROFILES.some((profile) => profile.key === key)
+    ? (key as MetadataProfileKey)
+    : 'auto'
 }

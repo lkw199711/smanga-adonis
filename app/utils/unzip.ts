@@ -82,7 +82,7 @@ export async function extractFirstImageSyncOrder(
 export async function extract_cover(zipFilePath: string, outputDir: string) {
   const zip = new AdmZip(zipFilePath)
   const entries = zip.getEntries()
-  if (entries.length === 0) return false;
+  if (entries.length === 0) return false
 
   let coverEntry = entries.find((entry: any) => /cover/i.test(entry.name))
   if (!coverEntry) coverEntry = entries.find((entry: any) => is_img(entry.name))
@@ -99,13 +99,14 @@ export async function extract_cover(zipFilePath: string, outputDir: string) {
   return true
 }
 
-export async function extract_metadata(zipFilePath: string) {
+export async function extract_metadata(zipFilePath: string, maxBytes = Number.POSITIVE_INFINITY) {
   const zip = new AdmZip(zipFilePath)
   const entries = zip.getEntries()
-  if (entries.length === 0) return false;
+  if (entries.length === 0) return false
 
   let coverEntry = entries.find((entry: any) => entry.name === 'ComicInfo.xml')
-  if (!coverEntry) return false;
+  if (!coverEntry) return false
+  if (Number(coverEntry.header?.size || 0) > maxBytes) return false
 
   const ComicInfo = zip.readAsText(coverEntry.name)
   const ComicInfoJson = await parseStringPromise(ComicInfo)
@@ -122,7 +123,7 @@ export async function extract_metadata(zipFilePath: string) {
 export async function extractCoverAndMetadata(
   zipFilePath: string,
   outputDir: string
-): Promise<{ coverPath: string | null, metadata: any }> {
+): Promise<{ coverPath: string | null; metadata: any }> {
   try {
     // Ensure output directory exists
     if (!fs.existsSync(outputDir)) {
@@ -141,7 +142,8 @@ export async function extractCoverAndMetadata(
 
     if (imgs.length > 0) {
       const coverNameImg = imgs.find((file: any) => /cover/i.test(file.path))
-      let selectedImg = coverNameImg || imgs.sort((a: any, b: any) => a.path.localeCompare(b.path))[0]
+      let selectedImg =
+        coverNameImg || imgs.sort((a: any, b: any) => a.path.localeCompare(b.path))[0]
 
       const coverFileName = path.basename(selectedImg.path)
       coverPath = path.join(outputDir, coverFileName)

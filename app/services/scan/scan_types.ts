@@ -4,6 +4,7 @@ export type ScanReportCategory = 'found' | 'change' | 'skipped' | 'warning' | 'e
 export const SCAN_TEMPLATE_KEYS = [
   'legacy',
   'auto',
+  'custom',
   'manga_chapter_image',
   'manga_image',
   'category_manga_chapter_image',
@@ -13,6 +14,9 @@ export const SCAN_TEMPLATE_KEYS = [
 ] as const
 
 export type ScanTemplateKey = (typeof SCAN_TEMPLATE_KEYS)[number]
+
+export const SCAN_ENGINES = ['legacy', 'template-v1', 'template-v2'] as const
+export type ScanEngine = (typeof SCAN_ENGINES)[number]
 
 export const METADATA_PROFILE_KEYS = ['auto', 'smanga', 'series-json', 'comicinfo', 'none'] as const
 
@@ -79,6 +83,34 @@ export type ScanDiscoveryInput = {
   ignoreHiddenFiles: boolean
   isCloudMedia?: number
   sampleLimit?: number
+  engine?: ScanEngine
+}
+
+export type ScanTemplateRuleConfig = {
+  id: string
+  label: string
+  priority: number
+  mangaIndex: number
+  chapterIndex: number | null
+  singleChapter: boolean
+  directoryInclude?: string
+  directoryExclude?: string
+}
+
+export type ScanTemplateConfig = {
+  version: 1
+  strategy: 'single' | 'mixed'
+  rules: ScanTemplateRuleConfig[]
+}
+
+export type MetadataSource = 'smanga' | 'series-json' | 'comicinfo'
+
+export type MetadataProfileConfig = {
+  version: 1
+  sources: MetadataSource[]
+  precedence: MetadataSource[]
+  overwriteExisting: boolean
+  maxFileBytes: number
 }
 
 export type ScanDiscoverySummary = {

@@ -1,18 +1,19 @@
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 // @ts-ignore
-const cron = require('node-cron');
+const cron = require('node-cron')
 import { get_config } from '#utils/index'
 import prisma from '#start/prisma'
-import { addTask } from './queue_service.js';
+import { addTask } from './queue_service.js'
 import { TaskPriority } from '#type/index'
 import _ from 'lodash'
+import ScanReportService from './scan/scan_report_service.js'
 
-let scanCron: any = { stop: () => { } }
-let syncCron: any = { stop: () => { } }
-let createMediaPosterCron: any = { stop: () => { } }
-let clearCompressCron: any = { stop: () => { } }
-let trackerCleanupCron: any = { stop: () => { } }
+let scanCron: any = { stop: () => {} }
+let syncCron: any = { stop: () => {} }
+let createMediaPosterCron: any = { stop: () => {} }
+let clearCompressCron: any = { stop: () => {} }
+let trackerCleanupCron: any = { stop: () => {} }
 
 function create_scan_cron() {
   // 停止旧扫描任务
@@ -25,19 +26,30 @@ function create_scan_cron() {
   // 定时扫描任务
   try {
     scanCron = cron.schedule(scanInterval, async () => {
+      const reportService = new ScanReportService()
       const paths = await prisma.path.findMany()
       const autoScanPaths = paths.filter((path: any) => path.autoScan == 1 && path.deleteFlag == 0)
       for (let i = 0; i < autoScanPaths.length; i++) {
         const path = autoScanPaths[i]
+        const scanRun = await reportService.createRun({
+          runType: 'incremental',
+          triggerType: 'schedule',
+          mediaId: path.mediaId,
+          pathId: path.pathId,
+          pathContent: path.pathContent,
+        })
         // 任务名称唯一
-        await addTask({
+        const task = await addTask({
           taskName: `scan_path_${path.pathId}`,
           command: 'taskScanPath',
-          args: { pathId: path.pathId },
+          args: { pathId: path.pathId, scanRunId: scanRun.scanRunId },
           priority: TaskPriority.scan,
         })
+        if (!task) {
+          await reportService.finishFailed(scanRun.scanRunId, '路径正在被扫描，定时任务未重复提交')
+        }
       }
-    });
+    })
   } catch (e) {
     console.error('部署corn扫描任务失败', e)
   }
@@ -53,7 +65,7 @@ function create_sync_cron() {
 
   if (!scanInterval || scanInterval.trim() === '') {
     console.log('未配置同步任务定时策略，跳过部署')
-    return;
+    return
   }
 
   // 定时扫描任务
@@ -63,7 +75,6 @@ function create_sync_cron() {
       const autoScanPaths = syncs.filter((sync: any) => sync.auto == 1)
 
       for (let sync of autoScanPaths) {
-
         if (sync.syncType === 'media') {
           // 创建媒体同步任务
           await addTask({
@@ -83,7 +94,7 @@ function create_sync_cron() {
           })
         }
       }
-    });
+    })
   } catch (e) {
     console.error('部署corn扫描任务失败', e)
   }
@@ -112,7 +123,7 @@ function create_media_poster_cron() {
           priority: TaskPriority.createMediaPoster,
         })
       }
-    });
+    })
   } catch (e) {
     console.error('部署corn媒体库封面生成任务失败', e)
   }
@@ -135,7 +146,7 @@ function create_clear_compress_cron() {
         args: {},
         priority: TaskPriority.clearCompress,
       })
-    });
+    })
   } catch (e) {
     console.error('部署corn清除压缩缓存任务失败', e)
   }
@@ -176,4 +187,10 @@ function create_tracker_cleanup_cron() {
   }
 }
 
-export { create_scan_cron, create_sync_cron, create_media_poster_cron, create_clear_compress_cron, create_tracker_cleanup_cron }
+export {
+  create_scan_cron,
+  create_sync_cron,
+  create_media_poster_cron,
+  create_clear_compress_cron,
+  create_tracker_cleanup_cron,
+}

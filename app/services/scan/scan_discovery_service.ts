@@ -6,6 +6,11 @@ import {
   normalizeMetadataProfile,
   resolveScanTemplate,
 } from './scan_template_service.js'
+import {
+  parseScanTemplateConfig,
+  resolveScanEngine,
+  ScanConfigError,
+} from './scan_config_service.js'
 import type {
   DiscoveredChapter,
   DiscoveredManga,
@@ -15,6 +20,7 @@ import type {
   ScanReportItem,
   ScanTemplateCandidate,
   ScanTemplateInfo,
+  ScanTemplateRuleConfig,
 } from './scan_types.js'
 
 const COMPRESS_EXTENSIONS: Record<string, string> = {
@@ -41,11 +47,21 @@ export default class ScanDiscoveryService {
   private emitItems = true
   private activeTemplate!: ScanTemplateInfo
   private templateCandidates: ScanTemplateCandidate[] = []
+  private activeRule: ScanTemplateRuleConfig | null = null
+  private readDirCache = new Map<string, string[]>()
+  private statCache = new Map<string, fs.Stats | null>()
+  private directImageCache = new Map<string, boolean>()
+  private childDirectoryCache = new Map<string, boolean>()
 
   discoverPath(input: ScanDiscoveryInput): ScanDiscoveryResult {
     this.input = input
     this.items = []
     this.templateCandidates = []
+    this.activeRule = null
+    this.readDirCache.clear()
+    this.statCache.clear()
+    this.directImageCache.clear()
+    this.childDirectoryCache.clear()
 
     const pathContent = input.pathContent
     const sampleLimit = input.sampleLimit ?? 5
@@ -61,16 +77,60 @@ export default class ScanDiscoveryService {
     }
 
     const resolvedTemplate = resolveScanTemplate(input)
-    const template =
-      resolvedTemplate.key === 'auto'
-        ? this.selectTemplate(pathContent)
-        : resolvedTemplate
+    let template = resolvedTemplate
+    let mangas: DiscoveredManga[]
+
+    if (resolvedTemplate.key === 'custom') {
+      let customConfig
+      try {
+        customConfig = parseScanTemplateConfig(input.scanTemplateConfig)
+      } catch (error) {
+        const message = error instanceof ScanConfigError ? error.message : '自定义扫描模板配置无效'
+        this.error(
+          'rule',
+          'SCAN_TEMPLATE_CONFIG_INVALID',
+          message,
+          'scanTemplateConfig',
+          pathContent
+        )
+        return this.result([], resolvedTemplate)
+      }
+      if (!customConfig) {
+        this.error(
+          'rule',
+          'SCAN_TEMPLATE_CONFIG_REQUIRED',
+          '选择自定义模板时必须提供 scanTemplateConfig'
+        )
+        return this.result([], resolvedTemplate)
+      }
+
+      const customTemplates = customConfig.rules.map((rule) => this.templateFromRule(rule))
+      if (customConfig.strategy === 'single') {
+        this.activeRule = customConfig.rules[0]
+        template = customTemplates[0]
+        mangas = this.discoverWithTemplate(pathContent, template)
+      } else {
+        mangas = this.discoverMixed(pathContent, customTemplates, customConfig.rules, false)
+      }
+    } else if (resolvedTemplate.key === 'auto') {
+      if ((input.engine || resolveScanEngine()) === 'template-v1') {
+        template = this.selectTemplate(pathContent)
+        mangas = this.discoverWithTemplate(pathContent, template)
+      } else {
+        mangas = this.discoverMixed(pathContent, listConcreteScanTemplates(), [], true)
+        const resolvedKeys = [...new Set(mangas.map((manga) => manga.scanTemplateKey))]
+        if (resolvedKeys.length === 1) {
+          template =
+            listConcreteScanTemplates().find((candidate) => candidate.key === resolvedKeys[0]) ||
+            resolvedTemplate
+        }
+      }
+    } else {
+      mangas = this.discoverWithTemplate(pathContent, template)
+    }
 
     this.activeTemplate = template
-    this.items = []
     this.emitItems = true
-
-    const mangas = this.discoverWithTemplate(pathContent, template)
     this.addStructureWarnings(pathContent, mangas, template)
     this.addFoundItems(mangas, template)
 
@@ -78,6 +138,113 @@ export default class ScanDiscoveryService {
       ...this.result(mangas, template),
       samples: mangas.slice(0, sampleLimit),
     }
+  }
+
+  private templateFromRule(rule: ScanTemplateRuleConfig): ScanTemplateInfo {
+    return {
+      key: 'custom',
+      label: rule.label,
+      pattern: `custom:${rule.id}`,
+      mangaIndex: rule.mangaIndex,
+      chapterIndex: rule.chapterIndex,
+      singleChapter: rule.singleChapter,
+    }
+  }
+
+  private discoverMixed(
+    root: string,
+    templates: ScanTemplateInfo[],
+    rules: ScanTemplateRuleConfig[],
+    applyConfidenceThreshold: boolean
+  ) {
+    type RankedManga = {
+      manga: DiscoveredManga
+      template: ScanTemplateInfo
+      score: number
+      priority: number
+    }
+    const ranked: RankedManga[] = []
+
+    this.templateCandidates = templates.map((template, index) => {
+      this.emitItems = false
+      this.activeRule = rules[index] || null
+      const mangas = this.discoverWithTemplate(root, template)
+      const score = this.scoreTemplate(template, mangas)
+      for (const manga of mangas) {
+        const mangaScore = this.scoreTemplate(template, [manga])
+        if (!applyConfidenceThreshold || mangaScore >= 40) {
+          ranked.push({
+            manga,
+            template,
+            score: mangaScore,
+            priority: rules[index]?.priority ?? 0,
+          })
+        }
+      }
+      return {
+        key: template.key,
+        label: template.label,
+        pattern: template.pattern,
+        mangaFound: mangas.length,
+        chapterFound: mangas.reduce((sum, manga) => sum + manga.chapters.length, 0),
+        score,
+      }
+    })
+
+    this.templateCandidates.sort((a, b) => b.score - a.score)
+    this.emitItems = true
+    this.activeRule = null
+
+    const byPath = new Map<string, RankedManga>()
+    for (const candidate of ranked) {
+      const normalized = path.normalize(candidate.manga.mangaPath)
+      const existing = byPath.get(normalized)
+      if (
+        !existing ||
+        candidate.score > existing.score ||
+        (candidate.score === existing.score && candidate.priority > existing.priority)
+      ) {
+        byPath.set(normalized, candidate)
+      }
+    }
+
+    const ordered = [...byPath.values()].sort((a, b) => {
+      const depthA = path.relative(root, a.manga.mangaPath).split(path.sep).length
+      const depthB = path.relative(root, b.manga.mangaPath).split(path.sep).length
+      return b.score - a.score || b.priority - a.priority || depthA - depthB
+    })
+    const selected: RankedManga[] = []
+    for (const candidate of ordered) {
+      const candidatePath = path.normalize(candidate.manga.mangaPath)
+      const overlaps = selected.some((other) => {
+        const otherPath = path.normalize(other.manga.mangaPath)
+        return (
+          candidatePath.startsWith(`${otherPath}${path.sep}`) ||
+          otherPath.startsWith(`${candidatePath}${path.sep}`)
+        )
+      })
+      if (!overlaps) selected.push(candidate)
+    }
+
+    this.items.push({
+      level: 'info',
+      category: 'summary',
+      targetType: 'path',
+      action: 'none',
+      reasonCode: applyConfidenceThreshold
+        ? 'SCAN_TEMPLATE_MIXED_AUTO'
+        : 'SCAN_TEMPLATE_CUSTOM_RULES',
+      reason: applyConfidenceThreshold
+        ? `已按目录分支自动组合 ${new Set(selected.map((item) => item.template.pattern)).size} 种扫描结构`
+        : `已应用 ${templates.length} 条自定义扫描规则`,
+      targetPath: root,
+      extra: {
+        templates: [...new Set(selected.map((item) => item.template.pattern))],
+        candidates: this.templateCandidates,
+      },
+    })
+
+    return selected.map((item) => item.manga)
   }
 
   private validatePath(pathContent: string): ScanDiscoveryResult | null {
@@ -162,10 +329,16 @@ export default class ScanDiscoveryService {
 
       if (!template.singleChapter) {
         for (const chapter of manga.chapters) {
-          if (!this.looksLikeChapterName(chapter.chapterName) && !this.looksLikeArchiveChapter(chapter.fileName)) {
+          if (
+            !this.looksLikeChapterName(chapter.chapterName) &&
+            !this.looksLikeArchiveChapter(chapter.fileName)
+          ) {
             score -= 12
           }
-          if (this.templateHasIntermediateFolder(template) && !this.chapterHasVolumeIntermediate(chapter.chapterName)) {
+          if (
+            this.templateHasIntermediateFolder(template) &&
+            !this.chapterHasVolumeIntermediate(chapter.chapterName)
+          ) {
             score -= 35
           }
         }
@@ -184,14 +357,38 @@ export default class ScanDiscoveryService {
     const mangaCandidates = this.collectEntriesAtDepth(root, template.mangaIndex)
 
     for (const candidate of mangaCandidates) {
+      if (
+        this.activeRule?.directoryInclude &&
+        !new RegExp(this.activeRule.directoryInclude).test(candidate.entryPath)
+      ) {
+        continue
+      }
+      if (
+        this.activeRule?.directoryExclude &&
+        new RegExp(this.activeRule.directoryExclude).test(candidate.entryPath)
+      ) {
+        continue
+      }
       if (this.isMetadataDirectory(candidate.name)) {
-        this.skip('directory', 'METADATA_DIRECTORY', '元数据目录不会作为漫画扫描', candidate.name, candidate.entryPath)
+        this.skip(
+          'directory',
+          'METADATA_DIRECTORY',
+          '元数据目录不会作为漫画扫描',
+          candidate.name,
+          candidate.entryPath
+        )
         continue
       }
 
       const mangaType = this.resolveMangaType(candidate.entryPath)
       if (mangaType === 'other') {
-        this.skip('file', 'UNSUPPORTED_MANGA_FILE', '不支持的文件类型不会作为漫画扫描', candidate.name, candidate.entryPath)
+        this.skip(
+          'file',
+          'UNSUPPORTED_MANGA_FILE',
+          '不支持的文件类型不会作为漫画扫描',
+          candidate.name,
+          candidate.entryPath
+        )
         continue
       }
 
@@ -213,7 +410,13 @@ export default class ScanDiscoveryService {
       } else {
         manga.chapters = this.discoverChapters(manga, template)
         if (!manga.chapters.length) {
-          this.skip('manga', 'NO_CHAPTER_FOUND', '按当前模板未在漫画下识别到章节', manga.mangaName, manga.mangaPath)
+          this.skip(
+            'manga',
+            'NO_CHAPTER_FOUND',
+            '按当前模板未在漫画下识别到章节',
+            manga.mangaName,
+            manga.mangaPath
+          )
           continue
         }
       }
@@ -229,7 +432,13 @@ export default class ScanDiscoveryService {
     if (!stat) return null
 
     if (stat.isDirectory() && !this.hasDirectContentImages(manga.mangaPath)) {
-      this.skip('manga', 'NO_DIRECT_IMAGE', '单本模板要求漫画目录下直接包含图片', manga.mangaName, manga.mangaPath)
+      this.skip(
+        'manga',
+        'NO_DIRECT_IMAGE',
+        '单本模板要求漫画目录下直接包含图片',
+        manga.mangaName,
+        manga.mangaPath
+      )
       return null
     }
 
@@ -244,7 +453,13 @@ export default class ScanDiscoveryService {
   private discoverChapters(manga: DiscoveredManga, template: ScanTemplateInfo) {
     const stat = this.safeStat(manga.mangaPath)
     if (!stat?.isDirectory()) {
-      this.skip('manga', 'MANGA_FILE_IN_SERIAL_TEMPLATE', '当前模板需要从漫画目录下继续识别章节', manga.mangaName, manga.mangaPath)
+      this.skip(
+        'manga',
+        'MANGA_FILE_IN_SERIAL_TEMPLATE',
+        '当前模板需要从漫画目录下继续识别章节',
+        manga.mangaName,
+        manga.mangaPath
+      )
       return []
     }
 
@@ -264,7 +479,13 @@ export default class ScanDiscoveryService {
             entry.entryPath
           )
         } else {
-          this.skip('file', 'UNSUPPORTED_CHAPTER_FILE', '不支持的文件类型不会作为章节扫描', entry.name, entry.entryPath)
+          this.skip(
+            'file',
+            'UNSUPPORTED_CHAPTER_FILE',
+            '不支持的文件类型不会作为章节扫描',
+            entry.name,
+            entry.entryPath
+          )
         }
         continue
       }
@@ -327,14 +548,20 @@ export default class ScanDiscoveryService {
         extra: {
           mangaType: manga.mangaType,
           chapterCount: manga.chapters.length,
-          scanTemplateKey: template.key,
-          scanTemplatePattern: template.pattern,
+          scanTemplateKey: manga.scanTemplateKey || template.key,
+          scanTemplatePattern:
+            this.templateCandidates.find((candidate) => candidate.key === manga.scanTemplateKey)
+              ?.pattern || template.pattern,
         },
       })
     }
   }
 
-  private addStructureWarnings(pathContent: string, mangas: DiscoveredManga[], template: ScanTemplateInfo) {
+  private addStructureWarnings(
+    pathContent: string,
+    mangas: DiscoveredManga[],
+    template: ScanTemplateInfo
+  ) {
     if (!mangas.length) {
       this.items.push({
         level: 'warning',
@@ -370,12 +597,20 @@ export default class ScanDiscoveryService {
     return COMPRESS_EXTENSIONS[ext] || ''
   }
 
-  private shouldIncludeManga(manga: Pick<DiscoveredManga, 'mangaName' | 'mangaPath' | 'mangaType'>) {
+  private shouldIncludeManga(
+    manga: Pick<DiscoveredManga, 'mangaName' | 'mangaPath' | 'mangaType'>
+  ) {
     if (manga.mangaType === 'other') return false
 
     const target = `${manga.mangaName}\n${manga.mangaPath}`
     if (this.input.include && !new RegExp(this.input.include).test(target)) {
-      this.skip('manga', 'INCLUDE_NOT_MATCHED', '未匹配 include 规则', manga.mangaName, manga.mangaPath)
+      this.skip(
+        'manga',
+        'INCLUDE_NOT_MATCHED',
+        '未匹配 include 规则',
+        manga.mangaName,
+        manga.mangaPath
+      )
       return false
     }
 
@@ -405,13 +640,18 @@ export default class ScanDiscoveryService {
           if (fs.existsSync(`${manga.mangaPath}-smanga-info`)) summary.smangaSidecar += 1
         }
 
-        if ((profile === 'auto' || profile === 'series-json') && fs.existsSync(path.join(manga.mangaPath, 'series.json'))) {
+        if (
+          (profile === 'auto' || profile === 'series-json') &&
+          fs.existsSync(path.join(manga.mangaPath, 'series.json'))
+        ) {
           summary.seriesJson += 1
         }
       }
 
       if (profile === 'auto' || profile === 'comicinfo') {
-        summary.comicInfoCandidate += manga.chapters.filter((chapter) => chapter.chapterType === 'zip').length
+        summary.comicInfoCandidate += manga.chapters.filter(
+          (chapter) => chapter.chapterType === 'zip'
+        ).length
       }
     }
 
@@ -419,16 +659,24 @@ export default class ScanDiscoveryService {
   }
 
   private hasDirectContentImages(dir: string) {
+    if (this.directImageCache.has(dir)) return this.directImageCache.get(dir)!
     if (!this.safeStat(dir)?.isDirectory()) return false
-    return this.safeReadDir(dir, 'directory').some((entry) => {
+    const result = this.safeReadDir(dir, 'directory').some((entry) => {
       const entryPath = path.join(dir, entry)
       return is_img(entryPath) && !this.isNonContentImage(entry)
     })
+    this.directImageCache.set(dir, result)
+    return result
   }
 
   private hasChildDirectories(dir: string) {
+    if (this.childDirectoryCache.has(dir)) return this.childDirectoryCache.get(dir)!
     if (!this.safeStat(dir)?.isDirectory()) return false
-    return this.safeReadDir(dir, 'directory').some((entry) => this.safeStat(path.join(dir, entry))?.isDirectory())
+    const result = this.safeReadDir(dir, 'directory').some((entry) =>
+      this.safeStat(path.join(dir, entry))?.isDirectory()
+    )
+    this.childDirectoryCache.set(dir, result)
+    return result
   }
 
   private isNonContentImage(name: string) {
@@ -481,8 +729,12 @@ export default class ScanDiscoveryService {
   }
 
   private safeReadDir(dir: string, targetType: ScanReportItem['targetType']) {
+    const cached = this.readDirCache.get(dir)
+    if (cached) return cached
     try {
-      return fs.readdirSync(dir)
+      const entries = fs.readdirSync(dir)
+      this.readDirCache.set(dir, entries)
+      return entries
     } catch (e: any) {
       if (this.emitItems) {
         this.items.push({
@@ -499,8 +751,11 @@ export default class ScanDiscoveryService {
   }
 
   private safeStat(filePath: string) {
+    if (this.statCache.has(filePath)) return this.statCache.get(filePath) || null
     try {
-      return fs.statSync(filePath)
+      const stat = fs.statSync(filePath)
+      this.statCache.set(filePath, stat)
+      return stat
     } catch (e: any) {
       if (this.emitItems) {
         this.items.push({
@@ -512,6 +767,7 @@ export default class ScanDiscoveryService {
           targetPath: filePath,
         })
       }
+      this.statCache.set(filePath, null)
       return null
     }
   }
@@ -520,7 +776,13 @@ export default class ScanDiscoveryService {
     if (name === '.' || name === '..') return true
 
     if (this.isMetadataDirectory(name)) {
-      this.skip('directory', 'METADATA_DIRECTORY', '元数据目录不会作为漫画或章节扫描', name, filePath)
+      this.skip(
+        'directory',
+        'METADATA_DIRECTORY',
+        '元数据目录不会作为漫画或章节扫描',
+        name,
+        filePath
+      )
       return true
     }
 

@@ -50,7 +50,7 @@ export default class MediaController {
     }
 
     const [list, count] = await Promise.all([
-      prisma.media.findMany(queryParams),
+      prisma.media.findMany({ ...queryParams, orderBy: { mediaId: 'desc' } }),
       prisma.media.count({ where }),
     ])
 
@@ -96,7 +96,7 @@ export default class MediaController {
 
     // 如果存在媒体库则取消删除标识
     if (media) {
-      await prisma.media.update({
+      media = await prisma.media.update({
         where: { mediaId: media.mediaId },
         data: { deleteFlag: 0 },
       })

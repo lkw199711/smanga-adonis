@@ -1,6 +1,5 @@
 import prisma from '#start/prisma'
 import { v4 as uuidv4 } from 'uuid'
-import crypto from 'crypto'
 import { get_config } from '#utils/index'
 import membershipCache from '#services/p2p/p2p_membership_cache'
 import {
@@ -52,10 +51,18 @@ class TrackerNodeService {
     const pageSize = Math.min(200, Math.max(1, Number(params.pageSize) || 20))
     const where: any = {}
 
-    if (params.online !== undefined && params.online !== null && !Number.isNaN(Number(params.online))) {
+    if (
+      params.online !== undefined &&
+      params.online !== null &&
+      !Number.isNaN(Number(params.online))
+    ) {
       where.online = Number(params.online)
     }
-    if (params.banned !== undefined && params.banned !== null && !Number.isNaN(Number(params.banned))) {
+    if (
+      params.banned !== undefined &&
+      params.banned !== null &&
+      !Number.isNaN(Number(params.banned))
+    ) {
       where.banned = Number(params.banned)
     }
     if (params.keyword && params.keyword.trim()) {
@@ -124,7 +131,9 @@ class TrackerNodeService {
         : [[], [], [], []]
 
     const membershipMap = new Map(membershipCounts.map((r) => [r.nodeId, r._count.nodeId]))
-    const ownedGroupMap = new Map(ownedGroupCounts.map((r) => [r.ownerNodeId, r._count.ownerNodeId]))
+    const ownedGroupMap = new Map(
+      ownedGroupCounts.map((r) => [r.ownerNodeId, r._count.ownerNodeId])
+    )
     const shareIndexMap = new Map(shareIndexCounts.map((r) => [r.nodeId, r._count.nodeId]))
     const shareManifestMap = new Map(shareManifestCounts.map((r) => [r.nodeId, r._count.nodeId]))
 
@@ -261,8 +270,12 @@ class TrackerNodeService {
 
     await prisma.$transaction(async (tx) => {
       if (ownedGroupIds.length) {
-        await tx.tracker_share_manifest.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
-        await tx.tracker_share_index.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
+        await tx.tracker_share_manifest.deleteMany({
+          where: { trackerGroupId: { in: ownedGroupIds } },
+        })
+        await tx.tracker_share_index.deleteMany({
+          where: { trackerGroupId: { in: ownedGroupIds } },
+        })
         await tx.tracker_invite.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
         await tx.tracker_membership.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
         await tx.tracker_group.deleteMany({ where: { trackerGroupId: { in: ownedGroupIds } } })
@@ -345,33 +358,29 @@ class TrackerNodeService {
       if (!decidedUrl) {
         throw new Error(
           '注册请求缺少有效的 publicUrl。请在 smanga.json 的 p2p.node.publicUrl\n' +
-          '配置节点对外可达地址,例如:\n' +
-          '  "example.com:9797/api"     (经 webui 反代)\n' +
-          '  "http://1.2.3.4:9797/api"  (Adonis 统一服务)\n' +
-          '  "https://example.com"      (HTTPS 反代)\n' +
-          '本项目不支持纯内网/CGNAT 节点接入'
+            '配置节点对外可达地址,例如:\n' +
+            '  "example.com:9797/api"     (经 webui 反代)\n' +
+            '  "http://1.2.3.4:9797/api"  (Adonis 统一服务)\n' +
+            '  "https://example.com"      (HTTPS 反代)\n' +
+            '本项目不支持纯内网/CGNAT 节点接入'
         )
       }
 
       const check = await trackerReachabilityService.verify({ baseUrl: decidedUrl })
       if (!check.ok) {
-        console.warn(
-          `[tracker] 注册反向验证失败 publicUrl=${decidedUrl} reason=${check.reason}`
-        )
+        console.warn(`[tracker] 注册反向验证失败 publicUrl=${decidedUrl} reason=${check.reason}`)
         throw new Error(
           `节点公网可达性验证失败: ${check.reason}\n` +
-          `tracker 无法从 ${decidedUrl} 拿到正确 challenge 回包。\n` +
-          '请确认:\n' +
-          '  - 节点服务正常运行且监听端口正确\n' +
-          '  - 防火墙/安全组已放行该端口\n' +
-          '  - 若使用 IPv6 地址,请确保 tracker 所在网络支持 IPv6 出站(双栈环境)\n' +
-          '  - 若 tracker 仅 IPv4,请为节点配置一个 IPv4 可达的 publicUrl\n' +
-          '  - NAT 后做好端口映射'
+            `tracker 无法从 ${decidedUrl} 拿到正确 challenge 回包。\n` +
+            '请确认:\n' +
+            '  - 节点服务正常运行且监听端口正确\n' +
+            '  - 防火墙/安全组已放行该端口\n' +
+            '  - 若使用 IPv6 地址,请确保 tracker 所在网络支持 IPv6 出站(双栈环境)\n' +
+            '  - 若 tracker 仅 IPv4,请为节点配置一个 IPv4 可达的 publicUrl\n' +
+            '  - NAT 后做好端口映射'
         )
       }
-      console.log(
-        `[tracker] 注册反向验证通过 publicUrl=${decidedUrl} elapsed=${check.elapsedMs}ms`
-      )
+      console.log(`[tracker] 注册反向验证通过 publicUrl=${decidedUrl} elapsed=${check.elapsedMs}ms`)
     } else {
       console.log(`[tracker] 检测到本机自连(loopback),跳过反向验证`)
     }
@@ -379,7 +388,7 @@ class TrackerNodeService {
     // 优先使用客户端提供的 serverKey 作为 nodeId,保证同实例始终注册为同一节点
     const nodeId = payload.serverKey || uuidv4()
 
-    const persistUrl = isLoopback ? null : (decidedUrl || null)
+    const persistUrl = isLoopback ? null : decidedUrl || null
 
     await prisma.tracker_node.upsert({
       where: { nodeId },
@@ -405,8 +414,8 @@ class TrackerNodeService {
 
     console.log(
       `[tracker] 节点注册成功 nodeId=${nodeId} ` +
-      `publicUrl=${persistUrl || 'null(loopback)'} ` +
-      `ipSource=${clientIp.source} ipCategory=${clientIp.category}`
+        `publicUrl=${persistUrl || 'null(loopback)'} ` +
+        `ipSource=${clientIp.source} ipCategory=${clientIp.category}`
     )
 
     return {
@@ -468,7 +477,7 @@ class TrackerNodeService {
           online = 1
           console.log(
             `[tracker] 心跳反向验证通过 nodeId=${nodeId} publicUrl=${decidedUrl} ` +
-            `elapsed=${check.elapsedMs}ms (${endpointChanged ? '端点变更' : '离线恢复'})`
+              `elapsed=${check.elapsedMs}ms (${endpointChanged ? '端点变更' : '离线恢复'})`
           )
         } else {
           online = 0
@@ -558,7 +567,9 @@ class TrackerNodeService {
         try {
           const u = new URL(normalized)
           if (['localhost', '127.0.0.1', '::1'].includes(u.hostname)) continue
-        } catch { continue }
+        } catch {
+          continue
+        }
         if (!knownTrackers.includes(normalized)) {
           knownTrackers.push(normalized)
         }
@@ -566,7 +577,7 @@ class TrackerNodeService {
     }
 
     return {
-      publicUrl: isLoopback ? '' : (decidedUrl || existing.publicUrl || ''),
+      publicUrl: isLoopback ? '' : decidedUrl || existing.publicUrl || '',
       serverTime: Date.now(),
       pendingNotifications: notifications,
       knownTrackers,
@@ -614,8 +625,7 @@ class TrackerNodeService {
     })
 
     console.log(
-      `[tracker] 节点导入成功 nodeId=${payload.nodeId} ` +
-      `publicUrl=${decidedUrl || 'null'}`
+      `[tracker] 节点导入成功 nodeId=${payload.nodeId} ` + `publicUrl=${decidedUrl || 'null'}`
     )
 
     return { nodeId: payload.nodeId, publicUrl: decidedUrl || '' }

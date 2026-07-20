@@ -25,6 +25,9 @@ import { metaKeyType } from '../type/index.js'
 import { comicinfo_transform } from '#utils/meta'
 import type { DiscoveredChapter } from './scan/scan_types.js'
 import { normalizeMetadataProfile } from './scan/scan_template_service.js'
+import { parseMetadataProfileConfig } from './scan/scan_config_service.js'
+import type { MetadataProfileConfig, MetadataSource } from './scan/scan_types.js'
+import ScanReportService from './scan/scan_report_service.js'
 type pathType = sqlPathType & { media: sqlMediaType }
 const logModule = '[manga scan]'
 
@@ -50,6 +53,9 @@ export default class ScanMangaJob {
   private shouldSmangaMetaUpdate: boolean = true
   private shouldChapterUpdate: boolean = true
   private discoveredChapters: DiscoveredChapter[] = []
+  private parsedMetadataConfig: MetadataProfileConfig | null = null
+  private scanRunId?: number
+  private reportService = new ScanReportService()
 
   constructor({
     pathId,
@@ -58,6 +64,7 @@ export default class ScanMangaJob {
     parentPath,
     isCloudMedia,
     chapters,
+    scanRunId,
   }: {
     pathId: number
     pathInfo: any
@@ -67,6 +74,7 @@ export default class ScanMangaJob {
     parentPath: string
     isCloudMedia: boolean
     chapters?: DiscoveredChapter[]
+    scanRunId?: number
   }) {
     this.pathId = pathId
     this.mangaPath = mangaPath
@@ -74,6 +82,7 @@ export default class ScanMangaJob {
     this.parentPath = parentPath || path.dirname(mangaPath)
     this.isCloudMedia = isCloudMedia
     this.discoveredChapters = Array.isArray(chapters) ? chapters : []
+    this.scanRunId = scanRunId
 
     const config = get_config()
     this.ignoreHiddenFiles = config.scan?.ignoreHiddenFiles === 1
@@ -88,22 +97,56 @@ export default class ScanMangaJob {
     return normalizeMetadataProfile((this.pathInfo as any)?.metadataProfileKey)
   }
 
+  private metadata_config() {
+    if (!this.parsedMetadataConfig) {
+      this.parsedMetadataConfig = parseMetadataProfileConfig(
+        (this.pathInfo as any)?.metadataProfileConfig,
+        this.metadata_profile()
+      )
+    }
+    return this.parsedMetadataConfig
+  }
+
+  private metadata_source_enabled(source: MetadataSource) {
+    return this.metadata_config().sources.includes(source)
+  }
+
+  private metadata_file_within_limit(filePath: string) {
+    return fs.statSync(filePath).size <= this.metadata_config().maxFileBytes
+  }
+
+  private has_series_metadata() {
+    return is_directory(this.mangaPath) && fs.existsSync(path.join(this.mangaPath, 'series.json'))
+  }
+
+  private preferred_manga_metadata_source(): 'smanga' | 'series-json' | null {
+    const available = {
+      'smanga': Boolean(this.smangaMetaFolder) && this.metadata_source_enabled('smanga'),
+      'series-json': this.has_series_metadata() && this.metadata_source_enabled('series-json'),
+    }
+    for (const source of this.metadata_config().precedence) {
+      if ((source === 'smanga' || source === 'series-json') && available[source]) return source
+    }
+    return available.smanga ? 'smanga' : available['series-json'] ? 'series-json' : null
+  }
+
   private should_scan_smanga_meta() {
-    const profile = this.metadata_profile()
-    return profile === 'auto' || profile === 'smanga'
+    return this.metadata_source_enabled('smanga')
   }
 
   private should_scan_series_meta() {
-    const profile = this.metadata_profile()
-    return profile === 'auto' || profile === 'series-json'
+    return this.metadata_source_enabled('series-json')
   }
 
   private should_scan_comicinfo_meta() {
-    const profile = this.metadata_profile()
-    return profile === 'auto' || profile === 'comicinfo'
+    return this.metadata_source_enabled('comicinfo')
   }
 
-  private async scan_discovered_chapters(mangaInsert: Prisma.mangaCreateInput, subTitle: string, reloadCover: number) {
+  private async scan_discovered_chapters(
+    mangaInsert: Prisma.mangaCreateInput,
+    subTitle: string,
+    reloadCover: number
+  ) {
     const pathId = this.pathId
     const mangaPath = this.mangaPath
 
@@ -182,9 +225,7 @@ export default class ScanMangaJob {
       try {
         this.chapterRecord = await prisma.chapter.create({ data: chapterInsert })
       } catch (e) {
-        console.log('章节插入失败', item.chapterName)
-        console.log(e)
-        return
+        throw new Error(`章节插入失败: ${item.chapterName}`, { cause: e })
       }
 
       if (!this.chapterRecord.chapterCover || reloadCover) {
@@ -217,6 +258,11 @@ export default class ScanMangaJob {
   }
 
   async run() {
+    await this.runInternal()
+    await this.reportService.recordMangaCompleted(this.scanRunId, this.mangaName, this.mangaPath)
+  }
+
+  private async runInternal() {
     const pathId = this.pathId
     this.pathInfo = await prisma.path
       .findUnique({ where: { pathId }, include: { media: true } })
@@ -231,12 +277,12 @@ export default class ScanMangaJob {
 
     if (!this.pathInfo) {
       await error_log(logModule, `pathId ${pathId}路径不存在`)
-      return
+      throw new Error(`pathId ${pathId} 路径不存在`)
     }
 
     if (!this.mediaRecord) {
       error_log(logModule, `pathId ${pathId}媒体库不存在`)
-      return
+      throw new Error(`pathId ${pathId} 媒体库不存在`)
     }
 
     this.cachePath = path_cache()
@@ -383,10 +429,10 @@ export default class ScanMangaJob {
       // 扫描元数据
       await this.meta_scan()
       await this.meta_scan_series()
-      
-       if (!this.mangaRecord.mangaCover || this.shouldSmangaMetaUpdate || reloadCover) {
-         await this.manga_poster(mangaPath)
-       }
+
+      if (!this.mangaRecord.mangaCover || this.shouldSmangaMetaUpdate || reloadCover) {
+        await this.manga_poster(mangaPath)
+      }
 
       // 漫画未更新
       if (!this.shouldChapterUpdate) {
@@ -455,10 +501,7 @@ export default class ScanMangaJob {
         try {
           this.chapterRecord = await prisma.chapter.create({ data: chapterInsert })
         } catch (e) {
-          console.log('章节插入失败', item.chapterName)
-          console.log(e)
-
-          return
+          throw new Error(`章节插入失败: ${item.chapterName}`, { cause: e })
         }
 
         // 获取封面图
@@ -591,6 +634,8 @@ export default class ScanMangaJob {
    */
   async meta_scan() {
     if (!this.should_scan_smanga_meta()) return false
+    if (this.preferred_manga_metadata_source() !== 'smanga') return false
+    if (this.alreadyExistManga && !this.metadata_config().overwriteExisting) return false
 
     // 云盘库必须扫描既有缓存元数据 否则不执行
     if (this.alreadyExistManga && this.isCloudMedia && !this.hasDataMeta) return false
@@ -603,9 +648,6 @@ export default class ScanMangaJob {
 
     const dirMeta = this.smangaMetaFolder
 
-    // 删除原有的元数据
-    await this.clear_manga_meta()
-
     const infoFile = path.join(dirMeta, 'info.json')
     const metaFile = path.join(dirMeta, 'meta.json')
     // 为兼容老的元数据文件 允许文件名为info
@@ -617,8 +659,14 @@ export default class ScanMangaJob {
     }
 
     if (fs.existsSync(targetMetaFile)) {
+      if (!this.metadata_file_within_limit(targetMetaFile)) {
+        await error_log(logModule, `元数据文件超过大小限制: ${targetMetaFile}`)
+        return false
+      }
       const rawData = fs.readFileSync(targetMetaFile, 'utf-8')
       const info = JSON.parse(rawData)
+      // 新元数据读取并解析成功后再清理旧记录，避免损坏文件导致既有元数据丢失。
+      await this.clear_manga_meta()
       this.meta = info
       // 一般性元数据
       const keys = Object.keys(info)
@@ -754,9 +802,9 @@ export default class ScanMangaJob {
    */
   async meta_scan_series() {
     if (!this.should_scan_series_meta()) return false
+    if (this.preferred_manga_metadata_source() !== 'series-json') return false
+    if (this.alreadyExistManga && !this.metadata_config().overwriteExisting) return false
 
-    // 漫画为smanga定制格式 不扫描 series.json
-    if (this.smangaMetaFolder) return false
     // 云漫画不扫描 series.json
     if (this.isCloudMedia) return
     const mangaPath = this.mangaRecord.mangaPath
@@ -766,12 +814,14 @@ export default class ScanMangaJob {
     const series = fils.find((file) => file === 'series.json')
     if (!series) return
 
-    // 删除原有的元数据
-    await this.clear_manga_meta()
-
     const seriesFile = path.join(mangaPath, series)
+    if (!this.metadata_file_within_limit(seriesFile)) {
+      await error_log(logModule, `元数据文件超过大小限制: ${seriesFile}`)
+      return false
+    }
     const rawData = fs.readFileSync(seriesFile, 'utf-8')
     const jsonParse = JSON.parse(rawData)
+    await this.clear_manga_meta()
     this.meta = jsonParse?.metadata ? jsonParse.metadata : jsonParse
 
     if (this.meta?.tags) {
@@ -978,10 +1028,7 @@ export default class ScanMangaJob {
         this.mangaName,
         this.chapterRecord.chapterName + '.jpg'
       )
-      const metaChapterCover2 = path.join(
-        this.smangaMetaFolder,
-        'chapter-cover.jpg'
-      )
+      const metaChapterCover2 = path.join(this.smangaMetaFolder, 'chapter-cover.jpg')
       // 同级别目录封面
       const sidePoster = dirOutExt + '.jpg'
       // 漫画文件夹内部封面
@@ -1143,11 +1190,7 @@ export default class ScanMangaJob {
     }
 
     // 检索漫画文件夹内的封面图片
-    if (
-      !sourcePoster &&
-      fs.existsSync(dir) &&
-      fs.statSync(dir).isDirectory()
-    ) {
+    if (!sourcePoster && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
       extensions.some((ext) => {
         const picPath = path.join(dir, 'cover' + ext)
         if (fs.existsSync(picPath)) {
@@ -1205,6 +1248,7 @@ export default class ScanMangaJob {
    */
   async meta_scan_comicinfo() {
     if (!this.should_scan_comicinfo_meta()) return false
+    if (this.alreadyExistManga && !this.metadata_config().overwriteExisting) return false
 
     // 漫画为smanga定制格式 不扫描 comicinfo
     if (this.smangaMetaFolder) return false
@@ -1214,7 +1258,10 @@ export default class ScanMangaJob {
       return
     }
 
-    const comicinfo = await extract_metadata(this.chapterRecord.chapterPath)
+    const comicinfo = await extract_metadata(
+      this.chapterRecord.chapterPath,
+      this.metadata_config().maxFileBytes
+    )
 
     if (!comicinfo) return
 

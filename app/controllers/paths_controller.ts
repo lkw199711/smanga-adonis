@@ -6,6 +6,7 @@ import { create_scan_cron } from '#services/cron_service'
 import ScanDiscoveryService from '#services/scan/scan_discovery_service'
 import ScanReportService from '#services/scan/scan_report_service'
 import { get_config } from '#utils/index'
+import { normalizeScanConfigJson, ScanConfigError } from '#services/scan/scan_config_service'
 import fs from 'fs'
 import {
   listPathValidator,
@@ -19,6 +20,29 @@ import {
 export default class PathsController {
   private discoveryService = new ScanDiscoveryService()
   private reportService = new ScanReportService()
+
+  private normalizeScanConfigs(data: any, response: any, allowMissingCustom = false) {
+    try {
+      if (
+        data.scanTemplateKey === 'custom' &&
+        !allowMissingCustom &&
+        !data.scanTemplateConfig?.trim()
+      ) {
+        throw new ScanConfigError('选择 custom 时不能为空', 'scanTemplateConfig')
+      }
+      if (data.scanTemplateConfig !== undefined) {
+        data.scanTemplateConfig = normalizeScanConfigJson(data.scanTemplateConfig, 'template')
+      }
+      if (data.metadataProfileConfig !== undefined) {
+        data.metadataProfileConfig = normalizeScanConfigJson(data.metadataProfileConfig, 'metadata')
+      }
+      return data
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      response.status(422).json({ code: 422, message, status: 'validation failed' })
+      return null
+    }
+  }
 
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
@@ -101,7 +125,9 @@ export default class PathsController {
   public async preview_unsaved({ request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
-    const data = await previewPathValidator.validate(request.all())
+    const validatedData = await previewPathValidator.validate(request.all())
+    const data = this.normalizeScanConfigs(validatedData, response)
+    if (!data) return
     const media = data.mediaId
       ? await prisma.media.findUnique({ where: { mediaId: data.mediaId } })
       : null
@@ -128,7 +154,9 @@ export default class PathsController {
     if (!(await this.checkAdmin(request, response))) return
 
     let path = null
-    const insertData = await createPathValidator.validate(request.all())
+    const validatedData = await createPathValidator.validate(request.all())
+    const insertData = this.normalizeScanConfigs(validatedData, response)
+    if (!insertData) return
 
     // 检查路径是否存在
     if (!fs.existsSync(insertData.pathContent)) {
@@ -169,16 +197,20 @@ export default class PathsController {
     })
 
     // 扫描路径
-    await addTask({
+    const task = await addTask({
       taskName: `scan_path_${path.pathId}`,
       command: 'taskScanPath',
       args: { pathId: path.pathId, scanRunId: scanRun.scanRunId },
       priority: TaskPriority.scan,
     })
 
+    if (!task) {
+      await this.reportService.finishFailed(scanRun.scanRunId, '路径正在被扫描，任务未重复提交')
+    }
+
     return response.json({
       code: 200,
-      message: '新增成功,扫描任务已提交',
+      message: task ? '新增成功,扫描任务已提交' : '新增成功，但路径正在被扫描，未重复提交',
       data: { ...path, scanRunId: scanRun.scanRunId },
     })
   }
@@ -187,7 +219,33 @@ export default class PathsController {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathId } = await idParamPathValidator.validate(params)
-    const modifyData = await updatePathValidator.validate(request.all())
+    const validatedData = await updatePathValidator.validate(request.all())
+    const modifyData = this.normalizeScanConfigs(validatedData, response, true)
+    if (!modifyData) return
+    if (
+      modifyData.scanTemplateKey === 'custom' &&
+      modifyData.scanTemplateConfig !== undefined &&
+      !modifyData.scanTemplateConfig?.trim()
+    ) {
+      return response.status(422).json({
+        code: 422,
+        message: 'scanTemplateConfig: 选择 custom 时不能为空',
+        status: 'validation failed',
+      })
+    }
+    if (modifyData.scanTemplateKey === 'custom' && modifyData.scanTemplateConfig === undefined) {
+      const existing = await prisma.path.findUnique({
+        where: { pathId },
+        select: { scanTemplateConfig: true },
+      })
+      if (!existing?.scanTemplateConfig) {
+        return response.status(422).json({
+          code: 422,
+          message: 'scanTemplateConfig: 选择 custom 时不能为空',
+          status: 'validation failed',
+        })
+      }
+    }
     const path = await prisma.path.update({
       where: { pathId },
       data: modifyData,
@@ -291,28 +349,23 @@ export default class PathsController {
       message: '重新扫描会先删除路径下已有漫画，再按当前目录重新创建',
     })
 
-    const mangas = await prisma.manga.findMany({ where: { pathId } })
-    // 删除此路径现有漫画
-    for (const manga of mangas) {
-      await addTask({
-        taskName: `delete_manga_${manga.mangaId}`,
-        command: 'deleteManga',
-        args: { mangaId: manga.mangaId },
-        priority: TaskPriority.deleteManga,
-      })
-    }
-
-    // 再次扫描路径
-    await addTask({
+    const task = await addTask({
       taskName: `scan_path_${pathId}`,
-      command: 'taskScanPath',
+      command: 'taskRescanPath',
       args: { pathId, scanRunId: scanRun.scanRunId },
       priority: TaskPriority.scan,
     })
 
+    if (!task) {
+      await this.reportService.finishFailed(
+        scanRun.scanRunId,
+        '路径正在被扫描，未执行删除和重新扫描'
+      )
+    }
+
     return response.json({
       code: 200,
-      message: '重新扫描任务已提交',
+      message: task ? '重新扫描任务已提交' : '路径正在被扫描，未重复提交',
       data: { pathId, scanRunId: scanRun.scanRunId },
     })
   }

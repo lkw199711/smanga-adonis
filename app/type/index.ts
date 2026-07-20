@@ -4,6 +4,7 @@ enum TaskPriority {
   deleteManga = 210000,
   scan = 300000,
   scanManga = 310000,
+  finalizeScan = 315000,
   copyPoster = 320000,
   createMediaPoster = 330000,
   syncMedia = 500000,
@@ -34,18 +35,18 @@ enum metaKeyType {
 }
 
 export type metaType = {
-  title: string,
-  subTitle: string,
-  author: string,
-  star: number,
-  describe: string,
-  publishDate: string,
-  classify: string,
-  finished: boolean,
-  updateDate: string,
-  publisher: string,
-  status: string,
-  tags: string[],
+  title: string
+  subTitle: string
+  author: string
+  star: number
+  describe: string
+  publishDate: string
+  classify: string
+  finished: boolean
+  updateDate: string
+  publisher: string
+  status: string
+  tags: string[]
 }
 
 export { TaskPriority, metaKeyType }

@@ -6,12 +6,9 @@ import { TaskPriority } from '#type/index'
 import { announce_group } from '../p2p_announce_service.js'
 import { resolvePathShareMangas } from '../path_share_resolver.js'
 import { safeName } from './pull_context.js'
+import ScanReportService from '#services/scan/scan_report_service'
 
 const ARCHIVE_EXTS = new Set(['.zip', '.cbz', '.cbr', '.epub', '.rar', '.7z', '.pdf'])
-// Hard switch for pull-success local import/share finalization.
-// Keep disabled while validating the basic pull pipeline.
-const ENABLE_PULL_AUTO_LOCAL_SHARE_FINALIZE = false
-
 function isArchiveLike(filePath: string) {
   return ARCHIVE_EXTS.has(path.extname(filePath).toLowerCase())
 }
@@ -57,10 +54,7 @@ async function buildUniqueMediaName(baseName: string) {
   return candidate
 }
 
-async function resolveOrCreateScanPath(transfer: {
-  remoteName: string
-  receivedPath: string
-}) {
+async function resolveOrCreateScanPath(transfer: { remoteName: string; receivedPath: string }) {
   const receivedPath = path.resolve(transfer.receivedPath)
   const activePath = await prisma.path.findFirst({
     where: { pathContent: receivedPath, deleteFlag: 0 },
@@ -253,12 +247,23 @@ export async function finalizePulledTransferToLocalShare(transferId: number) {
     receivedPath,
   })
 
-  await addTask({
+  const reportService = new ScanReportService()
+  const scanRun = await reportService.createRun({
+    runType: 'incremental',
+    triggerType: 'p2p',
+    mediaId: scanPath.mediaId,
+    pathId: scanPath.pathId,
+    pathContent: scanPath.pathContent,
+  })
+  const scanTask = await addTask({
     taskName: `scan_path_${scanPath.pathId}`,
     command: 'taskScanPath',
-    args: { pathId: scanPath.pathId },
+    args: { pathId: scanPath.pathId, scanRunId: scanRun.scanRunId },
     priority: TaskPriority.scan,
   })
+  if (!scanTask) {
+    await reportService.finishFailed(scanRun.scanRunId, '路径正在被扫描，P2P 导入扫描未重复提交')
+  }
 
   await announce_group(transfer.groupNo)
   return true

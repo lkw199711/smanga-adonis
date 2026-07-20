@@ -90,23 +90,80 @@ export function toJobLike(job: QueueJobRecord | null) {
 
 export async function enqueueJob(input: EnqueueJobInput) {
   const config = getQueueConfig()
-  const job = await db.queue_job.create({
-    data: {
-      queue_name: getQueueName(),
-      task_queue: input.taskQueue,
-      task_name: input.taskName,
-      command: input.command,
-      args: encodeJson(input.args),
-      status: 'pending',
-      priority: input.priority ?? 10,
-      attempts_made: 0,
-      max_attempts: config.attempts,
-      timeout_ms: input.timeout ?? config.timeout,
-      available_at: new Date(),
-    },
-  })
+  const job = await db.queue_job.create({ data: queueJobData(input, config) })
 
   return toJobLike(job)
+}
+
+function queueJobData(input: EnqueueJobInput, config = getQueueConfig()) {
+  return {
+    queue_name: getQueueName(),
+    task_queue: input.taskQueue,
+    task_name: input.taskName,
+    command: input.command,
+    args: encodeJson(input.args),
+    status: 'pending',
+    priority: input.priority ?? 10,
+    attempts_made: 0,
+    max_attempts: config.attempts,
+    timeout_ms: input.timeout ?? config.timeout,
+    available_at: new Date(),
+  }
+}
+
+/**
+ * 在串行化事务内完成“检查路径是否繁忙 + 入队”，避免两个并发请求都通过预检查。
+ * 根任务运行期间会一直存在；根任务退出前已创建的漫画子任务/收尾任务继续通过
+ * scan_path_{pathId}_ 前缀保持路径繁忙状态。
+ */
+export async function enqueuePathJobIfIdle(pathId: number, input: EnqueueJobInput) {
+  const queueName = getQueueName()
+  const taskPrefix = `scan_path_${pathId}`
+  try {
+    const job = await db.$transaction(
+      async (tx: any) => {
+        const active = await tx.queue_job.count({
+          where: {
+            queue_name: queueName,
+            OR: [{ task_name: taskPrefix }, { task_name: { startsWith: `${taskPrefix}_` } }],
+            status: { in: ['pending', 'running'] },
+          },
+        })
+        if (active > 0) return null
+        return tx.queue_job.create({ data: queueJobData(input) })
+      },
+      { isolationLevel: 'Serializable' }
+    )
+    return toJobLike(job)
+  } catch (error: any) {
+    // Prisma 在并发串行化冲突时会让其中一个事务回滚；此时按重复扫描处理。
+    if (error?.code === 'P2034') return null
+    throw error
+  }
+}
+
+export async function enqueueNamedJobIfIdle(input: EnqueueJobInput) {
+  const queueName = getQueueName()
+  try {
+    const job = await db.$transaction(
+      async (tx: any) => {
+        const active = await tx.queue_job.count({
+          where: {
+            queue_name: queueName,
+            task_name: input.taskName,
+            status: { in: ['pending', 'running'] },
+          },
+        })
+        if (active > 0) return null
+        return tx.queue_job.create({ data: queueJobData(input) })
+      },
+      { isolationLevel: 'Serializable' }
+    )
+    return toJobLike(job)
+  } catch (error: any) {
+    if (error?.code === 'P2034') return null
+    throw error
+  }
 }
 
 export async function listJobs(states?: string[]) {
@@ -162,12 +219,23 @@ export async function pathJobExists(taskName: string) {
   const count = await db.queue_job.count({
     where: {
       queue_name: getQueueName(),
-      task_name: taskName,
+      OR: [{ task_name: taskName }, { task_name: { startsWith: `${taskName}_` } }],
       status: { in: ['pending', 'running'] },
     },
   })
 
   return count > 0
+}
+
+export async function countActiveScanChildren(scanRunId: number) {
+  return db.queue_job.count({
+    where: {
+      queue_name: getQueueName(),
+      command: 'taskScanManga',
+      task_name: { contains: `_run_${scanRunId}_` },
+      status: { in: ['pending', 'running'] },
+    },
+  })
 }
 
 export async function claimNextJob(input: ClaimInput): Promise<QueueJobRecord | null> {
@@ -245,7 +313,10 @@ function errorMessage(error: unknown) {
   return String(error)
 }
 
-export async function markJobFailedOrRetry(job: QueueJobRecord, error: unknown) {
+export async function markJobFailedOrRetry(
+  job: QueueJobRecord,
+  error: unknown
+): Promise<'retry' | 'failed'> {
   const now = new Date()
   const message = errorMessage(error)
 
@@ -261,7 +332,7 @@ export async function markJobFailedOrRetry(job: QueueJobRecord, error: unknown) 
         updated_at: now,
       },
     })
-    return
+    return 'retry'
   }
 
   await db.$transaction([
@@ -281,6 +352,7 @@ export async function markJobFailedOrRetry(job: QueueJobRecord, error: unknown) 
     }),
     db.queue_job.deleteMany({ where: { id: job.id } }),
   ])
+  return 'failed'
 }
 
 export async function recoverStalledJobs() {
@@ -296,7 +368,12 @@ export async function recoverStalledJobs() {
 
   for (const job of stalledJobs) {
     if (job.attempts_made >= job.max_attempts) {
-      await markJobFailedOrRetry(job, job.last_error || 'Job stalled')
+      const error = new Error(job.last_error || 'Job stalled')
+      const outcome = await markJobFailedOrRetry(job, error)
+      if (outcome === 'failed') {
+        const { handleScanQueueTerminalFailure } = await import('../scan/scan_report_service.js')
+        await handleScanQueueTerminalFailure(job.command, decodeJson(job.args), error)
+      }
     } else {
       await db.queue_job.update({
         where: { id: job.id },
