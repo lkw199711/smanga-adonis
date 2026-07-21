@@ -18,14 +18,22 @@ import PullMangaJob from '../p2p/pull/pull_manga_sub_job.js'
 import PullChapterJob from '../p2p/pull/pull_chapter_sub_job.js'
 import PullMetaJob from '../p2p/pull/pull_meta_sub_job.js'
 import AnnounceAfterScanJob from '../announce_after_scan_job.js'
+import FinalizeScanRunJob from '../finalize_scan_run_job.js'
+import RescanPathJob from '../rescan_path_job.js'
 
 export async function runJobCommand(command: string, args: any) {
   switch (command) {
     case 'taskScanPath':
       await new ScanPathJob(args).run()
       break
+    case 'taskRescanPath':
+      await new RescanPathJob(args).run()
+      break
     case 'taskScanManga':
       await new ScanMangaJob(args).run()
+      break
+    case 'finalizeScanRun':
+      await new FinalizeScanRunJob(args).run()
       break
     case 'deleteMedia':
       await new DeleteMediaJob(args).run()

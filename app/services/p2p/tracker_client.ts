@@ -11,8 +11,6 @@
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
-import { get_config } from '#utils/index'
-import trackerProbeService from './tracker_probe_service.js'
 import type {
   NodeRegisterPayload,
   NodeRegisterResult,
@@ -179,11 +177,7 @@ export class TrackerClient {
 
   // ============ Share ============
   async announceShares(groupNo: string, payload: AnnouncePayload) {
-    const res = await this.http.post(
-      `/tracker/group/${groupNo}/announce`,
-      payload,
-      this.auth()
-    )
+    const res = await this.http.post(`/tracker/group/${groupNo}/announce`, payload, this.auth())
     return res.data?.data ?? res.data
   }
 
@@ -277,10 +271,7 @@ export class TrackerClient {
       remoteMangaId?: number
     }
   ) {
-    const res = await this.http.get(
-      `/tracker/group/${groupNo}/seeds`,
-      this.auth({ params })
-    )
+    const res = await this.http.get(`/tracker/group/${groupNo}/seeds`, this.auth({ params }))
     const data = res.data?.data ?? res.data
     return (data?.list ?? data) as Array<{
       nodeId: string

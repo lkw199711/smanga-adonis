@@ -102,13 +102,14 @@ export async function extract_cover(zipFilePath: string, outputDir: string) {
   return true
 }
 
-export async function extract_metadata(zipFilePath: string) {
+export async function extract_metadata(zipFilePath: string, maxBytes = Number.POSITIVE_INFINITY) {
   const zip = new AdmZip(zipFilePath)
   const entries = zip.getEntries()
   if (entries.length === 0) return false
 
   let coverEntry = entries.find((entry: any) => entry.name === 'ComicInfo.xml')
   if (!coverEntry) return false
+  if (Number(coverEntry.header?.size || 0) > maxBytes) return false
 
   const ComicInfo = zip.readAsText(coverEntry.name)
   const ComicInfoJson = await parseStringPromise(ComicInfo)

@@ -19,6 +19,8 @@ import {
 } from '#services/cron_service'
 import { startEmbeddedQueueWorkers } from '#services/queue/sql_queue_worker_service'
 import { v4 as uuidv4 } from 'uuid'
+import prisma from '#start/prisma'
+import { migrateLegacyScanHistory } from '#services/migration/legacy_scan_backup_service'
 
 // 默认配置
 const defaultConfig = {
@@ -39,6 +41,7 @@ const defaultConfig = {
     quality: 100,
   },
   scan: {
+    engine: 'template-v2',
     auto: 0,
     reloadCover: 0,
     doNotCopyCover: 1,
@@ -183,6 +186,9 @@ export default async function boot() {
 
   await check_config_ver()
 
+  // 迁移脚本只重命名旧扫描表；启动后先落盘备份，再幂等导入新的扫描记录表。
+  await migrateLegacyScanHistory(prisma)
+
   // 删除缓存文件
   const cachePath = path_cache()
   fs.readdirSync(cachePath).forEach((file: any) => {
@@ -223,6 +229,12 @@ async function check_config_ver() {
   const ignoreHiddenFiles = config.scan?.ignoreHiddenFiles
   const defaultTagColor = config.scan?.defaultTagColor
   const compressSync = config.compress?.sync
+
+  if (!['legacy', 'template-v1', 'template-v2'].includes(config.scan?.engine)) {
+    console.log('扫描引擎配置不存在或无效，使用 template-v2')
+    config.scan.engine = defaultConfig.scan.engine
+    set_config(config)
+  }
 
   // 如果配置文件没有ignoreHiddenFiles字段，则添加，默认值为1
   if (ignoreHiddenFiles === undefined) {
@@ -340,24 +352,28 @@ async function check_config_ver() {
       changed = true
     }
 
-    if (config.p2p.enable && config.p2p.role?.node && !config.p2p.role?.tracker && config.sql.deploy === false) {
+    if (
+      config.p2p.enable &&
+      config.p2p.role?.node &&
+      !config.p2p.role?.tracker &&
+      config.sql.deploy === false
+    ) {
       if (!Array.isArray(config.p2p.node.trackers)) {
         config.p2p.node.trackers = []
       }
       const trackers: string[] = config.p2p.node.trackers
       const added: string[] = []
       for (const url of DEFAULT_TRACKER_URLS) {
-        console.log(`[p2p] 检测到本机不是tracker服务器，自动补入缺失的默认tracker地址: ${!trackers.includes(url) && config.sql.deploy === false}`)
+        console.log(
+          `[p2p] 检测到本机不是tracker服务器，自动补入缺失的默认tracker地址: ${!trackers.includes(url) && config.sql.deploy === false}`
+        )
         if (!trackers.includes(url)) {
           trackers.push(url)
           added.push(url)
         }
       }
       if (added.length > 0) {
-        console.log(
-          '检测到本机不是tracker服务器，自动补入缺失的默认tracker地址:',
-          added.join(', ')
-        )
+        console.log('检测到本机不是tracker服务器，自动补入缺失的默认tracker地址:', added.join(', '))
         config.p2p.node.trackers = trackers
         changed = true
       }

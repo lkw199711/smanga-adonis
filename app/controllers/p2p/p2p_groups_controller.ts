@@ -51,9 +51,7 @@ function get_clients(): TrackerClient[] {
  *
  * 适用场景：查询类操作（合并结果由调用方做去重）
  */
-async function invoke_first_success<T>(
-  fn: (client: TrackerClient) => Promise<T>
-): Promise<T> {
+async function invoke_first_success<T>(fn: (client: TrackerClient) => Promise<T>): Promise<T> {
   const clients = get_clients()
   if (!clients.length) throw new Error('P2P 未配置或未启用')
 
@@ -78,9 +76,7 @@ async function invoke_first_success<T>(
  * 适用场景：群组创建/加入/踢人/解散等写操作
  * 目的：确保群组数据尽量存在于多个 tracker,减少单点依赖
  */
-async function broadcast_to_all<T>(
-  fn: (client: TrackerClient) => Promise<T>
-): Promise<T> {
+async function broadcast_to_all<T>(fn: (client: TrackerClient) => Promise<T>): Promise<T> {
   const clients = get_clients()
   if (!clients.length) throw new Error('P2P 未配置或未启用')
 
@@ -114,25 +110,24 @@ async function broadcast_to_all<T>(
  *  1. 在第一个 tracker 创建 → 获取 groupNo
  *  2. 用同一 groupNo 广播到其余 tracker
  */
-async function broadcast_create_group(
-  payload: { groupName: string; describe?: string; password?: string; maxMembers?: number }
-): Promise<any> {
+async function broadcast_create_group(payload: {
+  groupName: string
+  describe?: string
+  password?: string
+  maxMembers?: number
+}): Promise<any> {
   const clients = get_clients()
   if (!clients.length) throw new Error('P2P 未配置或未启用')
 
   // Phase 1: 在主 tracker 创建(不传 groupNo,tracker 自动生成)
-  const firstResult = await call_with_reregister(clients[0], (c) =>
-    c.createGroup(payload)
-  )
+  const firstResult = await call_with_reregister(clients[0], (c) => c.createGroup(payload))
   const groupNo = firstResult.groupNo
 
   // Phase 2: 用同一 groupNo 导入到其余 tracker
   if (clients.length > 1) {
     for (let i = 1; i < clients.length; i++) {
       try {
-        await call_with_reregister(clients[i], (c) =>
-          c.createGroup({ ...payload, groupNo })
-        )
+        await call_with_reregister(clients[i], (c) => c.createGroup({ ...payload, groupNo }))
       } catch (e: any) {
         // 导入失败不阻塞:可能 groupNo 已被其他节点占用(极低概率)
         log_p2p_error('broadcast_create_group.import', e)
@@ -161,8 +156,12 @@ function isNodeAuthError(e: any): boolean {
  */
 async function refresh_client_after_reregister(): Promise<TrackerClient> {
   try {
-    const fresh = await p2pIdentityService.invalidateAndReregister()
-    console.log(`[p2p] 节点已自动重新注册 nodeId=${fresh.nodeId}`)
+    const success = await p2pIdentityService.invalidateAndReregister()
+    if (!success) {
+      throw new Error('节点重新注册失败')
+    }
+    const identity = p2pIdentityService.getIdentity()
+    console.log(`[p2p] 节点已自动重新注册 nodeId=${identity?.nodeId || 'unknown'}`)
     const clients = get_clients()
     if (!clients.length) {
       throw new Error('节点重新注册后仍无法构建 tracker 客户端(检查 p2p 配置)')
@@ -269,9 +268,7 @@ export default class P2PGroupsController {
 
     let res: any
     try {
-      res = await broadcast_to_all((c) =>
-        c.joinGroup({ groupNo, password, inviteCode })
-      )
+      res = await broadcast_to_all((c) => c.joinGroup({ groupNo, password, inviteCode }))
       const cfg = get_config()?.p2p
 
       const remoteGroup = res?.group || res
@@ -367,7 +364,11 @@ export default class P2PGroupsController {
    */
   async whoami({ response }: HttpContext) {
     const id = p2pIdentityService.getIdentity()
-    return response.json({ code: 200, message: '', data: { nodeId: id?.nodeId || '', nodeName: id?.nodeName || '' } })
+    return response.json({
+      code: 200,
+      message: '',
+      data: { nodeId: id?.nodeId || '', nodeName: id?.nodeName || '' },
+    })
   }
 
   /**
@@ -385,7 +386,11 @@ export default class P2PGroupsController {
     const clients = get_clients()
     if (!clients.length) {
       // P2P 未启用:仅返回本地视图
-      return response.json({ code: 200, message: '', data: { local, members: [], remote: null, fromTracker: false } })
+      return response.json({
+        code: 200,
+        message: '',
+        data: { local, members: [], remote: null, fromTracker: false },
+      })
     }
 
     try {
@@ -418,7 +423,11 @@ export default class P2PGroupsController {
         return rest
       })
 
-      return response.json({ code: 200, message: '', data: { local, members: sanitizedMembers, remote, fromTracker: true } })
+      return response.json({
+        code: 200,
+        message: '',
+        data: { local, members: sanitizedMembers, remote, fromTracker: true },
+      })
     } catch (e: any) {
       log_p2p_error('group.detail', e)
       // tracker 不可达:降级为本地视图

@@ -35,15 +35,24 @@ export default class ConfigsController {
   public async set({ request, response }: HttpContext) {
     const user = (request as any).user
     if (user?.role !== 'admin') {
-      return response
-        .status(403)
-        .json({ code: 403, message: '无权限', status: 'no permission' })
+      return response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
     }
     const { key, value } = await setConfigValidator.validate(request.all())
     let config = get_config()
 
     if (key === 'scan.interval') {
       config.scan.interval = value
+    }
+
+    if (key === 'scan.engine') {
+      if (!['legacy', 'template-v1', 'template-v2'].includes(String(value))) {
+        return response.status(422).json({
+          code: 422,
+          message: 'scan.engine 仅支持 legacy、template-v1、template-v2',
+          status: 'validation failed',
+        })
+      }
+      config.scan.engine = String(value)
     }
 
     if (key === 'scan.mediaPosterInterval') {
@@ -111,7 +120,8 @@ export default class ConfigsController {
 
     if (key === 'opds.enabled') {
       // 兼容 0/1 与 true/false
-      config.opds.enabled = value === true || value === 1 || value === '1' || value === 'true' ? 1 : 0
+      config.opds.enabled =
+        value === true || value === 1 || value === '1' || value === 'true' ? 1 : 0
     }
 
     if (key === 'opds.pageSize') {
@@ -182,7 +192,9 @@ export default class ConfigsController {
     if (key === 'p2p.node.publicUrl') {
       // 允许用户填 "host" / "host:port" / "http(s)://host[:port]"
       // 这里仅去首尾空白和尾部斜杠,规范化工作交给服务层的 normalize_public_url
-      const raw = String(value || '').trim().replace(/\/+$/, '')
+      const raw = String(value || '')
+        .trim()
+        .replace(/\/+$/, '')
       config.p2p.node.publicUrl = raw
       needIdentityRefresh = true
     }
@@ -212,9 +224,7 @@ export default class ConfigsController {
           list = trimmed.split(/[\s,]+/).filter(Boolean)
         }
       }
-      list = list
-        .map((u) => String(u || '').trim())
-        .filter((u) => /^https?:\/\//i.test(u))
+      list = list.map((u) => String(u || '').trim()).filter((u) => /^https?:\/\//i.test(u))
       config.p2p.node.trackers = list
       needIdentityRefresh = true
     }
@@ -357,10 +367,14 @@ export default class ConfigsController {
 
     const cfg = get_config()?.p2p
     if (!cfg?.enable) {
-      return response.status(400).json({ code: 400, message: '请先开启 P2P(启用 P2P 开关)', status: 'error' })
+      return response
+        .status(400)
+        .json({ code: 400, message: '请先开启 P2P(启用 P2P 开关)', status: 'error' })
     }
     if (!cfg?.role?.node) {
-      return response.status(400).json({ code: 400, message: '请先开启"作为节点(Node)"角色', status: 'error' })
+      return response
+        .status(400)
+        .json({ code: 400, message: '请先开启"作为节点(Node)"角色', status: 'error' })
     }
 
     try {
@@ -393,10 +407,14 @@ export default class ConfigsController {
 
     const cfg = get_config()?.p2p
     if (!cfg?.enable) {
-      return response.status(400).json({ code: 400, message: '请先开启 P2P(启用 P2P 开关)', status: 'error' })
+      return response
+        .status(400)
+        .json({ code: 400, message: '请先开启 P2P(启用 P2P 开关)', status: 'error' })
     }
     if (!cfg?.role?.tracker) {
-      return response.status(400).json({ code: 400, message: '请先开启"作为 Tracker"角色', status: 'error' })
+      return response
+        .status(400)
+        .json({ code: 400, message: '请先开启"作为 Tracker"角色', status: 'error' })
     }
     if (!cfg?.tracker?.syncKey) {
       return response.status(400).json({ code: 400, message: '请先配置同步密钥', status: 'error' })
@@ -411,7 +429,9 @@ export default class ConfigsController {
         data: result,
       })
     } catch (err: any) {
-      return response.status(500).json({ code: 500, message: err?.message || '同步触发失败', status: 'error' })
+      return response
+        .status(500)
+        .json({ code: 500, message: err?.message || '同步触发失败', status: 'error' })
     }
   }
 

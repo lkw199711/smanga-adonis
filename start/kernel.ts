@@ -63,7 +63,9 @@ router.use([
 const os = get_os()
 const config = get_config()
 
-if (!config.sql?.deploy) {
+if (process.env.NODE_ENV === 'test') {
+  // 单元测试只加载路由和依赖，不启动目录初始化、cron、队列 worker 或 P2P 后台服务。
+} else if (!config.sql?.deploy) {
   // ========== 初始化模式 ==========
   // 只创建目录、检查配置版本，不加载 Prisma
   await init_dirs_only()

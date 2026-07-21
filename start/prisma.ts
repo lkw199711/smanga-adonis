@@ -1,9 +1,10 @@
 import { get_config, get_os } from '../app/utils/index.js'
 import * as path from 'node:path'
+import type { PrismaClient as PrismaClientType } from '@prisma/client'
 // 获取当前运行路径作为根目录
 const rootDir = process.cwd()
 
-let prisma: any = null
+let prisma: PrismaClientType | null = null
 
 try {
   const config = get_config()
@@ -12,7 +13,9 @@ try {
   // deploy=true 时才动态加载 PrismaClient（deploy=false 时 @prisma/client 尚未生成）
   if (sql?.deploy) {
     const clientModule: any = await import('@prisma/client')
-    const PrismaClient = clientModule.PrismaClient || clientModule.default?.PrismaClient || clientModule.default
+    const PrismaClient = (clientModule.PrismaClient ||
+      clientModule.default?.PrismaClient ||
+      clientModule.default) as new (options?: any) => PrismaClientType
 
     const { client, username, password, host, port, database } = sql
 
@@ -42,4 +45,4 @@ try {
   console.error('PrismaClient 初始化失败:', error.message)
 }
 
-export default prisma
+export default prisma as PrismaClientType

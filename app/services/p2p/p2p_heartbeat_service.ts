@@ -7,7 +7,7 @@
  *  - 提供 start/stop 供外部在配置变更后重启
  */
 
-import { get_config, set_config } from '#utils/index'
+import { get_config } from '#utils/index'
 import TrackerClient from './tracker_client.js'
 import p2pIdentityService from './p2p_identity_service.js'
 import { normalize_public_url, is_reportable_public_url } from '#utils/ip_resolver'
@@ -35,9 +35,7 @@ class P2PHeartbeatService {
     // 首次确保身份存在
     const ok = await p2pIdentityService.ensureIdentity()
     if (!ok) {
-      console.warn(
-        '[p2p] 心跳服务启动失败:所有 tracker 注册均失败'
-      )
+      console.warn('[p2p] 心跳服务启动失败:所有 tracker 注册均失败')
       return
     }
 
@@ -45,9 +43,9 @@ class P2PHeartbeatService {
     this.running = true
 
     // 立即发一次再进入循环
-    this.tick().catch(() => { })
+    this.tick().catch(() => {})
     this.timer = setInterval(() => {
-      this.tick().catch(() => { })
+      this.tick().catch(() => {})
     }, intervalSec * 1000)
 
     console.log(`[p2p] 心跳服务已启动,间隔 ${intervalSec}s`)
@@ -89,7 +87,7 @@ class P2PHeartbeatService {
       trackers.length > 0
         ? trackers
         : p2p.role?.tracker
-          ? [p2pIdentityService.pickTrackerUrl(p2p)].filter(Boolean) as string[]
+          ? ([p2pIdentityService.pickTrackerUrl(p2p)].filter(Boolean) as string[])
           : []
 
     if (!list.length) return
@@ -133,9 +131,7 @@ class P2PHeartbeatService {
               const ok = await p2pIdentityService.invalidateAndReregister()
               console.log(`[p2p] 节点重新注册${ok ? '成功' : '失败'}`)
             } catch (reErr: any) {
-              console.warn(
-                `[p2p] 节点自动重新注册失败: ${reErr?.message || reErr}`
-              )
+              console.warn(`[p2p] 节点自动重新注册失败: ${reErr?.message || reErr}`)
             }
             return
           }
@@ -163,57 +159,6 @@ class P2PHeartbeatService {
         }
       }
     }
-  }
-}
-
-/**
- * 将 tracker 心跳回参中的已知 tracker 列表合并到本地配置
- *
- * 实现 BT/PEX 风格的动态 tracker 发现:
- *  - 节点向 tracker A 心跳 → A 返回自己知道的 tracker 列表(B, C, D)
- *  - 节点发现本地配置没有 B → 自动写入 p2p.node.trackers
- *  - 下次心跳循环就开始向 B 也发送心跳
- *
- * 这样只需知道一个 tracker,就能自动加入整个同步密钥组。
- */
-function mergeUnknownTrackers(knownTrackers: string[]): void {
-  try {
-    const config = get_config()
-    const p2p = config?.p2p
-    if (!p2p?.enable) return
-
-    const current: string[] = (p2p.node?.trackers || []).slice()
-    const currentSet = new Set(
-      current.map((u: string) => String(u || '').trim().replace(/\/+$/, '').toLowerCase())
-    )
-
-    let changed = false
-    for (const raw of knownTrackers) {
-      const normalized = String(raw || '').trim().replace(/\/+$/, '')
-      if (!normalized) continue
-
-      // 排除 loopback
-      try {
-        const u = new URL(normalized)
-        if (['localhost', '127.0.0.1', '::1'].includes(u.hostname)) continue
-      } catch { continue }
-
-      const key = normalized.toLowerCase()
-      if (!currentSet.has(key)) {
-        currentSet.add(key)
-        current.push(normalized)
-        changed = true
-        console.log(`[p2p] 动态发现新 tracker: ${normalized}`)
-      }
-    }
-
-    if (changed) {
-      config.p2p.node.trackers = current
-      set_config(config)
-      console.log(`[p2p] tracker 列表已更新,当前共 ${current.length} 个`)
-    }
-  } catch (e) {
-    // 合并失败不影响心跳主流程
   }
 }
 

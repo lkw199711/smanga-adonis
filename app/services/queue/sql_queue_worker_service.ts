@@ -15,6 +15,7 @@ import {
   decodeJson,
 } from './sql_queue_repository.js'
 import { handleP2PQueueJobFailure } from '../p2p/pull/pull_child_tracker.js'
+import { handleScanQueueTerminalFailure } from '../scan/scan_report_service.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -115,7 +116,10 @@ export class SqlQueueWorkerService {
           console.log(`[queue] job ${job.id} completed: ${job.command}`)
         } catch (error) {
           console.error(`[queue] job ${job.id} failed: ${job.command}`, error)
-          await markJobFailedOrRetry(job, error)
+          const outcome = await markJobFailedOrRetry(job, error)
+          if (outcome === 'failed') {
+            await handleScanQueueTerminalFailure(job.command, decodeJson(job.args), error)
+          }
         } finally {
           this.running -= 1
         }
@@ -192,7 +196,11 @@ export class SqlQueueWorkerService {
               ? `killed by signal ${signal}`
               : stderr.trim() || `exit code ${code}`
             await handleP2PQueueJobFailure(args, new Error(reason))
-            await markJobFailedOrRetry(job, new Error(reason))
+            const error = new Error(reason)
+            const outcome = await markJobFailedOrRetry(job, error)
+            if (outcome === 'failed') {
+              await handleScanQueueTerminalFailure(job.command, args, error)
+            }
           }
         } catch (err) {
           console.error(`[queue] failed to update job ${job.id} status`, err)
@@ -206,9 +214,12 @@ export class SqlQueueWorkerService {
         clearInterval(lockRenewTimer)
         try {
           await handleP2PQueueJobFailure(args, err)
-          await markJobFailedOrRetry(job, err)
-        } catch {}
-        finally {
+          const outcome = await markJobFailedOrRetry(job, err)
+          if (outcome === 'failed') {
+            await handleScanQueueTerminalFailure(job.command, args, err)
+          }
+        } catch {
+        } finally {
           resolve()
         }
       })

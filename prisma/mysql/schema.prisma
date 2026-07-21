@@ -272,6 +272,10 @@ model path {
   autoScan     Int       @default(0) @db.UnsignedInt
   include      String?   @db.VarChar(191)
   exclude      String?   @db.VarChar(191)
+  scanTemplateKey       String?   @db.VarChar(64)
+  scanTemplateConfig    String?   @db.Text
+  metadataProfileKey    String?   @db.VarChar(64)
+  metadataProfileConfig String?   @db.Text
   lastScanTime DateTime? @db.DateTime(0)
   deleteFlag   Int       @default(0)
   createTime   DateTime  @default(now()) @db.DateTime(6)
@@ -296,6 +300,9 @@ model scanRun {
   error          String?   @db.Text
   startedAt      DateTime? @db.DateTime(6)
   finishedAt     DateTime? @db.DateTime(6)
+  expectedTasks  Int       @default(0)
+  completedTasks Int       @default(0)
+  failedTasks    Int       @default(0)
   createTime     DateTime  @default(now()) @db.DateTime(6)
   updateTime     DateTime  @default(now()) @updatedAt @db.DateTime(6)
 

@@ -3,6 +3,8 @@ import { getQueueConfig, resolveTaskQueue } from './queue/queue_config.js'
 import {
   cleanJobs,
   enqueueJob,
+  enqueueNamedJobIfIdle,
+  enqueuePathJobIfIdle,
   getJob,
   listJobs,
   pathJobExists,
@@ -55,11 +57,33 @@ async function addTask({ taskName, command, args, priority, timeout }: AddTaskTy
     }
   }
 
-  if (command === 'taskScanPath') {
-    if (await path_scanning(args.pathId)) {
+  if (command === 'taskScanPath' || command === 'taskRescanPath') {
+    const queueConfig = getQueueConfig()
+    const taskQueue = resolveTaskQueue(taskName, command)
+    const job = await enqueuePathJobIfIdle(args.pathId, {
+      taskQueue,
+      taskName,
+      command,
+      args,
+      priority,
+      timeout: timeout ?? queueConfig.timeout,
+    })
+    if (!job) {
       console.log(`路径${args.pathId} 正在被扫描,跳过执行`)
       return false
     }
+    return job
+  } else if (command === 'taskScanManga' || command === 'finalizeScanRun') {
+    const queueConfig = getQueueConfig()
+    const taskQueue = resolveTaskQueue(taskName, command)
+    return enqueueNamedJobIfIdle({
+      taskQueue,
+      taskName,
+      command,
+      args,
+      priority,
+      timeout: timeout ?? queueConfig.timeout,
+    })
   } else if (command === 'deletePath') {
     if (await path_deleting(args.pathId)) {
       console.log(`路径${args.pathId} 正在被删除,跳过执行`)

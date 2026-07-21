@@ -6,6 +6,10 @@ import prisma from '#start/prisma'
 import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import {
+  backupLegacyScanTables,
+  importLegacyScanHistory,
+} from '#services/migration/legacy_scan_backup_service'
 const rootDir = process.cwd()
 /**
  * 服务端部署初始化程序
@@ -43,6 +47,7 @@ export default class DeploysController {
 
     // 停止守护进程定时器
     stopTimer()
+    const legacyBackup = await backupLegacyScanTables(prisma)
     await prisma?.$disconnect()
     if (client === 'sqlite') {
       const schemaPath = path.join(rootDir, 'prisma', 'sqlite', 'schema.prisma')
@@ -60,6 +65,7 @@ export default class DeploysController {
     }
 
     await prisma?.$connect()
+    await importLegacyScanHistory(prisma, legacyBackup)
 
     return response.json({ code: 200, message: '连接成功', data: true })
   }
@@ -198,9 +204,10 @@ export default class DeploysController {
 
     if (client === 'sqlite') {
       const os = get_os()
-      dbUrl = (os === 'Windows' || os === 'MacOS')
-        ? `file:${path.join(rootDir, 'data', 'db', 'smanga.db')}`
-        : 'file:/data/db/smanga.db'
+      dbUrl =
+        os === 'Windows' || os === 'MacOS'
+          ? `file:${path.join(rootDir, 'data', 'db', 'smanga.db')}`
+          : 'file:/data/db/smanga.db'
       varName = 'DB_URL_SQLITE'
       schemaPath = path.join(rootDir, 'prisma', 'sqlite', 'schema.prisma')
     } else if (client === 'mysql') {
@@ -225,7 +232,9 @@ export default class DeploysController {
     // 4. 清理旧 Prisma 缓存，避免 Windows DLL 锁定
     const prismaCacheDir = path.join(rootDir, 'node_modules', '.prisma', 'client')
     if (fs.existsSync(prismaCacheDir)) {
-      try { fs.rmSync(prismaCacheDir, { recursive: true, force: true }) } catch {}
+      try {
+        fs.rmSync(prismaCacheDir, { recursive: true, force: true })
+      } catch {}
     }
 
     // 5. 执行 Prisma 命令
@@ -288,9 +297,10 @@ export default class DeploysController {
 
     if (client === 'sqlite') {
       const os = get_os()
-      dbUrl = (os === 'Windows' || os === 'MacOS')
-        ? `file:${path.join(rootDir, 'data', 'db', 'smanga.db')}`
-        : 'file:/data/db/smanga.db'
+      dbUrl =
+        os === 'Windows' || os === 'MacOS'
+          ? `file:${path.join(rootDir, 'data', 'db', 'smanga.db')}`
+          : 'file:/data/db/smanga.db'
     } else if (client === 'mysql') {
       dbUrl = `mysql://${username}:${password}@${host}:${port}/${database}`
     } else {
@@ -304,8 +314,7 @@ export default class DeploysController {
         datasources: { db: { url: dbUrl } },
       })
 
-      const md5 = (str: string) =>
-        crypto.createHash('md5').update(str).digest('hex')
+      const md5 = (str: string) => crypto.createHash('md5').update(str).digest('hex')
 
       await initPrisma.user.create({
         data: {
