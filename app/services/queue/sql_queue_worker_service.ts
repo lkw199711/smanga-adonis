@@ -24,6 +24,55 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function formatChildStderr(stderr: string) {
+  const output = stderr.trim()
+  const maxLength = 64 * 1024
+  if (output.length <= maxLength) return output
+
+  const halfLength = Math.floor(maxLength / 2)
+  return `${output.slice(0, halfLength)}\n... child stderr truncated ...\n${output.slice(-halfLength)}`
+}
+
+function buildChildFailureReason({
+  job,
+  pid,
+  code,
+  signal,
+  stderr,
+}: {
+  job: any
+  pid?: number
+  code: number | null
+  signal: NodeJS.Signals | null
+  stderr: string
+}) {
+  const details = [
+    'queue child process failed',
+    `jobId=${job.id}`,
+    `command=${job.command}`,
+    `pid=${pid ?? 'unknown'}`,
+    `exitCode=${code ?? 'null'}`,
+    `signal=${signal ?? 'none'}`,
+  ]
+  const output = formatChildStderr(stderr)
+  if (output) details.push(`stderr:\n${output}`)
+  return details.join('\n')
+}
+
+/**
+ * Queue children must retain the TypeScript loader in development, but must not
+ * inherit hot-hook. The hook starts fsevents watchers in every short-lived
+ * child; on macOS their native teardown can abort the Node process.
+ */
+function getQueueChildExecArgv(execArgv = process.execArgv) {
+  return execArgv.filter((arg, index) => {
+    const nextArg = execArgv[index + 1]
+    if (arg.includes('hot-hook/register')) return false
+    if (arg === '--import' && nextArg?.includes('hot-hook/register')) return false
+    return true
+  })
+}
+
 export class SqlQueueWorkerService {
   private stopping = false
   private running = 0
@@ -139,8 +188,10 @@ export class SqlQueueWorkerService {
       const args = decodeJson(job.args)
       const config = getQueueConfig()
       const queueChildWorkerPath = path.resolve(__dirname, '../../../bin/queue_child_worker.js')
+      const childExecArgv = getQueueChildExecArgv()
 
       const child = fork(queueChildWorkerPath, [], {
+        execArgv: childExecArgv,
         env: {
           ...process.env,
           QUEUE_JOB_COMMAND: job.command,
@@ -192,9 +243,14 @@ export class SqlQueueWorkerService {
           if (code === 0) {
             await markJobCompleted(job.id)
           } else {
-            const reason = signal
-              ? `killed by signal ${signal}`
-              : stderr.trim() || `exit code ${code}`
+            const reason = buildChildFailureReason({
+              job,
+              pid: child.pid,
+              code,
+              signal,
+              stderr,
+            })
+            console.error(`[queue] ${reason}`)
             await handleP2PQueueJobFailure(args, new Error(reason))
             const error = new Error(reason)
             const outcome = await markJobFailedOrRetry(job, error)
@@ -213,10 +269,19 @@ export class SqlQueueWorkerService {
         clearTimeout(timeoutId)
         clearInterval(lockRenewTimer)
         try {
-          await handleP2PQueueJobFailure(args, err)
-          const outcome = await markJobFailedOrRetry(job, err)
+          const reason = buildChildFailureReason({
+            job,
+            pid: child.pid,
+            code: null,
+            signal: null,
+            stderr,
+          })
+          const error = new Error(`${reason}\nspawn error: ${err.message}`)
+          console.error(`[queue] ${error.message}`)
+          await handleP2PQueueJobFailure(args, error)
+          const outcome = await markJobFailedOrRetry(job, error)
           if (outcome === 'failed') {
-            await handleScanQueueTerminalFailure(job.command, args, err)
+            await handleScanQueueTerminalFailure(job.command, args, error)
           }
         } catch {
         } finally {
