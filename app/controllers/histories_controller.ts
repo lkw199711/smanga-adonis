@@ -55,7 +55,8 @@ export default class HistoriesController {
           MAX("chapter"."chapterName") AS "chapterName",
           MAX("manga"."mangaName") AS "mangaName",
           MAX("manga"."mangaCover") AS "chapterCover",
-          MAX("manga"."browseType") AS "browseType"
+          MAX("manga"."browseType") AS "browseType",
+          MAX("history"."createTime") AS "createTime"
       FROM 
           "history"
       JOIN 
@@ -94,7 +95,8 @@ export default class HistoriesController {
           MAX(chapter.chapterName) AS chapterName,
           MAX(manga.mangaName) AS mangaName,
           MAX(manga.mangaCover) AS chapterCover,
-          MAX(manga.browseType) AS browseType
+          MAX(manga.browseType) AS browseType,
+          MAX(history.createTime) AS createTime
       FROM 
           history
       JOIN 
