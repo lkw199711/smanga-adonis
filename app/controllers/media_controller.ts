@@ -48,11 +48,25 @@ export default class MediaController {
     }
 
     const [list, count] = await Promise.all([
-      prisma.media.findMany({ ...queryParams, orderBy: { mediaId: 'desc' } }),
+      prisma.media.findMany({
+        ...queryParams,
+        orderBy: { mediaId: 'desc' },
+        include: {
+          _count: {
+            select: { mangas: true },
+          },
+        },
+      }),
       prisma.media.count({ where }),
     ])
 
-    return response.json({ code: 200, message: '', list, count })
+    // 将 Prisma 的 _count 映射为 mangaCount 字段
+    const mappedList = list.map((m) => ({
+      ...m,
+      mangaCount: m._count?.mangas ?? 0,
+    }))
+
+    return response.json({ code: 200, message: '', list: mappedList, count })
   }
 
   public async show({ request, params, response }: HttpContext) {
