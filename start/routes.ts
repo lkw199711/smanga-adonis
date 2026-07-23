@@ -247,8 +247,11 @@ router.delete('/chapter/:chapterId/compress', [chaptersController, 'compress_del
 
 // 用户
 router.get('/user', [UsersController, 'index'])
+router.get('/user/me', [UsersController, 'me'])
+router.get('/user/avatar/:userId', [UsersController, 'avatar'])
 router.get('/user/:userId', [UsersController, 'show'])
 router.post('/user', [UsersController, 'create'])
+router.post('/user/avatar', [UsersController, 'uploadAvatar'])
 router.put('/user/:userId', [UsersController, 'update'])
 router.delete('/user/:userId', [UsersController, 'destroy'])
 

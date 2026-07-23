@@ -51,7 +51,9 @@ export default class AuthMiddleware {
     const url = normalizeApiPath(rawUrl)
 
     const isSkipped = skipRoutes.some((prefix) => url === prefix || url.startsWith(prefix + '/'))
-    if (isSkipped) {
+    // 头像图片允许公开访问 (GET only, img 标签不携带 token)
+    const isAvatarGet = url.startsWith('/user/avatar/') && request.method() === 'GET'
+    if (isSkipped || isAvatarGet) {
       // 部署/测试/登录/资源/分析/对外接口/对等节点接口 跳过用户 token 校验
       await next()
       return

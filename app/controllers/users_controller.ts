@@ -1,7 +1,9 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import md5 from '../utils/md5.js'
-import { sql_parse_json } from '#utils/index'
+import { sql_parse_json, is_img, path_avatars } from '#utils/index'
+import path from 'path'
+import fs from 'fs'
 import {
   listUserValidator,
   idParamUserValidator,
@@ -176,5 +178,127 @@ export default class UsersController {
 
     const config = sql_parse_json(user?.userConfig || {})
     return response.json({ code: 200, message: '', data: config })
+  }
+
+  /**
+   * 获取当前登录用户信息
+   * GET /api/user/me
+   */
+  public async me({ request, response }: HttpContext) {
+    const userId = (request as any).userId
+    if (!userId) {
+      return response.status(401).json({ code: 401, message: '未登录' })
+    }
+
+    const user = await prisma.user.findUnique({ where: { userId } })
+    if (!user) {
+      return response.status(404).json({ code: 404, message: '用户不存在' })
+    }
+
+    return response.json({
+      code: 200,
+      message: '',
+      data: {
+        userId: user.userId,
+        userName: user.userName,
+        header: user.header,
+        avatarPath: user.header ? path.join(path_avatars(), path.basename(user.header)) : '',
+        role: user.role,
+        mediaPermit: user.mediaPermit,
+      },
+    })
+  }
+
+  /**
+   * 上传用户头像
+   * POST /api/user/avatar
+   */
+  public async uploadAvatar({ request, response }: HttpContext) {
+    const userId = (request as any).userId
+    if (!userId) {
+      return response.status(401).json({ code: 401, message: '未登录' })
+    }
+
+    const imageFile = request.file('avatar')
+    if (!imageFile) {
+      return response.status(400).json({ code: 400, message: '未找到上传的头像文件' })
+    }
+
+    // 验证文件类型
+    if (!is_img(imageFile.clientName)) {
+      return response.status(400).json({ code: 400, message: '不支持的图片格式' })
+    }
+
+    // 获取保存目录，不存在则创建
+    const avatarsDir = path_avatars()
+    if (!fs.existsSync(avatarsDir)) {
+      fs.mkdirSync(avatarsDir, { recursive: true })
+    }
+
+    // 生成文件名：user_{userId}.{ext}
+    const ext = path.extname(imageFile.clientName) || '.png'
+    const fileName = `user_${userId}${ext}`
+
+    // 删除旧头像（如果有其他扩展名）
+    const oldFiles = fs.readdirSync(avatarsDir).filter(f => f.startsWith(`user_${userId}.`))
+    for (const oldFile of oldFiles) {
+      try {
+        fs.unlinkSync(path.join(avatarsDir, oldFile))
+      } catch {}
+    }
+
+    // 保存文件
+    await imageFile.move(avatarsDir, {
+      name: fileName,
+      overwrite: true,
+    })
+
+    // 更新数据库 header 字段（相对路径）
+    const headerPath = `avatars/${fileName}`
+    await prisma.user.update({
+      where: { userId },
+      data: { header: headerPath },
+    })
+
+    return response.json({
+      code: 200,
+      message: '头像上传成功',
+      data: { header: headerPath, avatarPath: path.join(avatarsDir, fileName) },
+    })
+  }
+
+  /**
+   * 获取用户头像
+   * GET /api/user/avatar/:userId
+   */
+  public async avatar({ params, response }: HttpContext) {
+    const { userId } = await idParamUserValidator.validate(params)
+    const user = await prisma.user.findUnique({ where: { userId } })
+
+    if (!user?.header) {
+      return response.status(404).json({ code: 404, message: '未设置头像' })
+    }
+
+    const avatarsDir = path_avatars()
+    const filePath = path.join(avatarsDir, path.basename(user.header))
+
+    if (!fs.existsSync(filePath)) {
+      return response.status(404).json({ code: 404, message: '头像文件不存在' })
+    }
+
+    const ext = path.extname(filePath).toLowerCase()
+    const mimeTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
+      '.bmp': 'image/bmp',
+    }
+    const contentType = mimeTypes[ext] || 'image/png'
+
+    response.header('Content-Type', contentType)
+    response.header('Cache-Control', 'public, max-age=86400')
+    response.stream(fs.createReadStream(filePath))
   }
 }

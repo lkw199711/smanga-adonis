@@ -125,6 +125,16 @@ export function path_compress() {
   }
 }
 
+export function path_avatars() {
+  if (platform === 'win32' || platform === 'darwin') {
+    return path.join(rootDir, 'data', 'avatars')
+  } else if (platform === 'linux') {
+    return '/data/avatars'
+  } else {
+    return '/data/avatars'
+  }
+}
+
 export function path_config() {
   if (platform === 'win32' || platform === 'darwin') {
     return path.join(rootDir, 'data', 'config')

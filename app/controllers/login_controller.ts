@@ -1,7 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import md5 from '../utils/md5.js'
-import { get_config } from '#utils/index'
+import { get_config, path_avatars } from '#utils/index'
+import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import {
   idParamLoginValidator,
@@ -87,10 +88,11 @@ export default class LoginController {
         userAgent: request.header('user-agent'),
       },
     })
+    const avatarPath = user.header ? path.join(path_avatars(), path.basename(user.header)) : ''
     return response.json({
       code: 200,
       message: '登录成功',
-      data: { ...login, serverKey: get_config()?.serverKey, userRole: user.role },
+      data: { ...login, serverKey: get_config()?.serverKey, userRole: user.role, header: user.header, avatarPath },
     })
   }
 
