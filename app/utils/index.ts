@@ -175,46 +175,24 @@ export function set_config(config: object) {
 export function order_params(order: string = 'asc', model: string = 'chapter'): object {
   const sort = /desc/i.test(order) ? 'desc' : 'asc'
 
+  let field: string | null = null
+
   if (/id/.test(order)) {
-    const nameField = model === 'chapter' ? 'chapterId' : 'mangaId'
-    return {
-      [nameField]: sort,
-    }
+    field = model === 'chapter' ? 'chapterId' : 'mangaId'
+  } else if (/number/i.test(order)) {
+    field = model === 'chapter' ? 'chapterNumber' : 'mangaNumber'
+  } else if (/name/i.test(order)) {
+    field = model === 'chapter' ? 'chapterName' : 'mangaName'
+  } else if (/createTime/i.test(order)) {
+    field = 'createTime'
+  } else if (/updateTime/i.test(order)) {
+    field = 'updateTime'
+  } else if (/chapterUpdate/i.test(order)) {
+    field = model === 'manga' ? 'chapterUpdate' : 'updateTime'
   }
 
-  if (/number/i.test(order)) {
-    const nameField = model === 'chapter' ? 'chapterNumber' : 'mangaNumber'
-    return {
-      [nameField]: sort,
-    }
-  }
-
-  if (/name/i.test(order)) {
-    const nameField = model === 'chapter' ? 'chapterName' : 'mangaName'
-    return {
-      [nameField]: sort,
-    }
-  }
-
-  if (/createTime/i.test(order)) {
-    return {
-      createTime: sort,
-    }
-  }
-
-  if (/updateTime/i.test(order)) {
-    return {
-      updateTime: sort,
-    }
-  }
-
-  if (/chapterUpdate/i.test(order)) {
-    return {
-      chapterUpdate: sort,
-    }
-  }
-
-  return {}
+  if (!field) return {}
+  return { [field]: sort }
 }
 
 /**
