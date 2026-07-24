@@ -123,7 +123,10 @@ export default class AuthMiddleware {
     // const permissonRoutes = ['/user', '/media', '/collect', '/compress', '/history', '/latest', '/log', '/task', '/path', '/bookmark', '/tag', '/manga', '/chapter', '/image', '/manga-tag', '/chart', '/search', '/config']
 
     // 用户信息模块
-    if (url.startsWith('/user') && url !== '/user-config') {
+    // 允许非管理员访问自身信息接口
+    const isSelfService = (url === '/user/me' && request.method() === 'GET')
+      || (url === '/user/avatar' && request.method() === 'POST')
+    if (url.startsWith('/user') && url !== '/user-config' && !isSelfService) {
       if (user.role !== 'admin') {
         return response
           .status(401)
