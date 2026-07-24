@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import _ from 'lodash'
+import { order_params } from '#utils/index'
 import {
   listTagValidator,
   idParamTagValidator,
@@ -54,6 +55,11 @@ export default class TagsController {
       return response.json({ code: 200, message: '', list: [], count: 0 })
     }
 
+    // 构建 WHERE 条件: 管理员看全部; 普通用户受限 media 权限
+    const mediaWhere = isAdmin
+      ? Prisma.sql`TRUE`
+      : Prisma.sql`manga.mediaId IN (${Prisma.join(mediaIds)})`
+
     const tagList: any[] = await prisma.$queryRaw`SELECT 
           tag.tagId,
           MAX(tag.tagName) AS tagName,
@@ -73,7 +79,7 @@ export default class TagsController {
       LEFT JOIN 
           history ON manga.mangaId = history.mangaId
       WHERE 
-          ${isAdmin} OR manga.mediaId IN (${Prisma.join(mediaIds)})
+          ${mediaWhere}
       GROUP BY 
           tag.tagId
       ORDER BY 
@@ -169,6 +175,7 @@ export default class TagsController {
     const query = await tagsMangaQueryValidator.validate(request.qs())
     const page = query.page ?? 1
     const pageSize = query.pageSize ?? 10
+    const order = query.order
 
     // tagIds 支持 CSV 字符串或数组,统一走 shared 工具转正整数数组
     const tagIds = csvToPositiveIds(query.tagIds)
@@ -190,6 +197,12 @@ export default class TagsController {
         select: { mediaId: true },
       })) || []
 
+    // 构建 manga 排序: 查询 mangaTag 时通过嵌套的 manga 字段排序
+    const mangaOrder = order_params(order || '', 'manga')
+    const orderBy = Object.keys(mangaOrder).length > 0
+      ? { manga: mangaOrder }
+      : { manga: { updateTime: 'desc' } }
+
     const mangaTags = await prisma.mangaTag.findMany({
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -200,6 +213,7 @@ export default class TagsController {
           ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
         },
       },
+      orderBy,
       include: {
         manga: true,
       },
