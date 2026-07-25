@@ -29,9 +29,32 @@ export default class HistoriesController {
       : []
     const latestMap = new Map(latests.map((l: any) => [l.chapterId, l]))
 
+    // 将 $queryRaw 返回的时间字段(BigInt/Date/字符串等)统一转成 ISO 字符串
+    // 保持与 Prisma ORM 序列化 (prisma.latest.findMany) 的输出格式一致
+    const toIso = (v: any): string | null => {
+      if (v === null || v === undefined || v === '') return null
+      if (v instanceof Date) return isNaN(v.getTime()) ? null : v.toISOString()
+      if (typeof v === 'bigint') {
+        const d = new Date(Number(v))
+        return isNaN(d.getTime()) ? null : d.toISOString()
+      }
+      if (typeof v === 'number') {
+        const d = new Date(v)
+        return isNaN(d.getTime()) ? null : d.toISOString()
+      }
+      if (typeof v === 'string') {
+        const n = /^\d+$/.test(v) ? Number(v) : Date.parse(v)
+        const d = new Date(n)
+        return isNaN(d.getTime()) ? null : d.toISOString()
+      }
+      return null
+    }
+
     list.forEach((chapter: any) => {
       const chapterId = Number(chapter.chapterId)
       chapter.latest = chapterId ? latestMap.get(chapterId) || null : null
+      if ('createTime' in chapter) chapter.createTime = toIso(chapter.createTime)
+      if ('updateTime' in chapter) chapter.updateTime = toIso(chapter.updateTime)
     })
 
     return response.json({ code: 200, message: '', list, count: Number((distinct as any)[0].count) })
