@@ -50,9 +50,10 @@ export default class FilesController {
   }
 
   public async apk({ response }: HttpContext) {
-    let apkPath = '/data/file/smanga-1.2.apk'
+    const apkName = 'smanga.1.0.1.apk'
+    let apkPath = `/data/file/${apkName}`
     if (get_os() === 'Windows') {
-      apkPath = './data/file/smanga-1.2.apk'
+      apkPath = `./data/file/${apkName}`
     }
 
     // 检查文件是否存在
