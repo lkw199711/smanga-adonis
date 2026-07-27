@@ -2,7 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { Prisma } from '@prisma/client'
 import _ from 'lodash'
-import { order_params } from '#utils/index'
+import { get_config, order_params } from '#utils/index'
 import {
   listTagValidator,
   idParamTagValidator,
@@ -55,12 +55,48 @@ export default class TagsController {
       return response.json({ code: 200, message: '', list: [], count: 0 })
     }
 
-    // 构建 WHERE 条件: 管理员看全部; 普通用户受限 media 权限
-    const mediaWhere = isAdmin
-      ? Prisma.sql`TRUE`
-      : Prisma.sql`manga.mediaId IN (${Prisma.join(mediaIds)})`
+    // PostgreSQL 会将未引用的 camelCase 标识符折叠为小写，需要单独引用表名和列名。
+    const databaseClient = get_config().sql?.client
+    const isPostgreSql = databaseClient === 'postgresql' || databaseClient === 'pgsql'
 
-    const tagList: any[] = await prisma.$queryRaw`SELECT 
+    let tagList: any[]
+    if (isPostgreSql) {
+      const mediaWhere = isAdmin
+        ? Prisma.sql`TRUE`
+        : Prisma.sql`manga."mediaId" IN (${Prisma.join(mediaIds)})`
+
+      tagList = await prisma.$queryRaw`SELECT
+          tag."tagId" AS "tagId",
+          MAX(tag."tagName") AS "tagName",
+          MAX(tag."tagColor") AS "tagColor",
+          MAX(tag.description) AS description,
+          MAX(tag."updateTime") AS "updateTime",
+          MAX(tag."createTime") AS "createTime",
+          MAX(manga."mangaId") AS "mangaId",
+          MAX(manga."mediaId") AS "mediaId",
+          COUNT(history."historyId")::INTEGER AS "readCount"
+      FROM
+          tag
+      LEFT JOIN
+          "mangaTag" ON tag."tagId" = "mangaTag"."tagId"
+      LEFT JOIN
+          manga ON "mangaTag"."mangaId" = manga."mangaId"
+      LEFT JOIN
+          history ON manga."mangaId" = history."mangaId"
+      WHERE
+          ${mediaWhere}
+      GROUP BY
+          tag."tagId"
+      ORDER BY
+          COUNT(history."historyId") DESC
+      `
+    } else {
+      // MySQL/SQLite 沿用各自支持的未引用标识符语法。
+      const mediaWhere = isAdmin
+        ? Prisma.sql`TRUE`
+        : Prisma.sql`manga.mediaId IN (${Prisma.join(mediaIds)})`
+
+      tagList = await prisma.$queryRaw`SELECT
           tag.tagId,
           MAX(tag.tagName) AS tagName,
           MAX(tag.tagColor) AS tagColor,
@@ -72,9 +108,9 @@ export default class TagsController {
           COUNT(history.historyId) AS "readCount"
       FROM 
           tag
-      JOIN 
+      LEFT JOIN
           mangaTag ON tag.tagId = mangaTag.tagId
-      JOIN 
+      LEFT JOIN
           manga ON mangaTag.mangaId = manga.mangaId
       LEFT JOIN 
           history ON manga.mangaId = history.mangaId
@@ -85,6 +121,7 @@ export default class TagsController {
       ORDER BY 
           COUNT(history.historyId) DESC
       `
+    }
 
     return response.json({ code: 200, message: '', list: tagList, count: tagList.length })
   }
@@ -112,6 +149,13 @@ export default class TagsController {
   }
 
   public async create({ request, response }: HttpContext) {
+    const user = (request as any).user
+    if (!user || user.role !== 'admin') {
+      return response
+        .status(403)
+        .json({ code: 403, message: '仅管理员可以新增标签', status: 'no permission' })
+    }
+
     const { userId } = request as any
     const insertData = await createTagValidator.validate(request.all())
     const tag = await prisma.tag.create({
