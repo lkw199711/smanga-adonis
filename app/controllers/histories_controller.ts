@@ -74,6 +74,7 @@ export default class HistoriesController {
       prisma.$queryRaw`SELECT 
           "history"."mangaId",
           MAX("history"."chapterId") AS "chapterId",
+          MAX("history"."mediaId") AS "mediaId",
           MAX("history"."userId") AS "userId",
           MAX("chapter"."chapterName") AS "chapterName",
           MAX("manga"."mangaName") AS "mangaName",
@@ -114,6 +115,7 @@ export default class HistoriesController {
       prisma.$queryRaw`SELECT 
           history.mangaId,
           MAX(history.chapterId) AS chapterId,
+          MAX(history.mediaId) AS mediaId,
           MAX(history.userId) AS userId,
           MAX(chapter.chapterName) AS chapterName,
           MAX(manga.mangaName) AS mangaName,
