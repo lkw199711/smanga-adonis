@@ -151,6 +151,7 @@ router.get('/chapter-is-read/:chapterId', [HistoriesController, 'chapter_is_read
 
 // 最后阅读记录 latest
 router.get('/latest', [LatestsController, 'index'])
+router.get('/latest/progress', [LatestsController, 'progress'])
 router.get('/latest/:mangaId', [LatestsController, 'show'])
 router.post('/latest', [LatestsController, 'create'])
 router.put('/latest/:chapterId', [LatestsController, 'update'])
