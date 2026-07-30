@@ -50,19 +50,26 @@ export default class FilesController {
   }
 
   public async apk({ response }: HttpContext) {
-    const apkName = 'smanga.1.0.1.apk'
-    let apkPath = `/data/file/${apkName}`
+    let fileDir = '/data/file'
     if (get_os() === 'Windows') {
-      apkPath = `./data/file/${apkName}`
+      fileDir = './data/file'
     }
 
-    // 检查文件是否存在
-    if (!fs.existsSync(apkPath)) {
+    // 扫描目录取最新的 apk，避免硬编码文件名导致版本更新后 404
+    const apkFiles = fs.existsSync(fileDir)
+      ? fs.readdirSync(fileDir).filter((name) => name.toLowerCase().endsWith('.apk'))
+      : []
+    if (apkFiles.length === 0) {
       return response.status(400).json({
         message: '文件不存在',
         error: 'file error.',
       })
     }
+
+    const latestApk = apkFiles
+      .map((name) => ({ name, mtime: fs.statSync(path.join(fileDir, name)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime)[0].name
+    const apkPath = path.join(fileDir, latestApk)
 
     response.attachment(apkPath)
     return response.send(fs.readFileSync(apkPath))
