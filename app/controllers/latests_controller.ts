@@ -180,26 +180,29 @@ export default class LatestsController {
         },
       })
 
-      // 全部章节均已阅读时，直接跳过该漫画，不进入继续阅读列表。
-      const readChapters = await prisma.history.findMany({
-        where: { userId, mangaId },
-        distinct: ['chapterId'],
+      // 已读完的章节集合（latest.finish 标记），用于跳过已读完的章节。
+      const finishedLatests = await prisma.latest.findMany({
+        where: { userId, mangaId, finish: { gt: 0 } },
         select: { chapterId: true },
       })
-      const readChapterIdSet = new Set(readChapters.map((item) => item.chapterId))
-      if (
-        chapters.length > 0 &&
-        chapters.every((chapter) => readChapterIdSet.has(chapter.chapterId))
-      ) {
-        return null
-      }
+      const finishedChapterIdSet = new Set(finishedLatests.map((item) => item.chapterId))
 
       const currentIndex = chapters.findIndex(
         (chapter) => chapter.chapterId === latest.chapterId
       )
-      const nextChapter = currentIndex === -1 ? null : chapters[currentIndex + 1]
 
-      // 与漫画详情页一致：最后一章已读完时，不再属于继续阅读。
+      // 从当前章节向后寻找第一个未读完的章节。
+      let nextChapter = null
+      if (currentIndex !== -1) {
+        for (let i = currentIndex + 1; i < chapters.length; i++) {
+          if (!finishedChapterIdSet.has(chapters[i].chapterId)) {
+            nextChapter = chapters[i]
+            break
+          }
+        }
+      }
+
+      // 与漫画详情页一致：后续章节全部已读完时，不再属于继续阅读。
       if (!nextChapter) return null
 
       targetChapter = nextChapter
@@ -310,7 +313,19 @@ export default class LatestsController {
       (chapter) => chapter.chapterId === latest?.chapterId
     )
     if (latestChapterIndex !== -1 && latestChapterIndex < chapters.length - 1) {
-      latest.nextChapter = chapters[latestChapterIndex + 1]
+      // 跳过已读完的章节（latest.finish 标记），取第一个未读完的章节；
+      // 若后续章节全部已读完，则不返回 nextChapter。
+      const finishedLatests = await prisma.latest.findMany({
+        where: { userId, mangaId, finish: { gt: 0 } },
+        select: { chapterId: true },
+      })
+      const finishedChapterIdSet = new Set(finishedLatests.map((item) => item.chapterId))
+      for (let i = latestChapterIndex + 1; i < chapters.length; i++) {
+        if (!finishedChapterIdSet.has(chapters[i].chapterId)) {
+          latest.nextChapter = chapters[i]
+          break
+        }
+      }
     }
 
     return response.json({ code: 200, message: '', data: latest })
