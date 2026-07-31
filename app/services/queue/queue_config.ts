@@ -47,14 +47,14 @@ const defaultQueueConfig: QueueConfig = {
   workers: {
     background: {
       enabled: true,
-      // 设计约定:不启用独立 p2p 进程,p2p 任务由 background worker 统一消费,
-      // 因此 background.queues 必须包含 'p2p'(见 docker init-config 生成的默认配置)
-      queues: ['scan', 'sync', 'p2p', 'default'],
+      // p2p 队列的归属是动态的(见 getEffectiveWorkerQueues):
+      // 独立 p2p worker 关闭时由 background 兜底消费,启用时让给 p2p worker。
+      // 故此静态列表不写 'p2p',避免与独立 p2p worker 形成双消费者抢任务。
+      queues: ['scan', 'sync', 'default'],
       concurrency: 1,
     },
     p2p: {
-      // 独立 p2p worker 默认关闭:svc-queue-p2p 未纳入 s6 user bundle,
-      // 启用也不会有进程消费;p2p 一律走 background 队列
+      // 独立 p2p worker 默认关闭;关闭时 p2p 队列由 background 动态接管(见 getEffectiveWorkerQueues)
       enabled: false,
       queues: ['p2p'],
       concurrency: 3,
@@ -133,6 +133,38 @@ export function getQueueName() {
 
 export function getWorkerConfig(workerGroup: QueueWorkerGroup) {
   return getQueueConfig().workers[workerGroup]
+}
+
+/**
+ * 计算某个 worker 实际消费的队列列表(动态归属 p2p 队列)。
+ *
+ * 设计约定:p2p 队列必须且只能有一个消费者,否则多个 worker 会竞争认领同一批任务,
+ * 破坏独立 p2p worker 的并发隔离。归属规则:
+ *  - 独立 p2p worker 启用(workers.p2p.enabled=true)时,p2p 由它消费,background 让出;
+ *  - 独立 p2p worker 关闭(默认)时,p2p 回落给 background 兜底消费,避免无人消费导致任务永久卡住。
+ *
+ * 这样无论静态配置的 background.queues 是否写了 'p2p',运行时都能保证 p2p 恰好一个消费者。
+ */
+export function getEffectiveWorkerQueues(workerGroup: QueueWorkerGroup): string[] {
+  const cfg = getQueueConfig()
+  const queues = [...(cfg.workers[workerGroup]?.queues || [])]
+  const p2pWorkerEnabled = cfg.workers.p2p?.enabled === true
+
+  if (workerGroup === 'background') {
+    if (p2pWorkerEnabled) {
+      // 独立 p2p worker 接管 p2p,background 不再消费以免抢任务
+      return queues.filter((q) => q !== 'p2p')
+    }
+    // 独立 p2p worker 未启用,background 兜底消费 p2p(插在 default 之前)
+    if (!queues.includes('p2p')) {
+      const idx = queues.indexOf('default')
+      if (idx >= 0) queues.splice(idx, 0, 'p2p')
+      else queues.push('p2p')
+    }
+    return queues
+  }
+
+  return queues
 }
 
 export function resolveTaskQueue(taskName: string, command: string) {

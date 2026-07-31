@@ -3,7 +3,7 @@ import os from 'node:os'
 import { fork } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { getQueueConfig, getWorkerConfig, type QueueWorkerGroup } from './queue_config.js'
+import { getQueueConfig, getWorkerConfig, getEffectiveWorkerQueues, type QueueWorkerGroup } from './queue_config.js'
 import {
   claimNextJob,
   extendRunningJobLock,
@@ -97,13 +97,17 @@ export class SqlQueueWorkerService {
       return
     }
 
+    // 实际消费的队列(动态归属 p2p:独立 p2p worker 关闭时 background 兜底)
+    const effectiveQueues = getEffectiveWorkerQueues(this.workerGroup)
+    const consumesP2P = effectiveQueues.includes('p2p')
+
     console.log(
-      `[queue] worker ${this.workerGroup} started, queues=${workerConfig.queues.join(',')}, concurrency=${workerConfig.concurrency}`
+      `[queue] worker ${this.workerGroup} started, queues=${effectiveQueues.join(',')}, concurrency=${workerConfig.concurrency}`
     )
 
     await recoverStalledJobs()
-    // p2p worker 启动时对账一次孤儿传输,治愈因重启/清队列而卡死的父任务
-    if (this.workerGroup === 'p2p' || getWorkerConfig(this.workerGroup).queues.includes('p2p')) {
+    // 实际消费 p2p 的 worker 启动时对账一次孤儿传输,治愈因重启/清队列而卡死的父任务
+    if (consumesP2P) {
       await reconcileOrphanTransfers().catch((error) =>
         console.error('[queue] reconcile orphan transfers failed', error)
       )
@@ -112,7 +116,7 @@ export class SqlQueueWorkerService {
       workerId: this.workerId,
       workerGroup: this.workerGroup,
       mode: this.mode,
-      queues: workerConfig.queues,
+      queues: effectiveQueues,
     })
 
     this.heartbeatTimer = setInterval(() => {
@@ -120,13 +124,13 @@ export class SqlQueueWorkerService {
         workerId: this.workerId,
         workerGroup: this.workerGroup,
         mode: this.mode,
-        queues: workerConfig.queues,
+        queues: effectiveQueues,
       }).catch((error) => console.error('[queue] heartbeat failed', error))
     }, config.worker.heartbeatIntervalMs)
 
     this.recoverTimer = setInterval(() => {
       recoverStalledJobs().catch((error) => console.error('[queue] stalled recovery failed', error))
-      if (this.workerGroup === 'p2p' || workerConfig.queues.includes('p2p')) {
+      if (consumesP2P) {
         reconcileOrphanTransfers().catch((error) =>
           console.error('[queue] reconcile orphan transfers failed', error)
         )
@@ -154,13 +158,13 @@ export class SqlQueueWorkerService {
 
   private async workLoop() {
     const config = getQueueConfig()
-    const workerConfig = getWorkerConfig(this.workerGroup)
+    const effectiveQueues = getEffectiveWorkerQueues(this.workerGroup)
 
     while (!this.stopping) {
       try {
         const job = await claimNextJob({
           workerId: this.workerId,
-          taskQueues: workerConfig.queues,
+          taskQueues: effectiveQueues,
           stalledAfterMs: config.worker.stalledAfterMs,
         })
 
