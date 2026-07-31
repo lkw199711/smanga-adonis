@@ -179,6 +179,21 @@ export default class LatestsController {
           chapterName: true,
         },
       })
+
+      // 全部章节均已阅读时，直接跳过该漫画，不进入继续阅读列表。
+      const readChapters = await prisma.history.findMany({
+        where: { userId, mangaId },
+        distinct: ['chapterId'],
+        select: { chapterId: true },
+      })
+      const readChapterIdSet = new Set(readChapters.map((item) => item.chapterId))
+      if (
+        chapters.length > 0 &&
+        chapters.every((chapter) => readChapterIdSet.has(chapter.chapterId))
+      ) {
+        return null
+      }
+
       const currentIndex = chapters.findIndex(
         (chapter) => chapter.chapterId === latest.chapterId
       )
