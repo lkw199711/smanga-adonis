@@ -373,6 +373,14 @@ export async function recoverStalledJobs() {
       if (outcome === 'failed') {
         const { handleScanQueueTerminalFailure } = await import('../scan/scan_report_service.js')
         await handleScanQueueTerminalFailure(job.command, decodeJson(job.args), error)
+        // p2p 子任务僵死且耗尽重试后,同步将对应 p2p_transfer_task 置失败,
+        // 否则父 p2p_transfer 会因子任务残留 running 而永远无法收敛
+        if (/^taskP2P/.test(job.command)) {
+          const { handleP2PQueueJobFailure } = await import(
+            '../p2p/pull/pull_child_tracker.js'
+          )
+          await handleP2PQueueJobFailure(decodeJson(job.args), error)
+        }
       }
     } else {
       await db.queue_job.update({

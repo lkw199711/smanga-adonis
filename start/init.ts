@@ -509,6 +509,20 @@ function ensure_queue_config(config: any) {
     changed = true
   }
 
+  // 设计约定:不启用独立 p2p 进程,p2p 任务由 background worker 统一消费。
+  // 存量/老配置可能 background.queues 缺少 'p2p'(历史上按分离式建模),在此自愈补齐,
+  // 否则 p2p 队列无任何消费者,拉取任务会永远卡在 pending(文件不下载)。
+  if (
+    Array.isArray(config.queue.workers.background.queues) &&
+    !config.queue.workers.background.queues.includes('p2p')
+  ) {
+    const queues = config.queue.workers.background.queues
+    const defaultIdx = queues.indexOf('default')
+    if (defaultIdx >= 0) queues.splice(defaultIdx, 0, 'p2p')
+    else queues.push('p2p')
+    changed = true
+  }
+
   if (changed) {
     console.log('配置文件 queue 字段不完整，补齐 SQL 队列默认值')
     set_config(config)

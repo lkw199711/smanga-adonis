@@ -14,7 +14,7 @@ import {
   stopWorker,
   decodeJson,
 } from './sql_queue_repository.js'
-import { handleP2PQueueJobFailure } from '../p2p/pull/pull_child_tracker.js'
+import { handleP2PQueueJobFailure, reconcileOrphanTransfers } from '../p2p/pull/pull_child_tracker.js'
 import { handleScanQueueTerminalFailure } from '../scan/scan_report_service.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -102,6 +102,12 @@ export class SqlQueueWorkerService {
     )
 
     await recoverStalledJobs()
+    // p2p worker 启动时对账一次孤儿传输,治愈因重启/清队列而卡死的父任务
+    if (this.workerGroup === 'p2p' || getWorkerConfig(this.workerGroup).queues.includes('p2p')) {
+      await reconcileOrphanTransfers().catch((error) =>
+        console.error('[queue] reconcile orphan transfers failed', error)
+      )
+    }
     await heartbeatWorker({
       workerId: this.workerId,
       workerGroup: this.workerGroup,
@@ -120,6 +126,11 @@ export class SqlQueueWorkerService {
 
     this.recoverTimer = setInterval(() => {
       recoverStalledJobs().catch((error) => console.error('[queue] stalled recovery failed', error))
+      if (this.workerGroup === 'p2p' || workerConfig.queues.includes('p2p')) {
+        reconcileOrphanTransfers().catch((error) =>
+          console.error('[queue] reconcile orphan transfers failed', error)
+        )
+      }
     }, config.worker.stalledAfterMs)
 
     for (let i = 0; i < workerConfig.concurrency; i++) {
@@ -167,6 +178,8 @@ export class SqlQueueWorkerService {
           console.error(`[queue] job ${job.id} failed: ${job.command}`, error)
           const outcome = await markJobFailedOrRetry(job, error)
           if (outcome === 'failed') {
+            // 仅在终态失败时回调,避免可重试错误提前将子任务/父任务置失败
+            await handleP2PQueueJobFailure(decodeJson(job.args), error)
             await handleScanQueueTerminalFailure(job.command, decodeJson(job.args), error)
           }
         } finally {

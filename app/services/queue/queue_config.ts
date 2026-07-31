@@ -47,10 +47,14 @@ const defaultQueueConfig: QueueConfig = {
   workers: {
     background: {
       enabled: true,
-      queues: ['scan', 'sync', 'default'],
+      // 设计约定:不启用独立 p2p 进程,p2p 任务由 background worker 统一消费,
+      // 因此 background.queues 必须包含 'p2p'(见 docker init-config 生成的默认配置)
+      queues: ['scan', 'sync', 'p2p', 'default'],
       concurrency: 1,
     },
     p2p: {
+      // 独立 p2p worker 默认关闭:svc-queue-p2p 未纳入 s6 user bundle,
+      // 启用也不会有进程消费;p2p 一律走 background 队列
       enabled: false,
       queues: ['p2p'],
       concurrency: 3,

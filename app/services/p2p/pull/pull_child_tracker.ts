@@ -288,3 +288,50 @@ export async function handleP2PQueueJobFailure(args: any, error: unknown) {
 
   await markTransferFailedDirectly(transferId, message)
 }
+
+/**
+ * 孤儿传输对账:修复"永远卡在进行中"的父任务。
+ *
+ * 触发场景:进程重启 / 队列被清理 / 子 job 因异常路径被删除,导致
+ * p2p_transfer_task 停留在 pending|running,而其对应的 queue_jobs 行已不存在。
+ * 此时 finalizeTransferIfReady 因存在未终态子任务而永远返回 false,
+ * 父 p2p_transfer 永远停留在 running。
+ *
+ * 处理策略:遍历仍处于 pending|running 的 p2p_transfer,对其
+ * 已分配 queue_job_id 但队列中已无对应 job 的未终态子任务,标记为 failed,
+ * 随后收敛父任务终态。
+ */
+export async function reconcileOrphanTransfers(): Promise<void> {
+  const transfers = await prisma.p2p_transfer.findMany({
+    where: { status: { in: ['pending', 'running'] } },
+    select: { p2pTransferId: true },
+  })
+  if (!transfers.length) return
+
+  for (const t of transfers) {
+    const transferId = t.p2pTransferId
+    let orphanFound = false
+
+    const tasks = await queryTasks(transferId)
+    for (const task of tasks) {
+      if (task.status !== 'pending' && task.status !== 'running') continue
+      // 尚未分配队列 job(addTask 与 attach 之间的瞬态)→ 跳过,避免误杀
+      if (!task.queue_job_id) continue
+
+      const job = await db.queue_job.findUnique({ where: { id: task.queue_job_id } })
+      if (job) continue // 队列中仍有对应 job(pending/running),交由正常流程处理
+
+      orphanFound = true
+      await updateTaskRow(transferId, task.task_key, {
+        status: 'failed',
+        errorMessage: 'queue job lost (worker restart or queue cleared)',
+        finishedAt: new Date(),
+      })
+    }
+
+    if (orphanFound) {
+      console.warn(`[pull-tracker] reconcile orphan transferId=${transferId}, marking lost tasks failed`)
+      await finalizeTransferIfReady(transferId)
+    }
+  }
+}
