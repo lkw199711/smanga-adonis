@@ -6,11 +6,14 @@
   "license": "UNLICENSED",
   "scripts": {
     "start": "node bin/server.js",
+    "prisma:generate": "prisma generate --schema=./prisma/sqlite/schema.prisma",
+    "prebuild": "npm run prisma:generate",
     "build": "node ace build --ignore-ts-errors",
     "dev": "node ace serve --hmr",
     "test": "node ace test",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc --noEmit"
   },
   "imports": {
