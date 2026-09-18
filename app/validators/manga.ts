@@ -52,6 +52,7 @@ export const updateMangaValidator = vine.compile(
     mangaCover: vine.string().optional(),
     removeFirst: vine.number().optional(),
     browseType: vine.string().trim().optional(),
+    direction: vine.number().optional(),
   })
 )
 

@@ -325,6 +325,7 @@ export default class ScanMangaJob {
       mangaPath,
       mangaCover: '',
       browseType: this.mediaRecord.browseType,
+      direction: this.mediaRecord.direction,
       chapterCount: 1,
       mangaNumber: this.manga_number(mangaName),
     }
