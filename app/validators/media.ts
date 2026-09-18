@@ -61,5 +61,6 @@ export const updateMediaValidator = vine.compile(
 export const batchIdsMediaValidator = vine.compile(
   vine.object({
     mediaIds: vine.array(vine.number().positive()).minLength(1),
+    deleteFile: vine.boolean().optional(),
   })
 )

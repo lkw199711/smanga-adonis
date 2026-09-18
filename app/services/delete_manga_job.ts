@@ -7,12 +7,15 @@
  */
 import prisma from '#start/prisma'
 import { s_delete } from '#utils/index'
+import { deletePhysicalTarget } from '#services/physical_delete_service'
 
 export default class DeleteMangaJob {
   private mangaId: number
+  private deleteFile: boolean
 
-  constructor({ mangaId }: { mangaId: number }) {
+  constructor({ mangaId, deleteFile = false }: { mangaId: number; deleteFile?: boolean }) {
     this.mangaId = mangaId
+    this.deleteFile = deleteFile
   }
 
   async run() {
@@ -21,7 +24,23 @@ export default class DeleteMangaJob {
     if (!mangaId) return
     
     // 标记为删除
-    const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
+    const manga = await prisma.manga.update({
+      where: { mangaId },
+      data: { deleteFlag: 1 },
+      include: { path: true, media: true },
+    })
+
+    if (this.deleteFile) {
+      try {
+        if (manga.media.isCloudMedia) {
+          throw new Error('云媒体库不支持删除本地实体文件')
+        }
+        deletePhysicalTarget(manga.mangaPath, manga.path.pathContent)
+      } catch (error) {
+        await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 0 } })
+        throw error
+      }
+    }
 
     // 删除书签
     const bookmarks = await prisma.bookmark.findMany({ where: { mangaId } })

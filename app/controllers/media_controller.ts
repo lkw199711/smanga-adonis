@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
+import { deleteFileRequested } from '#services/physical_delete_service'
 import CreateMediaPosterJob from '#services/create_media_poster_job'
 import ScanReportService from '#services/scan/scan_report_service'
 import {
@@ -135,12 +136,13 @@ export default class MediaController {
     if (!(await this.checkAdmin(request, response))) return
 
     const { mediaId } = await idParamMediaValidator.validate(params)
+    const deleteFile = deleteFileRequested(request.input('deleteFile'))
     const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
 
     await addTask({
       taskName: `delete_media_${media.mediaId}`,
       command: 'deleteMedia',
-      args: { mediaId: media.mediaId },
+      args: { mediaId: media.mediaId, deleteFile },
       priority: TaskPriority.deleteManga,
     })
 
@@ -150,7 +152,7 @@ export default class MediaController {
   public async destroy_batch({ request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
-    const { mediaIds } = await batchIdsMediaValidator.validate(request.all())
+    const { mediaIds, deleteFile = false } = await batchIdsMediaValidator.validate(request.all())
 
     for (const mediaId of mediaIds) {
       const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
@@ -158,7 +160,7 @@ export default class MediaController {
       await addTask({
         taskName: `delete_media_${media.mediaId}`,
         command: 'deleteMedia',
-        args: { mediaId: media.mediaId },
+        args: { mediaId: media.mediaId, deleteFile },
         priority: TaskPriority.deleteManga,
       })
     }

@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
+import { deleteFileRequested } from '#services/physical_delete_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 import fs from 'fs'
 import { order_params, path_compress, read_json, s_delete } from '#utils/index'
@@ -216,12 +217,13 @@ export default class MangaController {
         .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
+    const deleteFile = deleteFileRequested(request.input('deleteFile'))
     const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
 
     await addTask({
       taskName: `delete_manga_${manga.mangaId}`,
       command: 'deleteManga',
-      args: { mangaId: manga.mangaId },
+      args: { mangaId: manga.mangaId, deleteFile },
       priority: TaskPriority.deleteManga,
       timeout: 1000 * 60 * 10,
     })
@@ -230,7 +232,7 @@ export default class MangaController {
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
-    const { mangaIds } = await batchIdsMangaValidator.validate(request.all())
+    const { mangaIds, deleteFile = false } = await batchIdsMangaValidator.validate(request.all())
     const userId = (request as any).userId
 
     for (const mangaId of mangaIds) {
@@ -246,7 +248,7 @@ export default class MangaController {
       await addTask({
         taskName: `delete_manga_${mangaId}`,
         command: 'deleteManga',
-        args: { mangaId },
+        args: { mangaId, deleteFile },
         priority: TaskPriority.deleteManga,
         timeout: 1000 * 60 * 10,
       })

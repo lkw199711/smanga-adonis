@@ -60,6 +60,7 @@ export const updateMangaValidator = vine.compile(
 export const batchIdsMangaValidator = vine.compile(
   vine.object({
     mangaIds: vine.array(vine.number().positive()).minLength(1),
+    deleteFile: vine.boolean().optional(),
   })
 )
 

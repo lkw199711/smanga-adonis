@@ -5,6 +5,7 @@ import * as path from 'path'
 import { path_compress, order_params, extract_numbers, get_config, s_delete } from '#utils/index'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
+import { deleteFileRequested } from '#services/physical_delete_service'
 import { unzipFile } from '#utils/unzip'
 import {
   listChapterValidator,
@@ -424,22 +425,24 @@ export default class ChaptersController {
     return response.json({ code: 200, message: '更新成功', data: chapter })
   }
 
-  public async destroy({ params, response }: HttpContext) {
+  public async destroy({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
+    const deleteFile = deleteFileRequested(request.input('deleteFile'))
     const chapter = await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 1 } })
 
     await addTask({
       taskName: `delete_chapter_${chapter.chapterId}`,
       command: 'deleteChapter',
-      args: { chapterId: chapter.chapterId },
+      args: { chapterId: chapter.chapterId, deleteFile },
       priority: TaskPriority.deleteManga,
     })
 
     return response.json({ code: 200, message: '删除成功', data: chapter })
   }
 
-  public async destroy_batch({ params, response }: HttpContext) {
+  public async destroy_batch({ params, request, response }: HttpContext) {
     const { chapterIds } = await batchIdsParamChapterValidator.validate(params)
+    const deleteFile = deleteFileRequested(request.input('deleteFile'))
     const chapters = await prisma.chapter.updateMany({
       where: {
         chapterId: { in: chapterIds },
@@ -452,7 +455,7 @@ export default class ChaptersController {
       await addTask({
         taskName: `delete_chapter_${id}`,
         command: 'deleteChapter',
-        args: { chapterId: id },
+        args: { chapterId: id, deleteFile },
         priority: TaskPriority.deleteManga,
       })
     }

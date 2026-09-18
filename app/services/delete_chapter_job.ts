@@ -7,12 +7,15 @@
  */
 import prisma from '#start/prisma'
 import { s_delete } from '#utils/index'
+import { deletePhysicalTarget } from '#services/physical_delete_service'
 
 export default class DeleteChapterJob {
   private chapterId: number
+  private deleteFile: boolean
 
-  constructor({ chapterId }: { chapterId: number }) {
+  constructor({ chapterId, deleteFile = false }: { chapterId: number; deleteFile?: boolean }) {
     this.chapterId = chapterId
+    this.deleteFile = deleteFile
   }
 
   async run() {
@@ -21,7 +24,25 @@ export default class DeleteChapterJob {
     if (!chapterId) return
 
     // 标记为删除
-    await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 1 } })
+    const chapter = await prisma.chapter.update({
+      where: { chapterId },
+      data: { deleteFlag: 1 },
+    })
+
+    if (this.deleteFile) {
+      try {
+        const [pathRecord, media] = await Promise.all([
+          prisma.path.findUnique({ where: { pathId: chapter.pathId } }),
+          prisma.media.findUnique({ where: { mediaId: chapter.mediaId } }),
+        ])
+        if (!pathRecord) throw new Error(`章节 ${chapterId} 对应的媒体库路径不存在`)
+        if (media?.isCloudMedia) throw new Error('云媒体库不支持删除本地实体文件')
+        deletePhysicalTarget(chapter.chapterPath, pathRecord.pathContent)
+      } catch (error) {
+        await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 0 } })
+        throw error
+      }
+    }
 
     // 删除书签
     const bookmarks = await prisma.bookmark.findMany({ where: { chapterId } })
@@ -48,7 +69,6 @@ export default class DeleteChapterJob {
     await prisma.latest.deleteMany({ where: { chapterId } })
 
     // 删除章节 先删除章节封面
-    const chapter = await prisma.chapter.findFirst({ where: { chapterId } })
     if (chapter && chapter.chapterCover && /smanga_chapter/.test(chapter.chapterCover)) {
       s_delete(chapter.chapterCover)
     }
