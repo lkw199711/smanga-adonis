@@ -6,6 +6,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { image_files } from '#utils/index'
 import { LibraryPathContext, libraryPathContextForPathId } from '#services/library_path_service'
+import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
 import {
   listShareValidator,
   idParamShareValidator,
@@ -212,7 +213,12 @@ export default class SharesController {
         })
       })
 
-      return response.json({ code: 200, message: '章节列表获取成功', list: chapters, count: chapters.length })
+      return response.json({
+        code: 200,
+        message: '章节列表获取成功',
+        list: await resolveLibraryFiles(chapters),
+        count: chapters.length,
+      })
     }
 
     // 如果传了 chapterId，返回该章节的详细信息
@@ -296,7 +302,8 @@ export default class SharesController {
       }
     }
 
-    return response.json({ code: 200, message: '分析成功', data: { share, media, manga } })
+    const mangaFiles = await resolveLibraryFileRecord(manga)
+    return response.json({ code: 200, message: '分析成功', data: { share, media, manga: mangaFiles } })
   }
 
   async analysis_chapters({ request, response }: HttpContext) {
@@ -345,7 +352,12 @@ export default class SharesController {
       })
     })
 
-    return response.json({ code: 200, message: '章节列表获取成功', list: chapters, count: chapters.length })
+    return response.json({
+      code: 200,
+      message: '章节列表获取成功',
+      list: await resolveLibraryFiles(chapters),
+      count: chapters.length,
+    })
   }
 
   async analysis_images({ request, response }: HttpContext) {
@@ -416,6 +428,11 @@ export default class SharesController {
       return manga
     })
 
-    return response.json({ code: 200, message: '漫画列表获取成功', list, count: list.length })
+    return response.json({
+      code: 200,
+      message: '漫画列表获取成功',
+      list: await resolveLibraryFiles(list),
+      count: list.length,
+    })
   }
 }

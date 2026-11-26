@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
+import { resolveLibraryFiles } from '#services/library_file_response'
 import { order_params } from '../utils/index.js'
 import { searchMangaValidator, searchChapterValidator } from '#validators/search'
 
@@ -68,7 +69,7 @@ export default class SearchesController {
       manga.unWatched = Math.max(total - watched, 0)
     })
 
-    return response.json({ code: 200, message: '', list, count })
+    return response.json({ code: 200, message: '', list: await resolveLibraryFiles(list), count })
   }
 
   public async chapters({ request, response }: HttpContext) {
@@ -120,6 +121,6 @@ export default class SearchesController {
       chapter.latest = latestMap.get(chapter.chapterId) || null
     })
 
-    return response.json({ code: 200, message: '', list, count })
+    return response.json({ code: 200, message: '', list: await resolveLibraryFiles(list), count })
   }
 }

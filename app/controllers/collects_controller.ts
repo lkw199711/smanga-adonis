@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
+import { resolveLibraryFiles } from '#services/library_file_response'
 import {
   listCollectValidator,
   idParamCollectValidator,
@@ -33,6 +34,7 @@ export default class CollectsController {
             mangaId: true,
             mangaName: true,
             mangaCover: true,
+            pathId: true,
             mediaId: true,
             browseType: true,
             removeFirst: true,
@@ -76,10 +78,11 @@ export default class CollectsController {
       manga.unWatched = total - watched
     })
 
+    const mangas = await resolveLibraryFiles(list.map(item => item.manga))
     return response.json({
       code: 200,
       message: '',
-      list: list.map((item) => ({ ...item, ...item.manga })),
+      list: list.map((item, index) => ({ ...item, manga: mangas[index], ...mangas[index] })),
       count,
     })
   }
@@ -97,6 +100,7 @@ export default class CollectsController {
             chapterId: true,
             chapterName: true,
             chapterCover: true,
+            pathId: true,
           },
         },
         manga: {
@@ -130,10 +134,13 @@ export default class CollectsController {
       chapter.latest = chapter.chapterId ? latestMap.get(chapter.chapterId) || null : null
     })
 
+    const chapters = await resolveLibraryFiles(list.map(item => item.chapter))
     return response.json({
       code: 200,
       message: '',
-      list: list.map((item) => ({ ...item, ...item.chapter, ...item.manga })),
+      list: list.map((item, index) => ({
+        ...item, chapter: chapters[index], ...chapters[index], ...item.manga,
+      })),
       count,
     })
   }

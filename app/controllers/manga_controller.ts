@@ -4,6 +4,7 @@ import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
+import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
 import {
   LibraryPathContext,
   LibraryPathError,
@@ -11,7 +12,7 @@ import {
   normalizeRelativeLibraryPath,
 } from '#services/library_path_service'
 import fs from 'fs'
-import { order_params, path_compress, path_poster, read_json, s_delete } from '#utils/index'
+import { order_params, path_compress, read_json, s_delete } from '#utils/index'
 import path from 'path'
 import {
   listMangaValidator,
@@ -68,7 +69,7 @@ export default class MangaController {
       listResponse = await this.no_paginate({ mediaId, order })
     }
 
-    return response.json(listResponse)
+    return response.json({ ...listResponse, list: await resolveLibraryFiles(listResponse.list) })
   }
 
   // 不分页
@@ -144,7 +145,6 @@ export default class MangaController {
       where: { mangaId },
       include: {
         metas: true,
-        path: { include: { storageRoot: true } },
         mangaTags: {
           include: { tag: true },
         },
@@ -171,27 +171,11 @@ export default class MangaController {
         .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
-    const { path: pathRecord, ...mangaData } = manga
-    let metas = manga.metas
-    if (pathRecord.storageRootId) {
-      try {
-        const libraryPath = new LibraryPathContext(pathRecord)
-        metas = metas.map(meta => ({
-          ...meta,
-          metaFile: meta.metaFile ? libraryPath.resolveDataPath(meta.metaFile) : null,
-        }))
-      } catch (error) {
-        if (!(error instanceof LibraryPathError)) throw error
-        metas = metas.map(meta => ({ ...meta, metaFile: null }))
-      }
-    }
-
-    const result = {
-      ...mangaData,
-      metas,
+    const result = await resolveLibraryFileRecord({
+      ...manga,
       tags: manga.mangaTags.map((mangaTag) => mangaTag.tag),
       mangaTags: undefined,
-    }
+    })
     return response.json({ code: 200, message: '', data: result })
   }
 
@@ -200,7 +184,7 @@ export default class MangaController {
     const manga = await prisma.manga.create({
       data: insertData as any,
     })
-    return response.json({ code: 200, message: '新增成功', data: manga })
+    return response.json({ code: 200, message: '新增成功', data: await resolveLibraryFileRecord(manga) })
   }
 
   public async update({ params, request, response }: HttpContext) {
@@ -228,33 +212,18 @@ export default class MangaController {
         }
         if (modifyData.mangaCover) {
           const libraryPath = new LibraryPathContext(existManga.path)
-          const covers = await prisma.meta.findMany({
-            where: { mangaId, metaName: 'cover', metaFile: { not: null } },
-            select: { metaId: true, metaFile: true },
-          })
-          const cover = covers.find(item =>
-            item.metaFile && libraryPath.resolveDataPath(item.metaFile) === modifyData.mangaCover
-          )
-          if (cover?.metaFile) {
-            const source = libraryPath.resolveDataPath(cover.metaFile)
-            const target = path.join(
-              path_poster(), `smanga_manga_${mangaId}_meta_${cover.metaId}${path.extname(source)}`
-            )
-            await fs.promises.mkdir(path_poster(), { recursive: true })
-            await fs.promises.copyFile(source, target)
-            modifyData.mangaCover = target
-          }
+          modifyData.mangaCover = libraryPath.toStoredCoverPath(modifyData.mangaCover)
         }
       } catch (error) {
-        const message = error instanceof LibraryPathError ? error.message : '无法读取源封面'
-        return response.status(422).json({ code: 422, message })
+        if (!(error instanceof LibraryPathError)) throw error
+        return response.status(422).json({ code: 422, message: error.message })
       }
     }
     const manga = await prisma.manga.update({
       where: { mangaId },
       data: modifyData,
     })
-    return response.json({ code: 200, message: '更新成功', data: manga })
+    return response.json({ code: 200, message: '更新成功', data: await resolveLibraryFileRecord(manga) })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -282,7 +251,7 @@ export default class MangaController {
       timeout: 1000 * 60 * 10,
     })
 
-    return response.json({ code: 200, message: '删除成功', data: manga })
+    return response.json({ code: 200, message: '删除成功', data: await resolveLibraryFileRecord(manga) })
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
@@ -359,7 +328,11 @@ export default class MangaController {
       timeout: 1000 * 60 * 60 * 2,
     })
 
-    return response.json({ code: 200, message: '扫描任务添加成功', data: manga })
+    return response.json({
+      code: 200,
+      message: '扫描任务添加成功',
+      data: await resolveLibraryFileRecord(manga),
+    })
   }
 
   public async edit_meta({ params, request, response }: HttpContext) {
@@ -380,18 +353,29 @@ export default class MangaController {
     const { title, author, publishDate, mangaCover, star, describe, tags, wirteMetaJson } =
       await editMetaMangaValidator.validate(request.all())
 
+    let storedCover = mangaCover
+    let libraryPath: LibraryPathContext | undefined
+    if (mangaCover || wirteMetaJson) {
+      try {
+        libraryPath = await libraryPathContextForPathId(manga.pathId)
+        if (mangaCover) storedCover = libraryPath.toStoredCoverPath(mangaCover)
+      } catch (error) {
+        if (!(error instanceof LibraryPathError)) throw error
+        return response.status(422).json({ code: 422, message: error.message })
+      }
+    }
+
     // 修改或新增元数据
     const res = await Promise.all([
       this.meta_update(mangaId, 'title', title),
       this.meta_update(mangaId, 'author', author),
       this.meta_update(mangaId, 'publishDate', publishDate),
-      this.meta_update(mangaId, 'mangaCover', mangaCover),
+      this.meta_update(mangaId, 'mangaCover', storedCover),
       this.meta_update(mangaId, 'star', star),
       this.meta_update(mangaId, 'describe', describe),
     ])
 
-    if (wirteMetaJson) {
-      const libraryPath = await libraryPathContextForPathId(manga.pathId)
+    if (wirteMetaJson && libraryPath) {
       const mangaPath = libraryPath.resolveDataPath(manga.mangaPath)
       if (mangaPath) {
         try {
@@ -402,7 +386,7 @@ export default class MangaController {
           if (fs.existsSync(metaFile)) metaData = read_json(metaFile)
           if (author) metaData['author'] = author
           if (publishDate) metaData['publishDate'] = publishDate
-          if (mangaCover) metaData['mangaCover'] = mangaCover
+          if (storedCover) metaData['mangaCover'] = storedCover
           if (star) metaData['star'] = star
           if (describe) metaData['describe'] = describe
           if (tags) metaData['tags'] = tags

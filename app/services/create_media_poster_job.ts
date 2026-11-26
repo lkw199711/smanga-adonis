@@ -5,6 +5,7 @@ import * as path from 'path'
 import fs from 'fs';
 import { error_log, media_cover_log } from '#utils/log';
 import { media } from '@prisma/client';
+import { resolveLibraryFiles } from './library_file_response.js'
 
 export default class CreateMediaPosterJob {
   private mediaId: number
@@ -26,15 +27,16 @@ export default class CreateMediaPosterJob {
         mangaCover: { not: '' },
       },
       take: 10,
-      select: { mangaId: true, mangaName: true, mangaCover: true },
+      select: { pathId: true, mangaCover: true },
       orderBy: { updateTime: 'desc' },
     })
 
     if (!mangas.length) return
 
-    this.mangaCovers = mangas
-      .filter(manga => fs.existsSync(manga.mangaCover || ''))
-      .map(manga => manga.mangaCover) as string[] // 图片路径
+    const resolvedMangas = await resolveLibraryFiles(mangas)
+    this.mangaCovers = resolvedMangas
+      .map(manga => manga.mangaCover)
+      .filter((cover): cover is string => Boolean(cover && fs.existsSync(cover)))
     this.outputPath = path.join(path_poster(), `smanga_media_${this.mediaId}.jpg`) // 合并后的图片路径
     // 生成封面
     const images: Buffer[] = []

@@ -308,7 +308,11 @@ export default class P2PServeController {
       })
       const list = mangas.map(({ path: pathRecord, ...manga }) => {
         const libraryPath = new LibraryPathContext(pathRecord)
-        return { ...manga, mangaPath: libraryPath.resolve(manga.mangaPath) }
+        return {
+          ...manga,
+          mangaPath: libraryPath.resolve(manga.mangaPath),
+          mangaCover: manga.mangaCover ? libraryPath.resolveDataPath(manga.mangaCover) : manga.mangaCover,
+        }
       })
       console.log(
         `[p2p-serve] mangas 200 | caller=${callerNodeId} groupNo=${groupNo} mediaId=${mediaId} count=${mangas.length}`
@@ -358,6 +362,9 @@ export default class P2PServeController {
       const libraryPath = await libraryPathContextForPathId(manga.pathId)
       for (const chapter of chapters) {
         chapter.chapterPath = libraryPath.resolve(chapter.chapterPath)
+        if (chapter.chapterCover) {
+          chapter.chapterCover = libraryPath.resolveDataPath(chapter.chapterCover)
+        }
       }
       console.log(
         `[p2p-serve] chapters 200 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId} count=${chapters.length}`

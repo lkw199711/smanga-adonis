@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
+import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
 import { get_config } from '#utils/index'
 import {
   listLatestValidator,
@@ -54,7 +55,15 @@ export default class LatestsController {
       manga.unWatched = Math.max(total - watched, 0)
     })
 
-    return response.json({ code: 200, message: '', list, count: Number(countResult[0]?.count || 0) })
+    return response.json({
+      code: 200,
+      message: '',
+      list: (await resolveLibraryFiles(list)).map(item => {
+        const { pathId: _pathId, ...latest } = item ?? {}
+        return latest
+      }),
+      count: Number(countResult[0]?.count || 0),
+    })
   }
 
   /**
@@ -133,7 +142,7 @@ export default class LatestsController {
     return response.json({
       code: 200,
       message: '',
-      list,
+      list: (await resolveLibraryFiles(list)).map(({ pathId: _pathId, ...item }) => item),
       count: list.length,
     })
   }
@@ -148,6 +157,7 @@ export default class LatestsController {
             mediaId: true,
             mangaName: true,
             mangaCover: true,
+            pathId: true,
             chapterCount: true,
             browseType: true,
           },
@@ -231,6 +241,7 @@ export default class LatestsController {
           MAX("manga"."mediaId") AS "mediaId",
           MAX("manga"."mangaName") AS "mangaName",
           MAX("manga"."mangaCover") AS "mangaCover",
+          MAX("manga"."pathId") AS "pathId",
           MAX("manga"."chapterCount") AS "chapterCount",
           MAX("manga"."browseType") AS "browseType"
       FROM 
@@ -259,6 +270,7 @@ export default class LatestsController {
           MAX(manga.mediaId) AS mediaId,
           MAX(manga.mangaName) AS mangaName,
           MAX(manga.mangaCover) AS mangaCover,
+          MAX(manga.pathId) AS pathId,
           MAX(manga.chapterCount) AS chapterCount,
           MAX(manga.browseType) AS browseType
       FROM 
@@ -322,7 +334,7 @@ export default class LatestsController {
       const finishedChapterIdSet = new Set(finishedLatests.map((item) => item.chapterId))
       for (let i = latestChapterIndex + 1; i < chapters.length; i++) {
         if (!finishedChapterIdSet.has(chapters[i].chapterId)) {
-          latest.nextChapter = chapters[i]
+          latest.nextChapter = await resolveLibraryFileRecord(chapters[i])
           break
         }
       }

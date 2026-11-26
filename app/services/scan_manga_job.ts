@@ -1107,6 +1107,7 @@ export default class ScanMangaJob {
         const un7z = new Un7z(dir, cachePoster)
         const image = await un7z.first_image_7z(dir, this.cachePath)
         if (image) {
+          hasPosterInZip = true
           sourcePoster = `${this.cachePath}/${image}`
         }
         // 7z
@@ -1118,7 +1119,6 @@ export default class ScanMangaJob {
 
     // 不复制封面,直接使用源文件 网盘库必须copy封面
     const copyPoster =
-      this.libraryPath.usesStorageRoot ||
       // 压缩包内有封面
       hasPosterInZip ||
       // 云盘库 且没有移植元数据
@@ -1226,7 +1226,6 @@ export default class ScanMangaJob {
     // 网盘库必须copy封面
     // 或者封面太大需要压缩
     const copyPoster =
-      this.libraryPath.usesStorageRoot ||
       (this.isCloudMedia && !this.hasDataMeta) ||
       fs.statSync(sourcePoster).size > maxSizeKB * 1024
 

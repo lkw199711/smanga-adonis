@@ -37,6 +37,7 @@ import {
 import { is_img, image_files, path_compress, get_config } from '#utils/index'
 import { unzipFile } from '#utils/unzip'
 import { LibraryPathContext, libraryPathContextForPathId } from '#services/library_path_service'
+import { resolveLibraryFileRecord } from '#services/library_file_response'
 import sharp from 'sharp'
 
 // ----------------------------------------------------------------------------
@@ -876,9 +877,8 @@ export default class OpdsController {
     if (!user_can_access_media(user, manga.mediaId)) {
       return response.status(403).send('Forbidden')
     }
-    const libraryPath = await libraryPathContextForPathId(manga.pathId)
-    const mangaCover = manga.mangaCover ? libraryPath.resolveDataPath(manga.mangaCover) : null
-    return this.send_image(response, mangaCover)
+    const files = await resolveLibraryFileRecord(manga)
+    return this.send_image(response, files?.mangaCover)
   }
 
   /** 章节封面 */
@@ -892,11 +892,8 @@ export default class OpdsController {
     if (!user_can_access_media(user, chapter.mediaId)) {
       return response.status(403).send('Forbidden')
     }
-    const libraryPath = await libraryPathContextForPathId(chapter.pathId)
-    const chapterCover = chapter.chapterCover
-      ? libraryPath.resolveDataPath(chapter.chapterCover)
-      : null
-    return this.send_image(response, chapterCover)
+    const files = await resolveLibraryFileRecord(chapter)
+    return this.send_image(response, files?.chapterCover)
   }
 
   private send_image(response: any, file: string | null | undefined) {

@@ -151,7 +151,7 @@ async function buildDbBackedManifestMangas(
     return {
       remoteMangaId: manga.mangaId,
       mangaName: manga.mangaName,
-      mangaCover: manga.mangaCover,
+      mangaCover: manga.mangaCover ? libraryPath.resolveDataPath(manga.mangaCover) : null,
       describe: manga.describe,
       author: manga.author,
       chapterCount: manifestChapters.length,
@@ -295,11 +295,11 @@ export async function buildShareManifest(share: {
       },
     })
     if (!manga) return null
-    shareCover = manga.mangaCover || null
+    const mangas = await buildDbBackedManifestMangas([manga])
+    shareCover = mangas[0]?.mangaCover || null
     shareCoverSize = shareCover ? safeFileSize(shareCover) || null : null
     shareDescribe = manga.describe || null
 
-    const mangas = await buildDbBackedManifestMangas([manga])
     return finalizeManifest({
       identity,
       nodeVersion,

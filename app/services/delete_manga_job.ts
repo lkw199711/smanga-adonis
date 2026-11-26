@@ -8,7 +8,7 @@
 import prisma from '#start/prisma'
 import { s_delete } from '#utils/index'
 import { deletePhysicalTarget } from '#services/physical_delete_service'
-import { LibraryPathContext } from '#services/library_path_service'
+import { isManagedCover, LibraryPathContext } from '#services/library_path_service'
 
 export default class DeleteMangaJob {
   private mangaId: number
@@ -80,7 +80,7 @@ export default class DeleteMangaJob {
     const chapters = await prisma.chapter.findMany({ where: { mangaId } })
     for (let index = 0; index < chapters.length; index++) {
       const chapter = chapters[index];
-      if (chapter.chapterCover && /smanga_chapter/.test(chapter.chapterCover)) {
+      if (chapter.chapterCover && isManagedCover(chapter.chapterCover, 'chapter', chapter.chapterId)) {
         s_delete(chapter.chapterCover)
       }
     }
@@ -92,7 +92,7 @@ export default class DeleteMangaJob {
     await prisma.mangaTag.deleteMany({ where: { mangaId } })
 
     // 删除漫画封面
-    if (manga.mangaCover && /smanga_manga/.test(manga.mangaCover)) {
+    if (manga.mangaCover && isManagedCover(manga.mangaCover, 'manga', mangaId)) {
       s_delete(manga.mangaCover)
     }
     // 删除漫画

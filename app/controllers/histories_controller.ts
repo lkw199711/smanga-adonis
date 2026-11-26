@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
+import { resolveLibraryFiles } from '#services/library_file_response'
 import { get_config } from '#utils/index'
 import {
   listHistoryValidator,
@@ -57,7 +58,15 @@ export default class HistoriesController {
       if ('updateTime' in chapter) chapter.updateTime = toIso(chapter.updateTime)
     })
 
-    return response.json({ code: 200, message: '', list, count: Number((distinct as any)[0].count) })
+    return response.json({
+      code: 200,
+      message: '',
+      list: (await resolveLibraryFiles(list)).map(item => {
+        const { pathId: _pathId, ...history } = item ?? {}
+        return history
+      }),
+      count: Number((distinct as any)[0].count),
+    })
   }
 
   private async raw_sql_select_postgres({
@@ -79,6 +88,7 @@ export default class HistoriesController {
           MAX("chapter"."chapterName") AS "chapterName",
           MAX("manga"."mangaName") AS "mangaName",
           MAX("manga"."mangaCover") AS "chapterCover",
+          MAX("manga"."pathId") AS "pathId",
           MAX("manga"."browseType") AS "browseType",
           MAX("history"."createTime") AS "createTime"
       FROM 
@@ -120,6 +130,7 @@ export default class HistoriesController {
           MAX(chapter.chapterName) AS chapterName,
           MAX(manga.mangaName) AS mangaName,
           MAX(manga.mangaCover) AS chapterCover,
+          MAX(manga.pathId) AS pathId,
           MAX(manga.browseType) AS browseType,
           MAX(history.createTime) AS createTime
       FROM 

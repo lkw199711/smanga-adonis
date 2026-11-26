@@ -104,6 +104,14 @@ export class LibraryPathContext {
     return this.resolve(storedPath)
   }
 
+  /** 封面选择提交的值可能来自已解析的接口响应。 */
+  toStoredCoverPath(file: string): string {
+    if (!file || !this.rootPath) return file
+    return path.isAbsolute(file)
+      ? this.toStoredDataPath(file)
+      : normalizeRelativeLibraryPath(file)
+  }
+
   /** 根内文件保存相对路径；根外的 Smanga 缓存文件继续保存绝对路径。 */
   toStoredDataPath(physicalPath: string): string {
     if (!this.rootPath) return physicalPath
@@ -128,6 +136,16 @@ export class LibraryPathContext {
 export function isWithinLibraryDirectory(root: string, candidate: string): boolean {
   const relative = path.relative(comparisonKey(root), comparisonKey(candidate))
   return !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)
+}
+
+export function isManagedCover(file: string, kind: 'manga' | 'chapter', id: number): boolean {
+  if (!path.isAbsolute(file) || !isWithinLibraryDirectory(path_poster(), file)) return false
+  const name = path.basename(file, path.extname(file))
+  const prefix = `smanga_${kind}_${id}`
+  return (
+    name === prefix ||
+    (kind === 'manga' && name.startsWith(prefix) && /^_meta_\d+$/.test(name.slice(prefix.length)))
+  )
 }
 
 export async function libraryPathContextForPathId(pathId: number): Promise<LibraryPathContext> {

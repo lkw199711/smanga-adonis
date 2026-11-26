@@ -316,17 +316,15 @@ export default class ReloadMangaMetaJob {
     // 网盘库必须copy封面
     // 或者封面太大需要压缩
     const copyPoster =
-      this.libraryPath.usesStorageRoot ||
       (this.isCloudMedia && !this.hasDataMeta) ||
       fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
+    const storedCover = copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster)
     await prisma.manga.update({
       where: { mangaId: this.mangaRecord.mangaId },
-      data: {
-        mangaCover: copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster),
-      },
+      data: { mangaCover: storedCover },
     })
-    this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
+    this.mangaRecord.mangaCover = storedCover
 
     // 复制封面到poster目录 使用单独任务队列
     if (copyPoster) {
@@ -470,6 +468,7 @@ export default class ReloadMangaMetaJob {
         const un7z = new Un7z(dir, cachePoster)
         const image = await un7z.first_image_7z(dir, this.cachePath)
         if (image) {
+          hasPosterInZip = true
           sourcePoster = `${this.cachePath}/${image}`
         }
         // 7z
@@ -481,7 +480,6 @@ export default class ReloadMangaMetaJob {
 
     // 不复制封面,直接使用源文件 网盘库必须copy封面
     const copyPoster =
-      this.libraryPath.usesStorageRoot ||
       // 压缩包内有封面
       hasPosterInZip ||
       // 云盘库 且没有移植元数据
@@ -490,23 +488,24 @@ export default class ReloadMangaMetaJob {
       fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
     // 写入漫画与章节封面
+    const storedCover = copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster)
+    const previousChapterCover = this.chapterRecord.chapterCover
     await prisma.chapter.update({
       where: { chapterId: this.chapterRecord.chapterId },
-      data: {
-        chapterCover: copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster),
-      },
+      data: { chapterCover: storedCover },
     })
-    this.chapterRecord.chapterCover = copyPoster ? posterName : sourcePoster
+    this.chapterRecord.chapterCover = storedCover
 
-    if (!this.mangaRecord.mangaCover) {
+    if (
+      !this.mangaRecord.mangaCover ||
+      (this.libraryPath.usesStorageRoot && this.mangaRecord.mangaCover === previousChapterCover)
+    ) {
       // 直接使用update的返回值会丢失id 才用补充赋值的形式补全数据
       await prisma.manga.update({
         where: { mangaId: this.mangaRecord.mangaId },
-        data: {
-          mangaCover: copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster),
-        },
+        data: { mangaCover: storedCover },
       })
-      this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
+      this.mangaRecord.mangaCover = storedCover
     }
 
     // 复制封面到poster目录 使用单独任务队列

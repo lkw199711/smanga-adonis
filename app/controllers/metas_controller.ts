@@ -1,5 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
+import { resolveLibraryFiles } from '#services/library_file_response'
+import type { meta as Meta } from '@prisma/client'
 import {
   idParamMetaValidator,
   createMetaValidator,
@@ -7,6 +9,13 @@ import {
 } from '#validators/meta'
 
 export default class MetasController {
+  private async resolveFiles(rows: Array<Meta & { manga: { pathId: number } }>) {
+    const files = await resolveLibraryFiles(
+      rows.map(({ manga, ...row }) => ({ ...row, pathId: manga.pathId }))
+    )
+    return files.map(({ pathId: _pathId, ...row }) => row)
+  }
+
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
     if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
@@ -17,14 +26,21 @@ export default class MetasController {
   }
 
   public async index({ response }: HttpContext) {
-    const list = await prisma.meta.findMany()
+    const rows = await prisma.meta.findMany({
+      include: { manga: { select: { pathId: true } } },
+    })
+    const list = await this.resolveFiles(rows)
     return response.json({ code: 200, message: '', list, count: list.length })
   }
 
   public async show({ params, response }: HttpContext) {
     const { metaId } = await idParamMetaValidator.validate(params)
-    const meta = await prisma.meta.findUnique({ where: { metaId } })
-    return response.json({ code: 200, message: '', data: meta })
+    const meta = await prisma.meta.findUnique({
+      where: { metaId },
+      include: { manga: { select: { pathId: true } } },
+    })
+    const data = meta ? (await this.resolveFiles([meta]))[0] : null
+    return response.json({ code: 200, message: '', data })
   }
 
   public async create({ request, response }: HttpContext) {

@@ -8,7 +8,7 @@
 import prisma from '#start/prisma'
 import { s_delete } from '#utils/index'
 import { deletePhysicalTarget } from '#services/physical_delete_service'
-import { LibraryPathContext } from '#services/library_path_service'
+import { isManagedCover, LibraryPathContext } from '#services/library_path_service'
 
 export default class DeleteChapterJob {
   private chapterId: number
@@ -77,7 +77,7 @@ export default class DeleteChapterJob {
     await prisma.latest.deleteMany({ where: { chapterId } })
 
     // 删除章节 先删除章节封面
-    if (chapter && chapter.chapterCover && /smanga_chapter/.test(chapter.chapterCover)) {
+    if (chapter.chapterCover && isManagedCover(chapter.chapterCover, 'chapter', chapterId)) {
       s_delete(chapter.chapterCover)
     }
     await prisma.chapter.delete({ where: { chapterId } })

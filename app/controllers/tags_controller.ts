@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
+import { resolveLibraryFiles } from '#services/library_file_response'
 import { Prisma } from '@prisma/client'
 import _ from 'lodash'
 import { get_config, order_params } from '#utils/index'
@@ -267,6 +268,11 @@ export default class TagsController {
     const uniqueMangaTags = _.uniqBy(mangaTags, 'mangaId')
     const list = uniqueMangaTags.map((item) => Object.assign(item.manga, { mangaTagId: item.mangaTagId }))
 
-    return response.json({ code: 200, message: '', list, count: list.length })
+    return response.json({
+      code: 200,
+      message: '',
+      list: await resolveLibraryFiles(list),
+      count: list.length,
+    })
   }
 }

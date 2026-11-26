@@ -7,6 +7,7 @@ import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
 import { unzipFile } from '#utils/unzip'
+import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
 import {
   LibraryPathContext,
   LibraryPathError,
@@ -77,7 +78,7 @@ export default class ChaptersController {
       listResponse = await this.no_paginate({ mangaId, mediaId, order, userId })
     }
 
-    return response.json(listResponse)
+    return response.json({ ...listResponse, list: await resolveLibraryFiles(listResponse.list) })
   }
 
   // 校验用户是否有权访问指定 mediaId 的媒体库
@@ -184,7 +185,7 @@ export default class ChaptersController {
         .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
-    return response.json({ code: 200, message: '', data: chapter })
+    return response.json({ code: 200, message: '', data: await resolveLibraryFileRecord(chapter) })
   }
 
   public async first({ request, response }: HttpContext) {
@@ -206,7 +207,7 @@ export default class ChaptersController {
       orderBy: order_params(order),
     })
 
-    return response.json({ code: 200, message: '', data: chapter })
+    return response.json({ code: 200, message: '', data: await resolveLibraryFileRecord(chapter) })
   }
 
   public async images({ params, request, response }: HttpContext) {
@@ -424,22 +425,28 @@ export default class ChaptersController {
     const chapter = await prisma.chapter.create({
       data: insertData as any,
     })
-    return response.json({ code: 200, message: '新增成功', data: chapter })
+    return response.json({ code: 200, message: '新增成功', data: await resolveLibraryFileRecord(chapter) })
   }
 
   public async update({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
     const modifyData = await updateChapterValidator.validate(request.all())
-    if (modifyData.chapterPath !== undefined) {
+    if (modifyData.chapterPath !== undefined || modifyData.chapterCover) {
       const existing = await prisma.chapter.findUnique({ where: { chapterId } })
       if (!existing) return response.status(404).json({ code: 404, message: '章节不存在' })
       const pathRecord = await prisma.path.findUnique({
         where: { pathId: existing.pathId },
-        select: { storageRootId: true },
+        include: { storageRoot: true },
       })
       if (pathRecord?.storageRootId) {
         try {
-          modifyData.chapterPath = normalizeRelativeLibraryPath(modifyData.chapterPath)
+          if (modifyData.chapterPath !== undefined) {
+            modifyData.chapterPath = normalizeRelativeLibraryPath(modifyData.chapterPath)
+          }
+          if (modifyData.chapterCover) {
+            const libraryPath = new LibraryPathContext(pathRecord)
+            modifyData.chapterCover = libraryPath.toStoredCoverPath(modifyData.chapterCover)
+          }
         } catch (error) {
           if (!(error instanceof LibraryPathError)) throw error
           return response.status(422).json({ code: 422, message: error.message })
@@ -450,7 +457,7 @@ export default class ChaptersController {
       where: { chapterId },
       data: modifyData,
     })
-    return response.json({ code: 200, message: '更新成功', data: chapter })
+    return response.json({ code: 200, message: '更新成功', data: await resolveLibraryFileRecord(chapter) })
   }
 
   public async destroy({ params, request, response }: HttpContext) {
@@ -465,7 +472,7 @@ export default class ChaptersController {
       priority: TaskPriority.deleteManga,
     })
 
-    return response.json({ code: 200, message: '删除成功', data: chapter })
+    return response.json({ code: 200, message: '删除成功', data: await resolveLibraryFileRecord(chapter) })
   }
 
   public async destroy_batch({ params, request, response }: HttpContext) {
