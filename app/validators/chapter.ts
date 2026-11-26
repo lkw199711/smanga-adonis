@@ -63,7 +63,13 @@ export const updateChapterValidator = vine.compile(
     chapterName: vine.string().trim().optional(),
     chapterPath: vine.string().trim().optional(),
     chapterCover: vine.string().optional(),
-    chapterNumber: vine.string().trim().optional(),
+    chapterNumber: vine
+      .string()
+      .parse((value) =>
+        typeof value === 'number' && Number.isFinite(value) ? String(value) : value
+      )
+      .trim()
+      .optional(),
   })
 )
 
