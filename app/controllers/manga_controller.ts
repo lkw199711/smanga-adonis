@@ -5,6 +5,7 @@ import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
+import { resolveReadableSource } from '#services/library_availability_service'
 import {
   LibraryPathContext,
   LibraryPathError,
@@ -145,6 +146,7 @@ export default class MangaController {
       where: { mangaId },
       include: {
         metas: true,
+        path: { include: { storageRoot: true } },
         mangaTags: {
           include: { tag: true },
         },
@@ -171,8 +173,16 @@ export default class MangaController {
         .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
+    const { path: scanPath, ...data } = manga
+    const source = scanPath.storageRootId
+      ? await resolveReadableSource(scanPath, manga.mangaPath, '漫画')
+      : null
+    const canRead = source === null || source.path !== null
     const result = await resolveLibraryFileRecord({
-      ...manga,
+      ...data,
+      availability: source?.availability,
+      mangaCover: canRead ? manga.mangaCover : null,
+      metas: canRead ? manga.metas : manga.metas.map(meta => ({ ...meta, metaFile: null })),
       tags: manga.mangaTags.map((mangaTag) => mangaTag.tag),
       mangaTags: undefined,
     })

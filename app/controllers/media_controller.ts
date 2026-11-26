@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
+import { mediaAvailability } from '#services/library_availability_service'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
@@ -62,9 +63,11 @@ export default class MediaController {
     ])
 
     // 将 Prisma 的 _count 映射为 mangaCount 字段
+    const availability = await mediaAvailability(list.map(media => media.mediaId))
     const mappedList = list.map((m) => ({
       ...m,
       mangaCount: m._count?.mangas ?? 0,
+      availability: availability.get(m.mediaId),
     }))
 
     return response.json({ code: 200, message: '', list: mappedList, count })
@@ -92,7 +95,11 @@ export default class MediaController {
         .json({ code: 403, message: '无权限查看', status: 'no permission' })
     }
     const media = await prisma.media.findUnique({ where: { mediaId } })
-    return response.json({ code: 200, message: '', data: media })
+    if (!media) return response.json({ code: 200, message: '', data: null })
+    const availability = await mediaAvailability([mediaId])
+    return response.json({
+      code: 200, message: '', data: { ...media, availability: availability.get(mediaId) },
+    })
   }
 
   public async create({ request, response }: HttpContext) {

@@ -8,10 +8,10 @@ import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
 import { unzipFile } from '#utils/unzip'
 import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
+import { resolveReadableSource, type ResourceAvailability } from '#services/library_availability_service'
 import {
-  LibraryPathContext,
   LibraryPathError,
-  libraryPathContextForPathId,
+  LibraryPathContext,
   normalizeRelativeLibraryPath,
 } from '#services/library_path_service'
 import {
@@ -26,14 +26,31 @@ import {
 } from '#validators/chapter'
 
 export default class ChaptersController {
+  private sourceError(response: HttpContext['response'], availability: ResourceAvailability, imageRequest = false) {
+    const code = availability.code === 'SOURCE_MISSING' ? 404 : 503
+    return response.status(code).json({
+      code, message: availability.message, availability,
+      ...(imageRequest ? { data: [], status: 'failed' } : {}),
+    })
+  }
+
   public async index({ request, response }: HttpContext) {
     let { mangaId, mediaId, page, pageSize, order, keyWord } = await listChapterValidator.validate(
       request.qs()
     )
 
     const userId = (request as any).userId
+    const manga = mangaId
+      ? await prisma.manga.findUnique({
+          where: { mangaId },
+          select: {
+            mediaId: true,
+            mangaPath: true,
+            path: { include: { storageRoot: true } },
+          },
+        })
+      : null
     if (mangaId) {
-      const manga = await prisma.manga.findUnique({ where: { mangaId } })
       if (!manga) {
         return response
           .status(404)
@@ -78,7 +95,13 @@ export default class ChaptersController {
       listResponse = await this.no_paginate({ mangaId, mediaId, order, userId })
     }
 
-    return response.json({ ...listResponse, list: await resolveLibraryFiles(listResponse.list) })
+    const source = manga?.path.storageRootId
+      ? await resolveReadableSource(manga.path, manga.mangaPath, '漫画')
+      : null
+    const list = source && !source.path
+      ? listResponse.list.map(chapter => ({ ...chapter, chapterCover: null }))
+      : await resolveLibraryFiles(listResponse.list)
+    return response.json({ ...listResponse, list, availability: source?.availability })
   }
 
   // 校验用户是否有权访问指定 mediaId 的媒体库
@@ -215,7 +238,7 @@ export default class ChaptersController {
     const { orderChapterByNumber, reTry } = await imagesChapterValidator.validate(request.all())
     const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
     if (!chapter) {
-      return response.status(404).json({ code: 404, message: '章节不存在', data: [], status: 'compressed' })
+      return response.status(404).json({ code: 404, message: '章节不存在', data: [], status: 'failed' })
     }
 
     const userId = (request as any).userId
@@ -229,13 +252,9 @@ export default class ChaptersController {
       where: { pathId: chapter.pathId },
       include: { storageRoot: true },
     })
-    const libraryPath = new LibraryPathContext(pathInfo)
-    const chapterPath = libraryPath.resolve(chapter.chapterPath)
-
-    if (!fs.existsSync(chapterPath)) {
-      return response
-        .status(404)
-        .json({ code: 404, message: '章节文件不存在', data: [], status: 'compressed' })
+    const { path: chapterPath, availability } = await resolveReadableSource(pathInfo, chapter.chapterPath, '章节')
+    if (!chapterPath) {
+      return this.sourceError(response, availability, true)
     }
 
     let images: string[] = []
@@ -247,7 +266,15 @@ export default class ChaptersController {
     const compressPathExists = compress && fs.existsSync(compress.compressPath)
     if (chapter.chapterType === 'img') {
       // 纯图片章节
-      images = image_files(chapterPath, exclude)
+      try {
+        images = image_files(chapterPath, exclude)
+      } catch (error) {
+        if (!(error instanceof Error) || !('code' in error)) throw error
+        const source = await resolveReadableSource(pathInfo, chapter.chapterPath, '章节')
+        return this.sourceError(response, source.path ? {
+          status: 'unavailable', code: 'SOURCE_UNAVAILABLE', message: '章节内有文件暂时无法读取，请重试。',
+        } : source.availability, true)
+      }
       imagesResponse = {
         code: 200,
         message: '',
@@ -512,11 +539,13 @@ export default class ChaptersController {
         .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
-    const libraryPath = await libraryPathContextForPathId(chapter.pathId)
-    const chapterPath = libraryPath.resolve(chapter.chapterPath)
-
-    if (!fs.existsSync(chapterPath)) {
-      return response.status(404).json({ code: 404, message: '章节文件不存在' })
+    const pathInfo = await prisma.path.findUnique({
+      where: { pathId: chapter.pathId },
+      include: { storageRoot: true },
+    })
+    const { path: chapterPath, availability } = await resolveReadableSource(pathInfo, chapter.chapterPath, '章节')
+    if (!chapterPath) {
+      return this.sourceError(response, availability)
     }
 
     if (chapter.chapterType === 'img') {
