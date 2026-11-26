@@ -194,7 +194,8 @@ model manga {
   mangaTags     mangaTag[]
   share         share[]
 
-  @@unique([mediaId, mangaPath], map: "oname")
+  @@unique([pathId, mangaPath], map: "uniqueMangaPath")
+  @@index([mediaId], map: "mangaMediaId")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -304,7 +305,7 @@ model path {
   pathContent           String
   mangas                manga[]
 
-  @@unique([mediaId, pathContent], map: "opath")
+  @@unique([mediaId, storageRootId, pathContent], map: "opath")
   @@index([storageRootId], map: "pathStorageRoot")
 }
 

@@ -36,6 +36,7 @@ import {
 } from '#utils/opds'
 import { is_img, image_files, path_compress, get_config } from '#utils/index'
 import { unzipFile } from '#utils/unzip'
+import { LibraryPathContext, libraryPathContextForPathId } from '#services/library_path_service'
 import sharp from 'sharp'
 
 // ----------------------------------------------------------------------------
@@ -796,25 +797,28 @@ export default class OpdsController {
       return response.status(403).send('Forbidden')
     }
 
-    if (!chapter.chapterPath || !fs.existsSync(chapter.chapterPath)) {
+    const libraryPath = await libraryPathContextForPathId(chapter.pathId)
+    const chapterPath = libraryPath.resolve(chapter.chapterPath)
+
+    if (!chapterPath || !fs.existsSync(chapterPath)) {
       return response.status(404).send('file not found')
     }
 
-    const stat = fs.statSync(chapter.chapterPath)
+    const stat = fs.statSync(chapterPath)
 
     // 目录型章节: 临时打包成 CBZ (Comic Book Zip) 返回
     if (stat.isDirectory()) {
-      return this.stream_directory_as_cbz(response, chapter)
+      return this.stream_directory_as_cbz(response, { ...chapter, chapterPath })
     }
 
-    const fileName = path.basename(chapter.chapterPath)
-    response.header('Content-Type', chapter_mime(chapter.chapterPath))
+    const fileName = path.basename(chapterPath)
+    response.header('Content-Type', chapter_mime(chapterPath))
     response.header(
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
     )
     response.header('Content-Length', String(stat.size))
-    response.stream(fs.createReadStream(chapter.chapterPath))
+    response.stream(fs.createReadStream(chapterPath))
     return response
   }
 
@@ -872,7 +876,9 @@ export default class OpdsController {
     if (!user_can_access_media(user, manga.mediaId)) {
       return response.status(403).send('Forbidden')
     }
-    return this.send_image(response, manga.mangaCover)
+    const libraryPath = await libraryPathContextForPathId(manga.pathId)
+    const mangaCover = manga.mangaCover ? libraryPath.resolveDataPath(manga.mangaCover) : null
+    return this.send_image(response, mangaCover)
   }
 
   /** 章节封面 */
@@ -886,7 +892,11 @@ export default class OpdsController {
     if (!user_can_access_media(user, chapter.mediaId)) {
       return response.status(403).send('Forbidden')
     }
-    return this.send_image(response, chapter.chapterCover)
+    const libraryPath = await libraryPathContextForPathId(chapter.pathId)
+    const chapterCover = chapter.chapterCover
+      ? libraryPath.resolveDataPath(chapter.chapterCover)
+      : null
+    return this.send_image(response, chapterCover)
   }
 
   private send_image(response: any, file: string | null | undefined) {
@@ -919,22 +929,26 @@ export default class OpdsController {
    * 返回 null 表示章节不支持 PSE 翻页 (例如 pdf 或图片为空).
    */
   private async resolve_chapter_images(chapter: any): Promise<string[] | null> {
-    if (!chapter?.chapterPath || !fs.existsSync(chapter.chapterPath)) return null
+    if (!chapter?.chapterPath) return null
+    const pathInfo = await prisma.path.findUnique({
+      where: { pathId: chapter.pathId },
+      include: { storageRoot: true },
+    })
+    const libraryPath = new LibraryPathContext(pathInfo)
+    const exclude = pathInfo?.exclude || ''
+    const chapterPath = libraryPath.resolve(chapter.chapterPath)
+    if (!fs.existsSync(chapterPath)) return null
 
     // 目录型 / img 类型
     if (chapter.chapterType === 'img') {
-      const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
-      const exclude = pathInfo?.exclude || ''
-      const list = image_files(chapter.chapterPath, exclude).sort()
+      const list = image_files(chapterPath, exclude).sort()
       return list.length ? list : null
     }
 
     // 兼容: 目录但 chapterType 被标为其他
-    const stat = fs.statSync(chapter.chapterPath)
+    const stat = fs.statSync(chapterPath)
     if (stat.isDirectory()) {
-      const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
-      const exclude = pathInfo?.exclude || ''
-      const list = image_files(chapter.chapterPath, exclude).sort()
+      const list = image_files(chapterPath, exclude).sort()
       return list.length ? list : null
     }
 
@@ -945,9 +959,6 @@ export default class OpdsController {
     const compress: any = await prisma.compress.findUnique({
       where: { chapterId: chapter.chapterId },
     })
-    const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
-    const exclude = pathInfo?.exclude || ''
-
     if (compress && fs.existsSync(compress.compressPath)) {
       const list = image_files(compress.compressPath, exclude).sort()
       return list.length ? list : null
@@ -962,7 +973,7 @@ export default class OpdsController {
       if (!fs.existsSync(compressPath)) fs.mkdirSync(compressPath, { recursive: true })
       // 仅对 zip 直接支持, rar/7z 延用原有任务体系失败时返回 null
       if (chapter.chapterType === 'zip') {
-        unzipFile(chapter.chapterPath, compressPath)
+        await unzipFile(chapterPath, compressPath)
       } else {
         // 其他压缩格式走原逻辑 (等后台任务处理), 此时返回 null
         return null

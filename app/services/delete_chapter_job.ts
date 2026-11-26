@@ -8,6 +8,7 @@
 import prisma from '#start/prisma'
 import { s_delete } from '#utils/index'
 import { deletePhysicalTarget } from '#services/physical_delete_service'
+import { LibraryPathContext } from '#services/library_path_service'
 
 export default class DeleteChapterJob {
   private chapterId: number
@@ -32,12 +33,19 @@ export default class DeleteChapterJob {
     if (this.deleteFile) {
       try {
         const [pathRecord, media] = await Promise.all([
-          prisma.path.findUnique({ where: { pathId: chapter.pathId } }),
+          prisma.path.findUnique({
+            where: { pathId: chapter.pathId },
+            include: { storageRoot: true },
+          }),
           prisma.media.findUnique({ where: { mediaId: chapter.mediaId } }),
         ])
         if (!pathRecord) throw new Error(`章节 ${chapterId} 对应的媒体库路径不存在`)
         if (media?.isCloudMedia) throw new Error('云媒体库不支持删除本地实体文件')
-        deletePhysicalTarget(chapter.chapterPath, pathRecord.pathContent)
+        const libraryPath = new LibraryPathContext(pathRecord)
+        deletePhysicalTarget(
+          libraryPath.resolve(chapter.chapterPath),
+          libraryPath.resolve(pathRecord.pathContent)
+        )
       } catch (error) {
         await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 0 } })
         throw error

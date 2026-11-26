@@ -194,7 +194,8 @@ model manga {
   metas         meta[]
   shares        share[]
 
-  @@unique([mediaId, mangaPath], map: "unique-name")
+  @@unique([pathId, mangaPath], map: "uniqueMangaPath")
+  @@index([mediaId], map: "mangaMediaId")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
@@ -305,7 +306,7 @@ model path {
   media                 media        @relation(fields: [mediaId], references: [mediaId])
   storageRoot           storageRoot? @relation(fields: [storageRootId], references: [storageRootId])
 
-  @@unique([mediaId, pathContent], map: "opath")
+  @@unique([mediaId, storageRootId, pathContent], map: "opath")
   @@index([storageRootId], map: "pathStorageRoot")
 }
 

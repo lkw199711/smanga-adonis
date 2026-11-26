@@ -4,19 +4,29 @@ import path from 'path'
 import { get_os, is_img, path_compress } from '#utils/index'
 import { fileQueryValidator } from '#validators/file'
 import prisma from '#start/prisma'
+import { isWithinLibraryDirectory, LibraryPathContext } from '#services/library_path_service'
 
 // 获取所有媒体库允许的路径前缀
 async function getAllowedPaths(): Promise<string[]> {
-  const paths = await prisma.path.findMany({ select: { pathContent: true } })
-  const allowedPaths = paths.map((p) => p.pathContent)
+  const paths = await prisma.path.findMany({
+    where: { deleteFlag: 0 },
+    include: { storageRoot: true },
+  })
+  const allowedPaths: string[] = []
+  for (const pathInfo of paths) {
+    try {
+      allowedPaths.push(new LibraryPathContext(pathInfo).resolve(pathInfo.pathContent))
+    } catch {
+      // 单个存储根停用时，其他媒体库仍然可读。
+    }
+  }
   // 同时允许 compress 目录
   allowedPaths.push(path_compress())
   return allowedPaths
 }
 
 function isPathAllowed(filePath: string, allowedPaths: string[]): boolean {
-  const normalizedFile = path.resolve(filePath)
-  return allowedPaths.some((allowed) => normalizedFile.startsWith(path.resolve(allowed)))
+  return allowedPaths.some((allowed) => isWithinLibraryDirectory(allowed, filePath))
 }
 
 export default class FilesController {

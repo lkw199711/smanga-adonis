@@ -9,6 +9,11 @@ import { get_config } from '#utils/index'
 import { normalizeScanConfigJson, ScanConfigError } from '#services/scan/scan_config_service'
 import fs from 'fs'
 import {
+  LibraryPathContext,
+  LibraryPathError,
+  normalizeRelativeLibraryPath,
+} from '#services/library_path_service'
+import {
   listPathValidator,
   idParamPathValidator,
   createPathValidator,
@@ -69,7 +74,7 @@ export default class PathsController {
     }
 
     const [list, count] = await Promise.all([
-      prisma.path.findMany(queryParams),
+      prisma.path.findMany({ ...queryParams, include: { storageRoot: true } }),
       prisma.path.count({ where: queryParams.where }),
     ])
 
@@ -80,14 +85,25 @@ export default class PathsController {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathId } = await idParamPathValidator.validate(params)
-    const path = await prisma.path.findUnique({ where: { pathId } })
-    return response.json({ code: 200, message: '', data: path })
+    const pathInfo = await prisma.path.findUnique({
+      where: { pathId },
+      include: { storageRoot: true },
+    })
+    const data = pathInfo
+      ? {
+          ...pathInfo,
+          resolvedPath: pathInfo.storageRootId && pathInfo.storageRoot?.enabled !== 1
+            ? null
+            : new LibraryPathContext(pathInfo).resolve(pathInfo.pathContent),
+        }
+      : null
+    return response.json({ code: 200, message: '', data })
   }
 
   private async buildDiscoveryInputFromPath(pathId: number) {
     const pathInfo = await prisma.path.findUnique({
       where: { pathId },
-      include: { media: true },
+      include: { media: true, storageRoot: true },
     })
 
     if (!pathInfo || !pathInfo.media) return null
@@ -95,7 +111,7 @@ export default class PathsController {
     return {
       mediaId: pathInfo.mediaId,
       pathId: pathInfo.pathId,
-      pathContent: pathInfo.pathContent,
+      pathContent: new LibraryPathContext(pathInfo).scanDirectory(pathInfo.pathContent),
       mediaType: pathInfo.media.mediaType,
       directoryFormat: pathInfo.media.directoryFormat,
       scanTemplateKey: pathInfo.scanTemplateKey,
@@ -113,7 +129,13 @@ export default class PathsController {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathId } = await idParamPathValidator.validate(params)
-    const input = await this.buildDiscoveryInputFromPath(pathId)
+    let input
+    try {
+      input = await this.buildDiscoveryInputFromPath(pathId)
+    } catch (error) {
+      if (!(error instanceof LibraryPathError)) throw error
+      return response.status(422).json({ code: 422, message: error.message })
+    }
     if (!input) {
       return response.status(404).json({ code: 404, message: '路径或媒体库不存在' })
     }
@@ -132,9 +154,25 @@ export default class PathsController {
       ? await prisma.media.findUnique({ where: { mediaId: data.mediaId } })
       : null
 
+    let physicalPath = data.pathContent
+    try {
+      if (data.storageRootId) {
+        const storageRoot = await prisma.storageRoot.findFirst({
+          where: { storageRootId: data.storageRootId, deleteFlag: 0 },
+        })
+        physicalPath = new LibraryPathContext({
+          storageRootId: data.storageRootId,
+          storageRoot,
+        }).scanDirectory(data.pathContent)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '存储根路径无效'
+      return response.status(422).json({ code: 422, message, status: 'validation failed' })
+    }
+
     const result = this.discoveryService.discoverPath({
       mediaId: data.mediaId,
-      pathContent: data.pathContent,
+      pathContent: physicalPath,
       mediaType: data.mediaType ?? media?.mediaType ?? 0,
       directoryFormat: data.directoryFormat ?? media?.directoryFormat ?? 0,
       scanTemplateKey: data.scanTemplateKey,
@@ -158,8 +196,26 @@ export default class PathsController {
     const insertData = this.normalizeScanConfigs(validatedData, response)
     if (!insertData) return
 
-    // 检查路径是否存在
-    if (!fs.existsSync(insertData.pathContent)) {
+    let physicalPath = insertData.pathContent
+    try {
+      if (insertData.storageRootId) {
+        const storageRoot = await prisma.storageRoot.findFirst({
+          where: { storageRootId: insertData.storageRootId, deleteFlag: 0 },
+        })
+        const context = new LibraryPathContext({
+          storageRootId: insertData.storageRootId,
+          storageRoot,
+        })
+        insertData.pathContent = normalizeRelativeLibraryPath(insertData.pathContent)
+        physicalPath = context.scanDirectory(insertData.pathContent)
+      }
+    } catch (error) {
+      const message = error instanceof LibraryPathError ? error.message : '存储根路径无效'
+      return response.status(422).json({ code: 422, message, status: 'validation failed' })
+    }
+
+    // 检查最终解析出的服务器目录是否存在
+    if (!fs.existsSync(physicalPath)) {
       return response.status(400).json({ code: 400, message: '路径不存在', data: null })
     }
 
@@ -167,6 +223,7 @@ export default class PathsController {
       where: {
         pathContent: insertData.pathContent,
         mediaId: insertData.mediaId,
+        storageRootId: insertData.storageRootId ?? null,
       },
     })
 
@@ -177,7 +234,7 @@ export default class PathsController {
     } else if (path?.deleteFlag === 1) {
       await prisma.path.update({
         where: { pathId: path.pathId },
-        data: { deleteFlag: 0 },
+        data: { deleteFlag: 0, storageRootId: insertData.storageRootId ?? null },
       })
     } else {
       return response.status(400).json({ code: 400, message: '路径已存在', data: path })

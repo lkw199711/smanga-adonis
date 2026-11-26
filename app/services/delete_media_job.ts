@@ -8,6 +8,7 @@
 import prisma from '#start/prisma'
 import { TaskPriority } from '../type/index.js'
 import { addTask } from '#services/queue_service'
+import { LibraryPathContext } from '#services/library_path_service'
 import {
   deletePhysicalTarget,
   resolvePhysicalDeleteTarget,
@@ -31,19 +32,24 @@ export default class DeleteMediaJob {
     const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
 
     // 删除漫画
-    const paths = await prisma.path.findMany({ where: { mediaId } })
+    const paths = await prisma.path.findMany({
+      where: { mediaId },
+      include: { storageRoot: true },
+    })
     if (this.deleteFile) {
       try {
         if (media.isCloudMedia) throw new Error('云媒体库不支持删除本地实体文件')
 
-        // 先完成全部路径校验，再开始删除，避免校验到一半时产生部分删除。
-        for (const pathRecord of paths) {
-          resolvePhysicalDeleteTarget(pathRecord.pathContent, pathRecord.pathContent, {
-            allowRoot: true,
-          })
-        }
-        for (const pathRecord of paths) {
-          deletePhysicalTarget(pathRecord.pathContent, pathRecord.pathContent, { allowRoot: true })
+        const targets = paths.map(pathRecord => {
+          const context = new LibraryPathContext(pathRecord)
+          const target = context.resolve(pathRecord.pathContent)
+          const root = context.rootPath ?? target
+          const options = { allowRoot: !context.usesStorageRoot }
+          resolvePhysicalDeleteTarget(target, root, options)
+          return { target, root, options }
+        })
+        for (const { target, root, options } of targets) {
+          deletePhysicalTarget(target, root, options)
         }
       } catch (error) {
         await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 0 } })

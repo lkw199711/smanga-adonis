@@ -4,8 +4,14 @@ import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
+import {
+  LibraryPathContext,
+  LibraryPathError,
+  libraryPathContextForPathId,
+  normalizeRelativeLibraryPath,
+} from '#services/library_path_service'
 import fs from 'fs'
-import { order_params, path_compress, read_json, s_delete } from '#utils/index'
+import { order_params, path_compress, path_poster, read_json, s_delete } from '#utils/index'
 import path from 'path'
 import {
   listMangaValidator,
@@ -138,6 +144,7 @@ export default class MangaController {
       where: { mangaId },
       include: {
         metas: true,
+        path: { include: { storageRoot: true } },
         mangaTags: {
           include: { tag: true },
         },
@@ -164,9 +171,24 @@ export default class MangaController {
         .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
-    // 处理返回的数据 将mangaTags中的tag提取出来
+    const { path: pathRecord, ...mangaData } = manga
+    let metas = manga.metas
+    if (pathRecord.storageRootId) {
+      try {
+        const libraryPath = new LibraryPathContext(pathRecord)
+        metas = metas.map(meta => ({
+          ...meta,
+          metaFile: meta.metaFile ? libraryPath.resolveDataPath(meta.metaFile) : null,
+        }))
+      } catch (error) {
+        if (!(error instanceof LibraryPathError)) throw error
+        metas = metas.map(meta => ({ ...meta, metaFile: null }))
+      }
+    }
+
     const result = {
-      ...manga,
+      ...mangaData,
+      metas,
       tags: manga.mangaTags.map((mangaTag) => mangaTag.tag),
       mangaTags: undefined,
     }
@@ -183,7 +205,10 @@ export default class MangaController {
 
   public async update({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
-    const existManga = await prisma.manga.findUnique({ where: { mangaId } })
+    const existManga = await prisma.manga.findUnique({
+      where: { mangaId },
+      include: { path: { include: { storageRoot: true } } },
+    })
     if (!existManga) {
       return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
@@ -196,6 +221,35 @@ export default class MangaController {
     }
 
     const modifyData = await updateMangaValidator.validate(request.all())
+    if (existManga.path.storageRootId) {
+      try {
+        if (modifyData.mangaPath !== undefined) {
+          modifyData.mangaPath = normalizeRelativeLibraryPath(modifyData.mangaPath)
+        }
+        if (modifyData.mangaCover) {
+          const libraryPath = new LibraryPathContext(existManga.path)
+          const covers = await prisma.meta.findMany({
+            where: { mangaId, metaName: 'cover', metaFile: { not: null } },
+            select: { metaId: true, metaFile: true },
+          })
+          const cover = covers.find(item =>
+            item.metaFile && libraryPath.resolveDataPath(item.metaFile) === modifyData.mangaCover
+          )
+          if (cover?.metaFile) {
+            const source = libraryPath.resolveDataPath(cover.metaFile)
+            const target = path.join(
+              path_poster(), `smanga_manga_${mangaId}_meta_${cover.metaId}${path.extname(source)}`
+            )
+            await fs.promises.mkdir(path_poster(), { recursive: true })
+            await fs.promises.copyFile(source, target)
+            modifyData.mangaCover = target
+          }
+        }
+      } catch (error) {
+        const message = error instanceof LibraryPathError ? error.message : '无法读取源封面'
+        return response.status(422).json({ code: 422, message })
+      }
+    }
     const manga = await prisma.manga.update({
       where: { mangaId },
       data: modifyData,
@@ -296,6 +350,7 @@ export default class MangaController {
       args: {
         pathId: pathInfo.pathId,
         mangaPath: manga.mangaPath,
+        parentPath: manga.parentPath,
         mangaName: manga.mangaName,
         mangaId: manga.mangaId,
         isCloudMedia: pathInfo.media?.isCloudMedia,
@@ -336,7 +391,8 @@ export default class MangaController {
     ])
 
     if (wirteMetaJson) {
-      const mangaPath = manga.mangaPath
+      const libraryPath = await libraryPathContextForPathId(manga.pathId)
+      const mangaPath = libraryPath.resolveDataPath(manga.mangaPath)
       if (mangaPath) {
         try {
           const metaPath = path.join(mangaPath, '.smanga')
@@ -437,7 +493,8 @@ export default class MangaController {
     })
 
     if (metaWriteJson) {
-      const mangaPath = manga.mangaPath
+      const libraryPath = await libraryPathContextForPathId(manga.pathId)
+      const mangaPath = libraryPath.resolveDataPath(manga.mangaPath)
       if (mangaPath) {
         try {
           const metaPath = mangaPath + '-smanga-info'

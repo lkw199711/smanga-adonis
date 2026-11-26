@@ -56,7 +56,7 @@ test.group('physical delete service', () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'smanga-delete-outside-'))
     const outsideTarget = path.join(outside, 'manga')
     fs.mkdirSync(outsideTarget)
-    fs.symlinkSync(outside, path.join(root, 'linked'))
+    fs.symlinkSync(outside, path.join(root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
 
     assert.throws(
       () => resolvePhysicalDeleteTarget(path.join(root, 'linked', 'manga'), root),

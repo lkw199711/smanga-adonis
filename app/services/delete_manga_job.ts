@@ -8,6 +8,7 @@
 import prisma from '#start/prisma'
 import { s_delete } from '#utils/index'
 import { deletePhysicalTarget } from '#services/physical_delete_service'
+import { LibraryPathContext } from '#services/library_path_service'
 
 export default class DeleteMangaJob {
   private mangaId: number
@@ -27,7 +28,7 @@ export default class DeleteMangaJob {
     const manga = await prisma.manga.update({
       where: { mangaId },
       data: { deleteFlag: 1 },
-      include: { path: true, media: true },
+      include: { path: { include: { storageRoot: true } }, media: true },
     })
 
     if (this.deleteFile) {
@@ -35,7 +36,11 @@ export default class DeleteMangaJob {
         if (manga.media.isCloudMedia) {
           throw new Error('云媒体库不支持删除本地实体文件')
         }
-        deletePhysicalTarget(manga.mangaPath, manga.path.pathContent)
+        const libraryPath = new LibraryPathContext(manga.path)
+        deletePhysicalTarget(
+          libraryPath.resolve(manga.mangaPath),
+          libraryPath.resolve(manga.path.pathContent)
+        )
       } catch (error) {
         await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 0 } })
         throw error

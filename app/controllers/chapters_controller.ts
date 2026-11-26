@@ -8,6 +8,12 @@ import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
 import { unzipFile } from '#utils/unzip'
 import {
+  LibraryPathContext,
+  LibraryPathError,
+  libraryPathContextForPathId,
+  normalizeRelativeLibraryPath,
+} from '#services/library_path_service'
+import {
   listChapterValidator,
   idParamChapterValidator,
   firstChapterValidator,
@@ -218,7 +224,14 @@ export default class ChaptersController {
         .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
-    if (!fs.existsSync(chapter.chapterPath)) {
+    const pathInfo = await prisma.path.findUnique({
+      where: { pathId: chapter.pathId },
+      include: { storageRoot: true },
+    })
+    const libraryPath = new LibraryPathContext(pathInfo)
+    const chapterPath = libraryPath.resolve(chapter.chapterPath)
+
+    if (!fs.existsSync(chapterPath)) {
       return response
         .status(404)
         .json({ code: 404, message: '章节文件不存在', data: [], status: 'compressed' })
@@ -228,13 +241,12 @@ export default class ChaptersController {
     let imagesResponse: any
     // 查询解压记录
     let compress: any = await prisma.compress.findUnique({ where: { chapterId } })
-    const pathInfo = await prisma.path.findUnique({ where: { pathId: chapter.pathId } })
     const exclude = pathInfo?.exclude
 
     const compressPathExists = compress && fs.existsSync(compress.compressPath)
     if (chapter.chapterType === 'img') {
       // 纯图片章节
-      images = image_files(chapter.chapterPath, exclude)
+      images = image_files(chapterPath, exclude)
       imagesResponse = {
         code: 200,
         message: '',
@@ -243,7 +255,7 @@ export default class ChaptersController {
       }
     } else if (chapter.chapterType === 'pdf') {
       // PDF章节，直接返回PDF文件路径
-      images = [chapter.chapterPath]
+      images = [chapterPath]
       imagesResponse = {
         code: 200,
         message: '',
@@ -283,7 +295,7 @@ export default class ChaptersController {
 
           return response.json(imagesResponse)
         })
-      await unzipFile(chapter.chapterPath, compressPath)
+      await unzipFile(chapterPath, compressPath)
       // 解压完成后更新状态
       await prisma.compress.update({
         where: { chapterId: chapter.chapterId },
@@ -418,6 +430,22 @@ export default class ChaptersController {
   public async update({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
     const modifyData = await updateChapterValidator.validate(request.all())
+    if (modifyData.chapterPath !== undefined) {
+      const existing = await prisma.chapter.findUnique({ where: { chapterId } })
+      if (!existing) return response.status(404).json({ code: 404, message: '章节不存在' })
+      const pathRecord = await prisma.path.findUnique({
+        where: { pathId: existing.pathId },
+        select: { storageRootId: true },
+      })
+      if (pathRecord?.storageRootId) {
+        try {
+          modifyData.chapterPath = normalizeRelativeLibraryPath(modifyData.chapterPath)
+        } catch (error) {
+          if (!(error instanceof LibraryPathError)) throw error
+          return response.status(422).json({ code: 422, message: error.message })
+        }
+      }
+    }
     const chapter = await prisma.chapter.update({
       where: { chapterId },
       data: modifyData,
@@ -477,12 +505,15 @@ export default class ChaptersController {
         .json({ code: 403, message: '没有权限访问', status: 'no permission' })
     }
 
-    if (!fs.existsSync(chapter.chapterPath)) {
+    const libraryPath = await libraryPathContextForPathId(chapter.pathId)
+    const chapterPath = libraryPath.resolve(chapter.chapterPath)
+
+    if (!fs.existsSync(chapterPath)) {
       return response.status(404).json({ code: 404, message: '章节文件不存在' })
     }
 
     if (chapter.chapterType === 'img') {
-      const images = image_files(chapter.chapterPath, '')
+      const images = image_files(chapterPath, '')
       const imagesResponse = {
         code: 200,
         message: '',
@@ -491,7 +522,7 @@ export default class ChaptersController {
       }
       return response.json(imagesResponse)
     } else {
-      const fileName = path.basename(chapter.chapterPath)
+      const fileName = path.basename(chapterPath)
       response.header(
         'Content-Disposition',
         `attachment; filename="${encodeURIComponent(fileName)}"`
@@ -499,7 +530,7 @@ export default class ChaptersController {
 
       response.header('Content-Type', 'application/octet-stream')
 
-      response.stream(fs.createReadStream(chapter.chapterPath))
+      response.stream(fs.createReadStream(chapterPath))
 
       return response
     }

@@ -5,6 +5,7 @@ import { media as mediaType } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
 import { image_files } from '#utils/index'
+import { LibraryPathContext, libraryPathContextForPathId } from '#services/library_path_service'
 import {
   listShareValidator,
   idParamShareValidator,
@@ -177,6 +178,7 @@ export default class SharesController {
       }
 
       const sourceWebsite = mangaFound.media.sourceWebsite
+      const libraryPath = await libraryPathContextForPathId(mangaFound.pathId)
       const chapters = await prisma.chapter.findMany({
         where: { mangaId },
         orderBy: { chapterNumber: 'asc' },
@@ -184,6 +186,7 @@ export default class SharesController {
 
       // 检查章节是否有外置封面
       chapters.forEach((chapter: any) => {
+        chapter.chapterPath = libraryPath.resolve(chapter.chapterPath)
         const dirOutExt = chapter.chapterPath.replace(
           /(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i,
           ''
@@ -222,13 +225,13 @@ export default class SharesController {
           .status(404)
           .json({ code: 404, message: '章节未找到', status: 'chapter not found' })
       }
-      const images = (() => {
-        try {
-          return image_files(chapter.chapterPath)
-        } catch {
-          return []
-        }
-      })()
+      let images: string[] = []
+      try {
+        const libraryPath = await libraryPathContextForPathId(chapter.pathId)
+        images = image_files(libraryPath.resolve(chapter.chapterPath))
+      } catch {
+        // 文件暂不可读时保留原有空列表响应。
+      }
       return response.json({ code: 200, message: '章节信息获取成功', list: images, count: images.length })
     }
 
@@ -267,6 +270,8 @@ export default class SharesController {
           .json({ code: 404, message: '漫画未找到', status: 'manga not found' })
       }
 
+      const libraryPath = await libraryPathContextForPathId(manga.pathId)
+      manga.mangaPath = libraryPath.resolve(manga.mangaPath)
       const dirOutExt = manga.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
       const dirMeta = dirOutExt + '-smanga-info'
       const dirMetaNew = dirOutExt + '/.smanga'
@@ -309,6 +314,7 @@ export default class SharesController {
     }
 
     const sourceWebsite = manga.media.sourceWebsite
+    const libraryPath = await libraryPathContextForPathId(manga.pathId)
     const chapters = await prisma.chapter.findMany({
       where: { mangaId },
       orderBy: { chapterNumber: 'asc' },
@@ -316,6 +322,7 @@ export default class SharesController {
 
     // 检查章节是否有外置封面
     chapters.forEach((chapter: any) => {
+      chapter.chapterPath = libraryPath.resolve(chapter.chapterPath)
       const dirOutExt = chapter.chapterPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
 
       if (sourceWebsite === 'toptoon') {
@@ -353,7 +360,8 @@ export default class SharesController {
     }
     let images: string[] = []
     try {
-      images = image_files(chapter.chapterPath)
+      const libraryPath = await libraryPathContextForPathId(chapter.pathId)
+      images = image_files(libraryPath.resolve(chapter.chapterPath))
     } catch {
       images = []
     }
@@ -367,6 +375,7 @@ export default class SharesController {
       where: { mediaId },
       orderBy: { mangaName: 'asc' },
       include: {
+        path: { include: { storageRoot: true } },
         media: {
           select: {
             mediaId: true,
@@ -378,7 +387,10 @@ export default class SharesController {
       },
     })
 
-    mangas.forEach((manga: any) => {
+    const list = mangas.map(({ path: pathRecord, ...record }) => {
+      const manga: typeof record & { outCovers?: string[]; metaFiles?: string[] } = record
+      const libraryPath = new LibraryPathContext(pathRecord)
+      manga.mangaPath = libraryPath.resolve(manga.mangaPath)
       const dirOutExt = manga.mangaPath.replace(/(.cbr|.cbz|.zip|.7z|.epub|.rar|.pdf)$/i, '')
       const dirMeta = dirOutExt + '-smanga-info'
       const dirMetaNew = dirOutExt + '/.smanga'
@@ -401,8 +413,9 @@ export default class SharesController {
         const metaFiles = fs.readdirSync(dirMetaNew, 'utf-8')
         manga.metaFiles = metaFiles.map((file) => path.join(dirMetaNew, file))
       }
+      return manga
     })
 
-    return response.json({ code: 200, message: '漫画列表获取成功', list: mangas, count: mangas.length })
+    return response.json({ code: 200, message: '漫画列表获取成功', list, count: list.length })
   }
 }

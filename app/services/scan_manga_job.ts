@@ -28,16 +28,18 @@ import { normalizeMetadataProfile } from './scan/scan_template_service.js'
 import { parseMetadataProfileConfig } from './scan/scan_config_service.js'
 import type { MetadataProfileConfig, MetadataSource } from './scan/scan_types.js'
 import ScanReportService from './scan/scan_report_service.js'
-type pathType = sqlPathType & { media: sqlMediaType }
+import { LibraryPathContext, type StorageRootLike } from './library_path_service.js'
+type PathRecord = sqlPathType & { media: sqlMediaType; storageRoot: StorageRootLike | null }
 const logModule = '[manga scan]'
 
 export default class ScanMangaJob {
   private pathId: number
-  private pathInfo: pathType | null | void = null
+  private pathInfo: PathRecord | null | void = null
   private mediaRecord: sqlMediaType | null | void = null
   private mangaRecord: any
   private chapterRecord: any
   private mangaPath: string
+  private storedMangaPath: string
   private mangaName: string
   private parentPath: string
   private cachePath: string = ''
@@ -56,6 +58,7 @@ export default class ScanMangaJob {
   private parsedMetadataConfig: MetadataProfileConfig | null = null
   private scanRunId?: number
   private reportService = new ScanReportService()
+  private libraryPath = new LibraryPathContext()
 
   constructor({
     pathId,
@@ -78,6 +81,7 @@ export default class ScanMangaJob {
   }) {
     this.pathId = pathId
     this.mangaPath = mangaPath
+    this.storedMangaPath = mangaPath
     this.mangaName = mangaName
     this.parentPath = parentPath || path.dirname(mangaPath)
     this.isCloudMedia = isCloudMedia
@@ -182,13 +186,13 @@ export default class ScanMangaJob {
       return !chapterListSql.some(
         (sqlItem: any) =>
           this.normalize_scan_path(sqlItem.chapterPath) ===
-          this.normalize_scan_path(item.chapterPath)
+          this.normalize_scan_path(this.libraryPath.toStored(item.chapterPath))
       )
     })
     const delChapterList = chapterListSql.filter((item: any) => {
       return !chapterList.some(
         (scanItem: any) =>
-          this.normalize_scan_path(scanItem.chapterPath) ===
+          this.normalize_scan_path(this.libraryPath.toStored(scanItem.chapterPath)) ===
           this.normalize_scan_path(item.chapterPath)
       )
     })
@@ -215,7 +219,7 @@ export default class ScanMangaJob {
         },
         pathId,
         chapterName: item.chapterName,
-        chapterPath: item.chapterPath,
+        chapterPath: this.libraryPath.toStored(item.chapterPath),
         browseType: this.mediaRecord!.browseType,
         subTitle: chapterSubTitle,
         chapterType: this.compress_type(item.chapterPath),
@@ -259,23 +263,21 @@ export default class ScanMangaJob {
 
   async run() {
     await this.runInternal()
-    await this.reportService.recordMangaCompleted(this.scanRunId, this.mangaName, this.mangaPath)
+    await this.reportService.recordMangaCompleted(this.scanRunId, this.mangaName, this.storedMangaPath)
   }
 
   private async runInternal() {
     const pathId = this.pathId
     this.pathInfo = await prisma.path
-      .findUnique({ where: { pathId }, include: { media: true } })
+      .findUnique({ where: { pathId }, include: { media: true, storageRoot: true } })
       .catch(async (e) => {
         await error_log(logModule, e.message)
       })
     this.mediaRecord = this.pathInfo?.media
-    const mangaPath = this.mangaPath
     const mangaName = this.mangaName
-    const parentPath = this.parentPath
     const reloadCover = get_config()?.scan?.reloadCover ?? 0
 
-    if (!this.pathInfo) {
+    if (!this.pathInfo || this.pathInfo.deleteFlag === 1) {
       await error_log(logModule, `pathId ${pathId}路径不存在`)
       throw new Error(`pathId ${pathId} 路径不存在`)
     }
@@ -283,6 +285,20 @@ export default class ScanMangaJob {
     if (!this.mediaRecord) {
       error_log(logModule, `pathId ${pathId}媒体库不存在`)
       throw new Error(`pathId ${pathId} 媒体库不存在`)
+    }
+
+    this.libraryPath = new LibraryPathContext(this.pathInfo)
+    const storedMangaPath = this.storedMangaPath
+    const parentPath = this.parentPath
+    const mangaPath = this.libraryPath.resolve(storedMangaPath)
+    this.mangaPath = mangaPath
+    this.parentPath = this.libraryPath.resolve(parentPath)
+    this.discoveredChapters = this.discoveredChapters.map(chapter => ({
+      ...chapter,
+      chapterPath: this.libraryPath.resolve(chapter.chapterPath),
+    }))
+    if (this.libraryPath.usesStorageRoot && !fs.existsSync(mangaPath)) {
+      throw new Error('漫画文件不存在或挂载尚未就绪')
     }
 
     this.cachePath = path_cache()
@@ -322,7 +338,7 @@ export default class ScanMangaJob {
       mangaName,
       subTitle,
       parentPath,
-      mangaPath,
+      mangaPath: storedMangaPath,
       mangaCover: '',
       browseType: this.mediaRecord.browseType,
       direction: this.mediaRecord.direction,
@@ -333,7 +349,8 @@ export default class ScanMangaJob {
     // 检查库中是否存在此漫画
     this.mangaRecord = await prisma.manga.findFirst({
       where: {
-        AND: [{ mangaPath }, { mediaId: this.pathInfo.mediaId }],
+        mangaPath: storedMangaPath,
+        ...(this.libraryPath.usesStorageRoot ? { pathId } : { mediaId: this.pathInfo.mediaId }),
       },
     })
 
@@ -391,7 +408,7 @@ export default class ScanMangaJob {
         },
         pathId,
         chapterName: mangaName,
-        chapterPath: mangaPath,
+        chapterPath: storedMangaPath,
         browseType: this.mediaRecord.browseType,
         subTitle: subTitle,
         chapterType: this.compress_type(mangaPath),
@@ -458,13 +475,13 @@ export default class ScanMangaJob {
         return !chapterListSql.some(
           (sqlItem: any) =>
             this.normalize_scan_path(sqlItem.chapterPath) ===
-            this.normalize_scan_path(item.chapterPath)
+            this.normalize_scan_path(this.libraryPath.toStored(item.chapterPath))
         )
       })
       const delChapterList = chapterListSql.filter((item: any) => {
         return !chapterList.some(
           (scanItem: any) =>
-            this.normalize_scan_path(scanItem.chapterPath) ===
+            this.normalize_scan_path(this.libraryPath.toStored(scanItem.chapterPath)) ===
             this.normalize_scan_path(item.chapterPath)
         )
       })
@@ -492,7 +509,7 @@ export default class ScanMangaJob {
           },
           pathId,
           chapterName: item.chapterName,
-          chapterPath: item.chapterPath,
+          chapterPath: this.libraryPath.toStored(item.chapterPath),
           browseType: this.mediaRecord.browseType,
           subTitle: subTitle,
           chapterType: this.compress_type(item.chapterPath),
@@ -617,10 +634,10 @@ export default class ScanMangaJob {
     // 如果最新章节的更新时间 大于 章节文件夹更新时间 则不需要重新扫描
     if (latestChapter) {
       const latestChapterUpdateTime = latestChapter.updateTime
-      if (!fs.existsSync(this.mangaRecord.mangaPath)) {
+      if (!fs.existsSync(this.mangaPath)) {
         throw new Error('漫画路径不存在')
       }
-      const mangaFolderUpdateTime = fs.statSync(this.mangaRecord.mangaPath).mtime
+      const mangaFolderUpdateTime = fs.statSync(this.mangaPath).mtime
       return mangaFolderUpdateTime > latestChapterUpdateTime
     }
 
@@ -729,7 +746,7 @@ export default class ScanMangaJob {
             metaName,
             metaContent,
             description,
-            metaFile: filePath,
+            metaFile: this.libraryPath.toStoredDataPath(filePath),
           },
         })
       }
@@ -808,7 +825,7 @@ export default class ScanMangaJob {
 
     // 云漫画不扫描 series.json
     if (this.isCloudMedia) return
-    const mangaPath = this.mangaRecord.mangaPath
+    const mangaPath = this.mangaPath
     if (!is_directory(mangaPath)) return
 
     const fils = fs.readdirSync(mangaPath)
@@ -1101,6 +1118,7 @@ export default class ScanMangaJob {
 
     // 不复制封面,直接使用源文件 网盘库必须copy封面
     const copyPoster =
+      this.libraryPath.usesStorageRoot ||
       // 压缩包内有封面
       hasPosterInZip ||
       // 云盘库 且没有移植元数据
@@ -1109,19 +1127,20 @@ export default class ScanMangaJob {
       fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
     // 写入漫画与章节封面
+    const storedSourcePoster = this.libraryPath.toStoredDataPath(sourcePoster)
     await prisma.chapter.update({
       where: { chapterId: this.chapterRecord.chapterId },
-      data: { chapterCover: copyPoster ? posterName : sourcePoster },
+      data: { chapterCover: copyPoster ? posterName : storedSourcePoster },
     })
-    this.chapterRecord.chapterCover = copyPoster ? posterName : sourcePoster
+    this.chapterRecord.chapterCover = copyPoster ? posterName : storedSourcePoster
 
     if (!this.mangaRecord.mangaCover) {
       // 直接使用update的返回值会丢失id 才用补充赋值的形式补全数据
       await prisma.manga.update({
         where: { mangaId: this.mangaRecord.mangaId },
-        data: { mangaCover: copyPoster ? posterName : sourcePoster },
+        data: { mangaCover: copyPoster ? posterName : storedSourcePoster },
       })
-      this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
+      this.mangaRecord.mangaCover = copyPoster ? posterName : storedSourcePoster
     }
 
     // 复制封面到poster目录 使用单独任务队列
@@ -1207,13 +1226,16 @@ export default class ScanMangaJob {
     // 网盘库必须copy封面
     // 或者封面太大需要压缩
     const copyPoster =
-      (this.isCloudMedia && !this.hasDataMeta) || fs.statSync(sourcePoster).size > maxSizeKB * 1024
+      this.libraryPath.usesStorageRoot ||
+      (this.isCloudMedia && !this.hasDataMeta) ||
+      fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
+    const storedSourcePoster = this.libraryPath.toStoredDataPath(sourcePoster)
     await prisma.manga.update({
       where: { mangaId: this.mangaRecord.mangaId },
-      data: { mangaCover: copyPoster ? posterName : sourcePoster },
+      data: { mangaCover: copyPoster ? posterName : storedSourcePoster },
     })
-    this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
+    this.mangaRecord.mangaCover = copyPoster ? posterName : storedSourcePoster
 
     // 复制封面到poster目录 使用单独任务队列
     if (copyPoster) {
@@ -1230,11 +1252,12 @@ export default class ScanMangaJob {
    * @param maxSizeKB 压缩目标图片大小
    */
   copy_poster(inputPath: string, outputPath: string, maxSizeKB: number) {
-    addTask({
+    return addTask({
       taskName: `scan_path_${this.pathId}`,
       command: 'copyPoster',
       args: {
-        inputPath,
+        inputPath: this.libraryPath.toStoredDataPath(inputPath),
+        pathId: this.libraryPath.usesStorageRoot ? this.pathId : undefined,
         outputPath,
         maxSizeKB,
       },
@@ -1260,7 +1283,7 @@ export default class ScanMangaJob {
     }
 
     const comicinfo = await extract_metadata(
-      this.chapterRecord.chapterPath,
+      this.libraryPath.resolveDataPath(this.chapterRecord.chapterPath),
       this.metadata_config().maxFileBytes
     )
 

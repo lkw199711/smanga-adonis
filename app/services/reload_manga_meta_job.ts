@@ -20,6 +20,7 @@ import { Unrar } from '#utils/unrar'
 import { Un7z } from '#utils/un7z'
 import { metaKeyType } from '../type/index.js'
 import { comicinfo_transform } from '#utils/meta'
+import { LibraryPathContext, libraryPathContextForPathId } from './library_path_service.js'
 
 export default class ReloadMangaMetaJob {
   private mangaId: number
@@ -33,6 +34,7 @@ export default class ReloadMangaMetaJob {
   private smangaMetaFolder: string = ''
   private hasDataMeta: boolean = false
   private alreadyExistManga: boolean = false
+  private libraryPath = new LibraryPathContext()
   constructor({ mangaId }: { mangaId: number }) {
     this.mangaId = mangaId
     const config = get_config()
@@ -56,6 +58,9 @@ export default class ReloadMangaMetaJob {
     } else {
       this.alreadyExistManga = true
     }
+
+    this.libraryPath = await libraryPathContextForPathId(this.mangaRecord.pathId)
+    this.mangaRecord.mangaPath = this.libraryPath.resolveDataPath(this.mangaRecord.mangaPath)
 
     this.mediaRecord = await prisma.media
       .findUnique({ where: { mediaId: this.mangaRecord.mediaId } })
@@ -82,11 +87,14 @@ export default class ReloadMangaMetaJob {
       where: { mangaId: this.mangaId },
     })
 
-    sqlChapters.forEach(async (chapter) => {
-      this.chapterRecord = chapter
+    for (const chapter of sqlChapters) {
+      this.chapterRecord = {
+        ...chapter,
+        chapterPath: this.libraryPath.resolveDataPath(chapter.chapterPath),
+      }
       await this.chapter_poster(this.chapterRecord.chapterPath)
       await this.meta_scan_comicinfo()
-    })
+    }
 
     return true
   }
@@ -182,7 +190,7 @@ export default class ReloadMangaMetaJob {
             metaName,
             metaContent,
             description,
-            metaFile: filePath,
+            metaFile: this.libraryPath.toStoredDataPath(filePath),
           },
         })
       }
@@ -308,17 +316,21 @@ export default class ReloadMangaMetaJob {
     // 网盘库必须copy封面
     // 或者封面太大需要压缩
     const copyPoster =
-      (this.isCloudMedia && !this.hasDataMeta) || fs.statSync(sourcePoster).size > maxSizeKB * 1024
+      this.libraryPath.usesStorageRoot ||
+      (this.isCloudMedia && !this.hasDataMeta) ||
+      fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
     await prisma.manga.update({
       where: { mangaId: this.mangaRecord.mangaId },
-      data: { mangaCover: copyPoster ? posterName : sourcePoster },
+      data: {
+        mangaCover: copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster),
+      },
     })
     this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
 
     // 复制封面到poster目录 使用单独任务队列
     if (copyPoster) {
-      this.copy_poster(sourcePoster, posterName, maxSizeKB)
+      await this.copy_poster(sourcePoster, posterName, maxSizeKB)
     }
 
     return copyPoster ? posterName : sourcePoster
@@ -469,6 +481,7 @@ export default class ReloadMangaMetaJob {
 
     // 不复制封面,直接使用源文件 网盘库必须copy封面
     const copyPoster =
+      this.libraryPath.usesStorageRoot ||
       // 压缩包内有封面
       hasPosterInZip ||
       // 云盘库 且没有移植元数据
@@ -479,7 +492,9 @@ export default class ReloadMangaMetaJob {
     // 写入漫画与章节封面
     await prisma.chapter.update({
       where: { chapterId: this.chapterRecord.chapterId },
-      data: { chapterCover: copyPoster ? posterName : sourcePoster },
+      data: {
+        chapterCover: copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster),
+      },
     })
     this.chapterRecord.chapterCover = copyPoster ? posterName : sourcePoster
 
@@ -487,14 +502,16 @@ export default class ReloadMangaMetaJob {
       // 直接使用update的返回值会丢失id 才用补充赋值的形式补全数据
       await prisma.manga.update({
         where: { mangaId: this.mangaRecord.mangaId },
-        data: { mangaCover: copyPoster ? posterName : sourcePoster },
+        data: {
+          mangaCover: copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster),
+        },
       })
       this.mangaRecord.mangaCover = copyPoster ? posterName : sourcePoster
     }
 
     // 复制封面到poster目录 使用单独任务队列
     if (copyPoster) {
-      this.copy_poster(sourcePoster, posterName, maxSizeKB)
+      await this.copy_poster(sourcePoster, posterName, maxSizeKB)
     }
 
     return copyPoster ? posterName : sourcePoster
@@ -666,11 +683,12 @@ export default class ReloadMangaMetaJob {
    * @param maxSizeKB 压缩目标图片大小
    */
   copy_poster(inputPath: string, outputPath: string, maxSizeKB: number) {
-    addTask({
+    return addTask({
       taskName: `reload_manga_meta${this.mangaRecord.mangaId}`,
       command: 'copyPoster',
       args: {
-        inputPath,
+        inputPath: this.libraryPath.toStoredDataPath(inputPath),
+        pathId: this.libraryPath.usesStorageRoot ? this.mangaRecord.pathId : undefined,
         outputPath,
         maxSizeKB,
       },

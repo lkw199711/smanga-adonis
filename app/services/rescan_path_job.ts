@@ -12,6 +12,10 @@ export default class RescanPathJob {
     await this.reportService.markRunning(this.args.scanRunId)
     const pathRecord = await prisma.path.findUnique({ where: { pathId: this.args.pathId } })
     if (!pathRecord) throw new Error(`路径 ${this.args.pathId} 不存在`)
+    if (pathRecord.storageRootId) {
+      await new ScanPathJob({ ...this.args, rebuild: true }).run()
+      return
+    }
 
     const mangas = await prisma.manga.findMany({
       where: { pathId: this.args.pathId },

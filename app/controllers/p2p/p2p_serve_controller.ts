@@ -15,6 +15,7 @@ import fs from 'fs'
 import path from 'path'
 import { image_files, is_img } from '#utils/index'
 import { log_p2p_error } from '#utils/p2p_log'
+import { LibraryPathContext, libraryPathContextForPathId } from '#services/library_path_service'
 import {
   resolvePathChapterByRemoteId,
   resolvePathMangaByRemoteId,
@@ -303,11 +304,16 @@ export default class P2PServeController {
       const mangas = await prisma.manga.findMany({
         where: { mediaId },
         orderBy: { mangaName: 'asc' },
+        include: { path: { include: { storageRoot: true } } },
+      })
+      const list = mangas.map(({ path: pathRecord, ...manga }) => {
+        const libraryPath = new LibraryPathContext(pathRecord)
+        return { ...manga, mangaPath: libraryPath.resolve(manga.mangaPath) }
       })
       console.log(
         `[p2p-serve] mangas 200 | caller=${callerNodeId} groupNo=${groupNo} mediaId=${mediaId} count=${mangas.length}`
       )
-      return response.json({ code: 200, message: '', list: mangas, count: mangas.length })
+      return response.json({ code: 200, message: '', list, count: list.length })
     } catch (e: any) {
       log_p2p_error('serve.mangas', e)
       return response.status(500).json({ code: 500, message: e?.message || 'mangas 查询失败' })
@@ -349,6 +355,10 @@ export default class P2PServeController {
         where: { mangaId },
         orderBy: { chapterNumber: 'asc' },
       })
+      const libraryPath = await libraryPathContextForPathId(manga.pathId)
+      for (const chapter of chapters) {
+        chapter.chapterPath = libraryPath.resolve(chapter.chapterPath)
+      }
       console.log(
         `[p2p-serve] chapters 200 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId} count=${chapters.length}`
       )
@@ -385,7 +395,8 @@ export default class P2PServeController {
           .json({ code: 404, message: `chapter not found (chapterId=${chapterId})`, status: 'not found' })
       }
 
-      const images = image_files(chapter.chapterPath)
+      const libraryPath = await libraryPathContextForPathId(chapter.pathId)
+      const images = image_files(libraryPath.resolve(chapter.chapterPath))
       console.log(
         `[p2p-serve] images 200 | caller=${callerNodeId} groupNo=${groupNo} ` +
         `chapterId=${chapterId} path=${chapter.chapterPath} count=${images.length}`
@@ -446,7 +457,8 @@ export default class P2PServeController {
           .json({ code: 404, message: `manga not found (mangaId=${mangaId})`, status: 'not found' })
       }
 
-      const mangaPath = manga.mangaPath
+      const libraryPath = await libraryPathContextForPathId(manga.pathId)
+      const mangaPath = libraryPath.resolve(manga.mangaPath)
       if (!fs.existsSync(mangaPath)) {
         console.warn(`[p2p-serve] tree 404 漫画路径不存在 | mangaId=${mangaId} path=${mangaPath}`)
         return response
@@ -525,7 +537,7 @@ export default class P2PServeController {
         data: {
           mangaId: manga.mangaId,
           mangaName: manga.mangaName,
-          mangaPath: manga.mangaPath,
+          mangaPath,
           isSingleFile,
           rootDir,
           parentDir: mangaParentDir,
@@ -582,7 +594,8 @@ export default class P2PServeController {
           .json({ code: 404, message: `chapter not found (chapterId=${chapterId})`, status: 'not found' })
       }
 
-      const chapterPath = chapter.chapterPath
+      const libraryPath = await libraryPathContextForPathId(chapter.pathId)
+      const chapterPath = libraryPath.resolve(chapter.chapterPath)
       if (!fs.existsSync(chapterPath)) {
         return response
           .status(404)
@@ -641,7 +654,7 @@ export default class P2PServeController {
         data: {
           chapterId: chapter.chapterId,
           chapterName: chapter.chapterName,
-          chapterPath: chapter.chapterPath,
+          chapterPath,
           isSingleFile,
           rootDir,
           parentDir: chParentDir,

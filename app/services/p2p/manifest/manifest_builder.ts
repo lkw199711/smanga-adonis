@@ -11,6 +11,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import prisma from '#start/prisma'
 import p2pIdentityService from '#services/p2p/p2p_identity_service'
+import { LibraryPathContext, type PathWithStorageRoot } from '#services/library_path_service'
 import { resolvePathShareMangas, type ShareLike } from '../path_share_resolver.js'
 import {
   PAYLOAD_MAX_BYTES,
@@ -106,6 +107,7 @@ async function buildDbBackedManifestMangas(
     describe: string | null
     author: string | null
     chapterCount: number
+    path: PathWithStorageRoot
   }>
 ): Promise<ManifestManga[]> {
   const mangaIds = mangaList.map((m) => m.mangaId)
@@ -132,15 +134,19 @@ async function buildDbBackedManifestMangas(
   }
 
   return mangaList.map((manga) => {
+    const libraryPath = new LibraryPathContext(manga.path)
     const cs = chaptersByManga.get(manga.mangaId) || []
-    const manifestChapters: ManifestChapter[] = cs.map((chapter: (typeof chapters)[number]) => ({
-      remoteChapterId: chapter.chapterId,
-      chapterName: chapter.chapterName,
-      chapterType: chapter.chapterType,
-      size: estimateChapterSize(chapter),
-      imageCount: chapter.picNum || 0,
-      tree: scanChapterTree(chapter.chapterPath),
-    }))
+    const manifestChapters: ManifestChapter[] = cs.map((chapter) => {
+      const chapterPath = libraryPath.resolve(chapter.chapterPath)
+      return {
+        remoteChapterId: chapter.chapterId,
+        chapterName: chapter.chapterName,
+        chapterType: chapter.chapterType,
+        size: estimateChapterSize({ ...chapter, chapterPath }),
+        imageCount: chapter.picNum || 0,
+        tree: scanChapterTree(chapterPath),
+      }
+    })
 
     return {
       remoteMangaId: manga.mangaId,
@@ -256,6 +262,7 @@ export async function buildShareManifest(share: {
         describe: true,
         author: true,
         chapterCount: true,
+        path: { include: { storageRoot: true } },
       },
     })
 
@@ -284,6 +291,7 @@ export async function buildShareManifest(share: {
         describe: true,
         author: true,
         chapterCount: true,
+        path: { include: { storageRoot: true } },
       },
     })
     if (!manga) return null

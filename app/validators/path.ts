@@ -61,6 +61,7 @@ export const createPathValidator = vine.compile(
   vine.object({
     pathContent: vine.string().trim().minLength(1),
     mediaId: vine.number().positive(),
+    storageRootId: vine.number().positive().optional(),
     autoScan: vine.number().optional(),
     include: vine.string().optional(),
     exclude: vine.string().optional(),
@@ -75,6 +76,7 @@ export const previewPathValidator = vine.compile(
   vine.object({
     pathContent: vine.string().trim().minLength(1),
     mediaId: vine.number().positive().optional(),
+    storageRootId: vine.number().positive().optional(),
     autoScan: vine.number().optional(),
     include: vine.string().optional(),
     exclude: vine.string().optional(),
