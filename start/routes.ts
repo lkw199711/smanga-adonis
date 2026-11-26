@@ -44,6 +44,7 @@ const ScanRunsController = () => import('#controllers/scan_runs_controller')
 const ScanTemplatesController = () => import('#controllers/scan_templates_controller')
 const MediaController = () => import('#controllers/media_controller')
 const PathsController = () => import('#controllers/paths_controller')
+const StorageRootsController = () => import('#controllers/storage_roots_controller')
 const BookmarksController = () => import('#controllers/bookmarks_controller')
 const TagsController = () => import('#controllers/tags_controller')
 const MangaController = () => import('#controllers/manga_controller')
@@ -193,6 +194,15 @@ router.delete('/media/:mediaId', [MediaController, 'destroy'])
 router.delete('/media/:mediaIds/batch', [MediaController, 'destroy_batch'])
 router.put('/media-cover/:mediaId', [MediaController, 'poster'])
 router.put('/media/:mediaId/scan', [MediaController, 'scan'])
+
+// 存储根
+router.get('/storage-root', [StorageRootsController, 'index'])
+router.post('/storage-root/check', [StorageRootsController, 'checkPath'])
+router.get('/storage-root/:storageRootId', [StorageRootsController, 'show'])
+router.post('/storage-root', [StorageRootsController, 'create'])
+router.put('/storage-root/:storageRootId', [StorageRootsController, 'update'])
+router.post('/storage-root/:storageRootId/check', [StorageRootsController, 'check'])
+router.delete('/storage-root/:storageRootId', [StorageRootsController, 'destroy'])
 
 // 路径
 router.get('/path', [PathsController, 'index'])

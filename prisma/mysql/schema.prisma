@@ -161,38 +161,38 @@ model login {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model manga {
-  mangaId      Int        @id @default(autoincrement()) @db.UnsignedInt
-  media        media      @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int        @db.UnsignedInt
-  path         path       @relation(fields: [pathId], references: [pathId])
-  pathId       Int        @db.UnsignedInt
-  mangaName    String     @db.VarChar(191)
-  mangaPath    String     @db.VarChar(191)
-  parentPath   String?    @db.VarChar(191)
-  mangaCover   String?    @db.VarChar(191)
-  mangaNumber  String?    @db.VarChar(191)
-  chapterCount Int        @default(0) @db.UnsignedInt
-  browseType   String     @default("flow") @db.VarChar(191)
-  direction    Int        @default(1) @db.UnsignedInt
-  removeFirst  Int        @default(0) @db.UnsignedInt
-  title        String?    @db.VarChar(191)
-  subTitle     String?    @db.VarChar(191)
-  author       String?    @db.VarChar(191)
-  describe     String?    @db.VarChar(191)
-  publishDate  DateTime?  @db.Date
-  deleteFlag   Int        @default(0)
-  createTime   DateTime   @default(now()) @db.DateTime(6)
-  updateTime   DateTime   @default(now()) @updatedAt @db.DateTime(6)
-  chapterUpdate DateTime  @default(now()) @db.DateTime(6)
-  latests      latest[]
-  historys     history[]
-  chapters     chapter[]
-  collects     collect[]
-  bookmarks    bookmark[]
-  compress     compress[]
-  metas        meta[]
-  mangaTags    mangaTag[]
-  shares       share[]
+  mangaId       Int        @id @default(autoincrement()) @db.UnsignedInt
+  media         media      @relation(fields: [mediaId], references: [mediaId])
+  mediaId       Int        @db.UnsignedInt
+  path          path       @relation(fields: [pathId], references: [pathId])
+  pathId        Int        @db.UnsignedInt
+  mangaName     String     @db.VarChar(191)
+  mangaPath     String     @db.VarChar(191)
+  parentPath    String?    @db.VarChar(191)
+  mangaCover    String?    @db.VarChar(191)
+  mangaNumber   String?    @db.VarChar(191)
+  chapterCount  Int        @default(0) @db.UnsignedInt
+  browseType    String     @default("flow") @db.VarChar(191)
+  direction     Int        @default(1) @db.UnsignedInt
+  removeFirst   Int        @default(0) @db.UnsignedInt
+  title         String?    @db.VarChar(191)
+  subTitle      String?    @db.VarChar(191)
+  author        String?    @db.VarChar(191)
+  describe      String?    @db.VarChar(191)
+  publishDate   DateTime?  @db.Date
+  deleteFlag    Int        @default(0)
+  createTime    DateTime   @default(now()) @db.DateTime(6)
+  updateTime    DateTime   @default(now()) @updatedAt @db.DateTime(6)
+  chapterUpdate DateTime   @default(now()) @db.DateTime(6)
+  latests       latest[]
+  historys      history[]
+  chapters      chapter[]
+  collects      collect[]
+  bookmarks     bookmark[]
+  compress      compress[]
+  metas         meta[]
+  mangaTags     mangaTag[]
+  shares        share[]
 
   @@unique([mediaId, mangaPath], map: "oname")
 }
@@ -248,6 +248,26 @@ model mediaPermisson {
   @@map("mediaPermisson")
 }
 
+model storageRoot {
+  storageRootId    Int       @id @default(autoincrement()) @db.UnsignedInt
+  rootKey          String    @unique(map: "uniqueStorageRootKey") @db.VarChar(64)
+  rootName         String    @db.VarChar(100)
+  providerKey      String    @default("custom") @db.VarChar(64)
+  iconKey          String    @default("storage-folder") @db.VarChar(64)
+  rootPath         String    @db.Text
+  enabled          Int       @default(1) @db.UnsignedInt
+  description      String?   @db.Text
+  lastCheckStatus  String    @default("unknown") @db.VarChar(32)
+  lastCheckTime    DateTime? @db.DateTime(6)
+  lastCheckMessage String?   @db.Text
+  deleteFlag       Int       @default(0)
+  createTime       DateTime  @default(now()) @db.DateTime(6)
+  updateTime       DateTime  @default(now()) @updatedAt @db.DateTime(6)
+  paths            path[]
+
+  @@index([deleteFlag], map: "storageRootDeleteFlag")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model meta {
   metaId      Int      @id @default(autoincrement()) @db.UnsignedInt
@@ -265,25 +285,28 @@ model meta {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model path {
-  pathId       Int       @id @default(autoincrement()) @db.UnsignedInt
-  media        media     @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int       @db.UnsignedInt
-  pathType     String?   @db.VarChar(191)
-  autoScan     Int       @default(0) @db.UnsignedInt
-  include      String?   @db.VarChar(191)
-  exclude      String?   @db.VarChar(191)
-  scanTemplateKey       String?   @db.VarChar(64)
-  scanTemplateConfig    String?   @db.Text
-  metadataProfileKey    String?   @db.VarChar(64)
-  metadataProfileConfig String?   @db.Text
-  lastScanTime DateTime? @db.DateTime(0)
-  deleteFlag   Int       @default(0)
-  createTime   DateTime  @default(now()) @db.DateTime(6)
-  updateTime   DateTime  @default(now()) @updatedAt @db.DateTime(6)
-  pathContent  String    @db.VarChar(191)
-  mangas       manga[]
+  pathId                Int          @id @default(autoincrement()) @db.UnsignedInt
+  media                 media        @relation(fields: [mediaId], references: [mediaId])
+  mediaId               Int          @db.UnsignedInt
+  storageRootId         Int?         @db.UnsignedInt
+  storageRoot           storageRoot? @relation(fields: [storageRootId], references: [storageRootId])
+  pathType              String?      @db.VarChar(191)
+  autoScan              Int          @default(0) @db.UnsignedInt
+  include               String?      @db.VarChar(191)
+  exclude               String?      @db.VarChar(191)
+  scanTemplateKey       String?      @db.VarChar(64)
+  scanTemplateConfig    String?      @db.Text
+  metadataProfileKey    String?      @db.VarChar(64)
+  metadataProfileConfig String?      @db.Text
+  lastScanTime          DateTime?    @db.DateTime(0)
+  deleteFlag            Int          @default(0)
+  createTime            DateTime     @default(now()) @db.DateTime(6)
+  updateTime            DateTime     @default(now()) @updatedAt @db.DateTime(6)
+  pathContent           String       @db.VarChar(191)
+  mangas                manga[]
 
   @@unique([mediaId, pathContent], map: "opath")
+  @@index([storageRootId], map: "pathStorageRoot")
 }
 
 model scanRun {
@@ -561,28 +584,28 @@ model p2p_peer_cache {
 }
 
 model p2p_transfer {
-  p2pTransferId   Int       @id @default(autoincrement()) @db.UnsignedInt
-  group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
-  p2pGroupId      Int       @db.UnsignedInt
-  groupNo         String    @default("") @db.VarChar(64)
-  peerNodeId      String    @default("") @db.VarChar(64)
-  transferType    String    @db.VarChar(32)
-  remoteMediaId   Int?      @db.UnsignedInt
-  remoteMangaId   Int?      @db.UnsignedInt
-  remoteChapterId Int?      @db.UnsignedInt
-  remoteName      String    @db.VarChar(191)
-  receivedPath    String    @db.VarChar(500)
-  status          String    @default("pending") @db.VarChar(32)
-  progress        Int       @default(0) @db.UnsignedInt
-  totalBytes      BigInt?   @db.UnsignedBigInt
-  downloadedBytes BigInt    @default(0) @db.UnsignedBigInt
-  speedBps        Int       @default(0) @db.UnsignedInt
-  error           String?   @db.Text
-  connectMode     String?   @db.VarChar(32)
-  createTime      DateTime  @default(now()) @db.DateTime(6)
-  updateTime      DateTime  @default(now()) @updatedAt @db.DateTime(6)
-  startTime       DateTime? @db.DateTime(6)
-  endTime         DateTime? @db.DateTime(6)
+  p2pTransferId   Int                 @id @default(autoincrement()) @db.UnsignedInt
+  group           p2p_group           @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pGroupId      Int                 @db.UnsignedInt
+  groupNo         String              @default("") @db.VarChar(64)
+  peerNodeId      String              @default("") @db.VarChar(64)
+  transferType    String              @db.VarChar(32)
+  remoteMediaId   Int?                @db.UnsignedInt
+  remoteMangaId   Int?                @db.UnsignedInt
+  remoteChapterId Int?                @db.UnsignedInt
+  remoteName      String              @db.VarChar(191)
+  receivedPath    String              @db.VarChar(500)
+  status          String              @default("pending") @db.VarChar(32)
+  progress        Int                 @default(0) @db.UnsignedInt
+  totalBytes      BigInt?             @db.UnsignedBigInt
+  downloadedBytes BigInt              @default(0) @db.UnsignedBigInt
+  speedBps        Int                 @default(0) @db.UnsignedInt
+  error           String?             @db.Text
+  connectMode     String?             @db.VarChar(32)
+  createTime      DateTime            @default(now()) @db.DateTime(6)
+  updateTime      DateTime            @default(now()) @updatedAt @db.DateTime(6)
+  startTime       DateTime?           @db.DateTime(6)
+  endTime         DateTime?           @db.DateTime(6)
   tasks           p2p_transfer_task[]
 
   @@map("p2p_transfer")
@@ -590,26 +613,25 @@ model p2p_transfer {
 
 /// P2P 传输子任务追踪（用于多级任务编排）
 model p2p_transfer_task {
-  id           Int             @id @default(autoincrement()) @db.UnsignedInt
-  transfer     p2p_transfer    @relation(fields: [transferId], references: [p2pTransferId], onDelete: Cascade)
-  transferId   Int             @db.UnsignedInt @map("transfer_id")
-  parentKey    String?         @db.VarChar(255) @map("parent_key")
-  taskKey      String          @db.VarChar(255) @map("task_key")
-  taskType     String          @db.VarChar(64) @map("task_type")
-  queueJobId   Int?            @db.UnsignedInt @map("queue_job_id")
-  status       String          @default("pending") @db.VarChar(32) @map("status")
-  errorMessage String?         @db.Text @map("error_message")
-  startedAt    DateTime?       @db.DateTime(6) @map("started_at")
-  finishedAt   DateTime?       @db.DateTime(6) @map("finished_at")
-  createdAt    DateTime        @default(now()) @db.DateTime(6) @map("created_at")
-  updatedAt    DateTime        @default(now()) @updatedAt @db.DateTime(6) @map("updated_at")
+  id           Int          @id @default(autoincrement()) @db.UnsignedInt
+  transfer     p2p_transfer @relation(fields: [transferId], references: [p2pTransferId], onDelete: Cascade)
+  transferId   Int          @map("transfer_id") @db.UnsignedInt
+  parentKey    String?      @map("parent_key") @db.VarChar(255)
+  taskKey      String       @map("task_key") @db.VarChar(255)
+  taskType     String       @map("task_type") @db.VarChar(64)
+  queueJobId   Int?         @map("queue_job_id") @db.UnsignedInt
+  status       String       @default("pending") @map("status") @db.VarChar(32)
+  errorMessage String?      @map("error_message") @db.Text
+  startedAt    DateTime?    @map("started_at") @db.DateTime(6)
+  finishedAt   DateTime?    @map("finished_at") @db.DateTime(6)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.DateTime(6)
 
   @@unique([transferId, taskKey])
   @@index([transferId, status])
   @@index([queueJobId])
   @@map("p2p_transfer_task")
 }
-
 
 // ============================================================
 //  Tracker 角色(公网服务端数据) - 前缀 tracker_
@@ -719,23 +741,23 @@ model tracker_share_manifest {
   remoteMediaId          Int?          @db.UnsignedInt
   remoteMangaId          Int?          @db.UnsignedInt
 
-  version                BigInt        @db.UnsignedBigInt
-  contentHash            String        @db.VarChar(64)
-  payloadTruncated       Int           @default(0) @db.UnsignedInt
-  payloadSize            Int           @default(0) @db.UnsignedInt
+  version          BigInt @db.UnsignedBigInt
+  contentHash      String @db.VarChar(64)
+  payloadTruncated Int    @default(0) @db.UnsignedInt
+  payloadSize      Int    @default(0) @db.UnsignedInt
 
-  shareName              String        @db.VarChar(191)
-  coverUrl               String?       @db.VarChar(500)
-  coverSize              Int?          @db.UnsignedInt
-  describe               String?       @db.VarChar(500)
-  mangaCount             Int           @default(0) @db.UnsignedInt
-  chapterCount           Int           @default(0) @db.UnsignedInt
-  totalSize              BigInt?       @db.UnsignedBigInt
+  shareName    String  @db.VarChar(191)
+  coverUrl     String? @db.VarChar(500)
+  coverSize    Int?    @db.UnsignedInt
+  describe     String? @db.VarChar(500)
+  mangaCount   Int     @default(0) @db.UnsignedInt
+  chapterCount Int     @default(0) @db.UnsignedInt
+  totalSize    BigInt? @db.UnsignedBigInt
 
-  payload                String        @db.MediumText
+  payload String @db.MediumText
 
-  createTime             DateTime      @default(now()) @db.DateTime(6)
-  updateTime             DateTime      @default(now()) @updatedAt @db.DateTime(6)
+  createTime DateTime @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @updatedAt @db.DateTime(6)
 
   @@unique([trackerGroupId, nodeId, shareType, remoteMediaId, remoteMangaId], map: "uniqueShareManifest")
   @@index([trackerGroupId, updateTime], map: "idxShareManifestUpdate")
@@ -765,21 +787,21 @@ model p2p_peer_share_manifest {
   remoteMediaId          Int?      @db.UnsignedInt
   remoteMangaId          Int?      @db.UnsignedInt
 
-  version                BigInt    @db.UnsignedBigInt
-  contentHash            String    @db.VarChar(64)
-  payloadTruncated       Int       @default(0) @db.UnsignedInt
+  version          BigInt @db.UnsignedBigInt
+  contentHash      String @db.VarChar(64)
+  payloadTruncated Int    @default(0) @db.UnsignedInt
 
-  shareName              String    @db.VarChar(191)
-  coverUrl               String?   @db.VarChar(500)
-  describe               String?   @db.VarChar(500)
-  mangaCount             Int       @default(0) @db.UnsignedInt
-  chapterCount           Int       @default(0) @db.UnsignedInt
-  totalSize              BigInt?   @db.UnsignedBigInt
+  shareName    String  @db.VarChar(191)
+  coverUrl     String? @db.VarChar(500)
+  describe     String? @db.VarChar(500)
+  mangaCount   Int     @default(0) @db.UnsignedInt
+  chapterCount Int     @default(0) @db.UnsignedInt
+  totalSize    BigInt? @db.UnsignedBigInt
 
-  payload                String?   @db.MediumText
+  payload String? @db.MediumText
 
-  fetchTime              DateTime  @default(now()) @db.DateTime(6)
-  updateTime             DateTime  @default(now()) @updatedAt @db.DateTime(6)
+  fetchTime  DateTime @default(now()) @db.DateTime(6)
+  updateTime DateTime @default(now()) @updatedAt @db.DateTime(6)
 
   @@unique([p2pGroupId, ownerNodeId, shareType, remoteMediaId, remoteMangaId], map: "uniquePeerShareManifest")
   @@index([p2pGroupId, updateTime], map: "idxPeerShareManifestUpdate")

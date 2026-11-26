@@ -248,6 +248,26 @@ model mediaPermisson {
   @@map("mediaPermisson")
 }
 
+model storageRoot {
+  storageRootId    Int       @id @default(autoincrement())
+  rootKey          String    @unique(map: "uniqueStorageRootKey")
+  rootName         String
+  providerKey      String    @default("custom")
+  iconKey          String    @default("storage-folder")
+  rootPath         String
+  enabled          Int       @default(1)
+  description      String?
+  lastCheckStatus  String    @default("unknown")
+  lastCheckTime    DateTime?
+  lastCheckMessage String?
+  deleteFlag       Int       @default(0)
+  createTime       DateTime  @default(now())
+  updateTime       DateTime  @default(now()) @updatedAt
+  paths            path[]
+
+  @@index([deleteFlag], map: "storageRootDeleteFlag")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model meta {
   metaId      Int      @id @default(autoincrement())
@@ -265,29 +285,32 @@ model meta {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model path {
-  pathId       Int       @id @default(autoincrement())
-  mediaId      Int
-  pathType     String?
-  autoScan     Int       @default(0)
-  include      String?
-  exclude      String?
-  scanTemplateKey      String?
-  scanTemplateConfig   String?
-  metadataProfileKey   String?
+  pathId                Int          @id @default(autoincrement())
+  mediaId               Int
+  storageRootId         Int?
+  pathType              String?
+  autoScan              Int          @default(0)
+  include               String?
+  exclude               String?
+  scanTemplateKey       String?
+  scanTemplateConfig    String?
+  metadataProfileKey    String?
   metadataProfileConfig String?
-  lastScanTime DateTime?
-  deleteFlag   Int       @default(0)
-  createTime   DateTime  @default(now())
-  updateTime   DateTime  @default(now()) @updatedAt
-  pathContent  String
-  mangas       manga[]
-  media        media     @relation(fields: [mediaId], references: [mediaId])
+  lastScanTime          DateTime?
+  deleteFlag            Int          @default(0)
+  createTime            DateTime     @default(now())
+  updateTime            DateTime     @default(now()) @updatedAt
+  pathContent           String
+  mangas                manga[]
+  media                 media        @relation(fields: [mediaId], references: [mediaId])
+  storageRoot           storageRoot? @relation(fields: [storageRootId], references: [storageRootId])
 
   @@unique([mediaId, pathContent], map: "opath")
+  @@index([storageRootId], map: "pathStorageRoot")
 }
 
 model scanRun {
-  scanRunId      Int      @id @default(autoincrement())
+  scanRunId      Int       @id @default(autoincrement())
   runType        String
   triggerType    String
   status         String
@@ -300,11 +323,11 @@ model scanRun {
   error          String?
   startedAt      DateTime?
   finishedAt     DateTime?
-  expectedTasks  Int      @default(0)
-  completedTasks Int      @default(0)
-  failedTasks    Int      @default(0)
-  createTime     DateTime @default(now())
-  updateTime     DateTime @default(now()) @updatedAt
+  expectedTasks  Int       @default(0)
+  completedTasks Int       @default(0)
+  failedTasks    Int       @default(0)
+  createTime     DateTime  @default(now())
+  updateTime     DateTime  @default(now()) @updatedAt
 
   @@index([mediaId], map: "scanRunMedia")
   @@index([pathId], map: "scanRunPath")
@@ -390,12 +413,12 @@ model queue_failed_job {
 }
 
 model queue_worker {
-  worker_id    String   @id
+  worker_id    String    @id
   worker_group String
   mode         String
   queues       String?
-  status       String   @default("running")
-  started_at   DateTime @default(now())
+  status       String    @default("running")
+  started_at   DateTime  @default(now())
   heartbeat_at DateTime?
   stopped_at   DateTime?
   metadata     String?
@@ -499,18 +522,18 @@ model version {
 
 /// 本节点加入的群组(Tracker 数据的本地缓存)
 model p2p_group {
-  p2pGroupId   Int               @id @default(autoincrement())
-  groupNo      String            @unique(map: "uniqueP2pGroupNo")
-  groupName    String
-  describe     String?
-  ownerNodeId  String
-  isOwner      Int               @default(0)
-  trackerUrl   String
-  memberCount  Int               @default(0)
-  joinTime     DateTime          @default(now())
-  lastSyncTime DateTime          @default(now())
-  createTime   DateTime          @default(now())
-  updateTime   DateTime          @default(now()) @updatedAt
+  p2pGroupId         Int                       @id @default(autoincrement())
+  groupNo            String                    @unique(map: "uniqueP2pGroupNo")
+  groupName          String
+  describe           String?
+  ownerNodeId        String
+  isOwner            Int                       @default(0)
+  trackerUrl         String
+  memberCount        Int                       @default(0)
+  joinTime           DateTime                  @default(now())
+  lastSyncTime       DateTime                  @default(now())
+  createTime         DateTime                  @default(now())
+  updateTime         DateTime                  @default(now()) @updatedAt
   localShares        p2p_local_share[]
   peerCaches         p2p_peer_cache[]
   transfers          p2p_transfer[]
@@ -560,25 +583,25 @@ model p2p_peer_cache {
 
 /// P2P 传输任务
 model p2p_transfer {
-  p2pTransferId   Int       @id @default(autoincrement())
+  p2pTransferId   Int                 @id @default(autoincrement())
   p2pGroupId      Int
-  groupNo         String    @default("")
-  peerNodeId      String    @default("")
+  groupNo         String              @default("")
+  peerNodeId      String              @default("")
   transferType    String
   remoteMediaId   Int?
   remoteMangaId   Int?
   remoteChapterId Int?
   remoteName      String
   receivedPath    String
-  status          String    @default("pending")
-  progress        Int       @default(0)
+  status          String              @default("pending")
+  progress        Int                 @default(0)
   totalBytes      BigInt?
-  downloadedBytes BigInt    @default(0)
-  speedBps        Int       @default(0)
+  downloadedBytes BigInt              @default(0)
+  speedBps        Int                 @default(0)
   error           String?
   connectMode     String?
-  createTime      DateTime  @default(now())
-  updateTime      DateTime  @default(now()) @updatedAt
+  createTime      DateTime            @default(now())
+  updateTime      DateTime            @default(now()) @updatedAt
   startTime       DateTime?
   endTime         DateTime?
   group           p2p_group           @relation(fields: [p2pGroupId], references: [p2pGroupId])
@@ -589,19 +612,19 @@ model p2p_transfer {
 
 /// P2P 传输子任务追踪（用于多级任务编排）
 model p2p_transfer_task {
-  id           Int       @id @default(autoincrement())
+  id           Int          @id @default(autoincrement())
   transfer     p2p_transfer @relation(fields: [transferId], references: [p2pTransferId], onDelete: Cascade)
-  transferId   Int       @map("transfer_id")
-  parentKey    String?   @map("parent_key")
-  taskKey      String    @map("task_key")
-  taskType     String    @map("task_type")
-  queueJobId   Int?      @map("queue_job_id")
-  status       String    @default("pending") @map("status")
-  errorMessage String?   @map("error_message")
-  startedAt    DateTime? @map("started_at")
-  finishedAt   DateTime? @map("finished_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+  transferId   Int          @map("transfer_id")
+  parentKey    String?      @map("parent_key")
+  taskKey      String       @map("task_key")
+  taskType     String       @map("task_type")
+  queueJobId   Int?         @map("queue_job_id")
+  status       String       @default("pending") @map("status")
+  errorMessage String?      @map("error_message")
+  startedAt    DateTime?    @map("started_at")
+  finishedAt   DateTime?    @map("finished_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at")
 
   @@unique([transferId, taskKey])
   @@index([transferId, status])
@@ -634,18 +657,18 @@ model tracker_node {
 
 /// Tracker 上所有群组
 model tracker_group {
-  trackerGroupId Int                   @id @default(autoincrement())
-  groupNo        String                @unique(map: "uniqueTrackerGroupNo")
+  trackerGroupId Int                      @id @default(autoincrement())
+  groupNo        String                   @unique(map: "uniqueTrackerGroupNo")
   groupName      String
   describe       String?
   password       String
   ownerNodeId    String
-  maxMembers     Int                   @default(50)
-  memberCount    Int                   @default(1)
-  enable         Int                   @default(1)
-  createTime     DateTime              @default(now())
-  updateTime     DateTime              @default(now()) @updatedAt
-  owner          tracker_node          @relation("TrackerGroupOwner", fields: [ownerNodeId], references: [nodeId])
+  maxMembers     Int                      @default(50)
+  memberCount    Int                      @default(1)
+  enable         Int                      @default(1)
+  createTime     DateTime                 @default(now())
+  updateTime     DateTime                 @default(now()) @updatedAt
+  owner          tracker_node             @relation("TrackerGroupOwner", fields: [ownerNodeId], references: [nodeId])
   invites        tracker_invite[]
   memberships    tracker_membership[]
   shareIndexes   tracker_share_index[]
@@ -709,31 +732,31 @@ model tracker_share_index {
 
 /// 共享清单(tracker 端权威存储,最新最全)
 model tracker_share_manifest {
-  trackerShareManifestId Int           @id @default(autoincrement())
+  trackerShareManifestId Int    @id @default(autoincrement())
   trackerGroupId         Int
   nodeId                 String
-  shareType              String        @default("media")
+  shareType              String @default("media")
   remoteMediaId          Int?
   remoteMangaId          Int?
 
-  version                BigInt
-  contentHash            String
-  payloadTruncated       Int           @default(0)
-  payloadSize            Int           @default(0)
+  version          BigInt
+  contentHash      String
+  payloadTruncated Int    @default(0)
+  payloadSize      Int    @default(0)
 
-  shareName              String
-  coverUrl               String?
-  coverSize              Int?
-  describe               String?
-  mangaCount             Int           @default(0)
-  chapterCount           Int           @default(0)
-  totalSize              BigInt?
+  shareName    String
+  coverUrl     String?
+  coverSize    Int?
+  describe     String?
+  mangaCount   Int     @default(0)
+  chapterCount Int     @default(0)
+  totalSize    BigInt?
 
-  payload                String
+  payload String
 
-  createTime             DateTime      @default(now())
-  updateTime             DateTime      @default(now()) @updatedAt
-  group                  tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
+  createTime DateTime      @default(now())
+  updateTime DateTime      @default(now()) @updatedAt
+  group      tracker_group @relation(fields: [trackerGroupId], references: [trackerGroupId])
 
   @@unique([trackerGroupId, nodeId, shareType, remoteMediaId, remoteMangaId], map: "uniqueShareManifest")
   @@index([trackerGroupId, updateTime])
@@ -757,30 +780,30 @@ model p2p_local_share_manifest {
 
 /// 拉取端缓存的远端 manifest(用于版本比对与详情展示)
 model p2p_peer_share_manifest {
-  p2pPeerShareManifestId Int       @id @default(autoincrement())
+  p2pPeerShareManifestId Int    @id @default(autoincrement())
   p2pGroupId             Int
   ownerNodeId            String
-  shareType              String    @default("media")
+  shareType              String @default("media")
   remoteMediaId          Int?
   remoteMangaId          Int?
 
-  version                BigInt
-  contentHash            String
-  payloadTruncated       Int       @default(0)
+  version          BigInt
+  contentHash      String
+  payloadTruncated Int    @default(0)
 
-  shareName              String
-  coverUrl               String?
-  describe               String?
-  mangaCount             Int       @default(0)
-  chapterCount           Int       @default(0)
-  totalSize              BigInt?
+  shareName    String
+  coverUrl     String?
+  describe     String?
+  mangaCount   Int     @default(0)
+  chapterCount Int     @default(0)
+  totalSize    BigInt?
 
   /// 完整 payload(可选;摘要缓存可不存,详情按需调用 /p2p/peer/manifest 拉取)
-  payload                String?
+  payload String?
 
-  fetchTime              DateTime  @default(now())
-  updateTime             DateTime  @default(now()) @updatedAt
-  group                  p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  fetchTime  DateTime  @default(now())
+  updateTime DateTime  @default(now()) @updatedAt
+  group      p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
 
   @@unique([p2pGroupId, ownerNodeId, shareType, remoteMediaId, remoteMangaId], map: "uniquePeerShareManifest")
   @@index([p2pGroupId, updateTime])

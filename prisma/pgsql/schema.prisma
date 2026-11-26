@@ -161,38 +161,38 @@ model login {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model manga {
-  mangaId      Int        @id @default(autoincrement())
-  media        media      @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int
-  path         path       @relation(fields: [pathId], references: [pathId])
-  pathId       Int
-  mangaName    String
-  mangaPath    String
-  parentPath   String?
-  mangaCover   String?
-  mangaNumber  String?
-  chapterCount Int        @default(0)
-  browseType   String     @default("flow")
-  direction    Int        @default(1)
-  removeFirst  Int        @default(0)
-  title        String?
-  subTitle     String?
-  author       String?
-  describe     String?
-  publishDate  DateTime?  @db.Date
-  deleteFlag   Int        @default(0)
-  createTime   DateTime   @default(now())
-  updateTime   DateTime   @default(now()) @updatedAt
-  chapterUpdate DateTime  @default(now())
-  latests      latest[]
-  historys     history[]
-  chapters     chapter[]
-  collects     collect[]
-  bookmarks    bookmark[]
-  compress     compress[]
-  metas        meta[]
-  mangaTags    mangaTag[]
-  share        share[]
+  mangaId       Int        @id @default(autoincrement())
+  media         media      @relation(fields: [mediaId], references: [mediaId])
+  mediaId       Int
+  path          path       @relation(fields: [pathId], references: [pathId])
+  pathId        Int
+  mangaName     String
+  mangaPath     String
+  parentPath    String?
+  mangaCover    String?
+  mangaNumber   String?
+  chapterCount  Int        @default(0)
+  browseType    String     @default("flow")
+  direction     Int        @default(1)
+  removeFirst   Int        @default(0)
+  title         String?
+  subTitle      String?
+  author        String?
+  describe      String?
+  publishDate   DateTime?  @db.Date
+  deleteFlag    Int        @default(0)
+  createTime    DateTime   @default(now())
+  updateTime    DateTime   @default(now()) @updatedAt
+  chapterUpdate DateTime   @default(now())
+  latests       latest[]
+  historys      history[]
+  chapters      chapter[]
+  collects      collect[]
+  bookmarks     bookmark[]
+  compress      compress[]
+  metas         meta[]
+  mangaTags     mangaTag[]
+  share         share[]
 
   @@unique([mediaId, mangaPath], map: "oname")
 }
@@ -247,6 +247,26 @@ model mediaPermisson {
   @@map("mediaPermisson")
 }
 
+model storageRoot {
+  storageRootId    Int       @id @default(autoincrement())
+  rootKey          String    @unique(map: "uniqueStorageRootKey")
+  rootName         String
+  providerKey      String    @default("custom")
+  iconKey          String    @default("storage-folder")
+  rootPath         String
+  enabled          Int       @default(1)
+  description      String?
+  lastCheckStatus  String    @default("unknown")
+  lastCheckTime    DateTime?
+  lastCheckMessage String?
+  deleteFlag       Int       @default(0)
+  createTime       DateTime  @default(now())
+  updateTime       DateTime  @default(now()) @updatedAt
+  paths            path[]
+
+  @@index([deleteFlag], map: "storageRootDeleteFlag")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model meta {
   metaId      Int      @id @default(autoincrement())
@@ -264,25 +284,28 @@ model meta {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations
 model path {
-  pathId       Int       @id @default(autoincrement())
-  media        media     @relation(fields: [mediaId], references: [mediaId])
-  mediaId      Int
-  pathType     String?
-  autoScan     Int       @default(0)
-  include      String?
-  exclude      String?
+  pathId                Int          @id @default(autoincrement())
+  media                 media        @relation(fields: [mediaId], references: [mediaId])
+  mediaId               Int
+  storageRootId         Int?
+  storageRoot           storageRoot? @relation(fields: [storageRootId], references: [storageRootId])
+  pathType              String?
+  autoScan              Int          @default(0)
+  include               String?
+  exclude               String?
   scanTemplateKey       String?
   scanTemplateConfig    String?
   metadataProfileKey    String?
   metadataProfileConfig String?
-  lastScanTime DateTime?
-  deleteFlag   Int       @default(0)
-  createTime   DateTime  @default(now())
-  updateTime   DateTime  @default(now()) @updatedAt
-  pathContent  String
-  mangas       manga[]
+  lastScanTime          DateTime?
+  deleteFlag            Int          @default(0)
+  createTime            DateTime     @default(now())
+  updateTime            DateTime     @default(now()) @updatedAt
+  pathContent           String
+  mangas                manga[]
 
   @@unique([mediaId, pathContent], map: "opath")
+  @@index([storageRootId], map: "pathStorageRoot")
 }
 
 model scanRun {
@@ -389,12 +412,12 @@ model queue_failed_job {
 }
 
 model queue_worker {
-  worker_id    String   @id
+  worker_id    String    @id
   worker_group String
   mode         String
   queues       Json?
-  status       String   @default("running")
-  started_at   DateTime @default(now())
+  status       String    @default("running")
+  started_at   DateTime  @default(now())
   heartbeat_at DateTime?
   stopped_at   DateTime?
   metadata     Json?
@@ -560,26 +583,26 @@ model p2p_peer_cache {
 }
 
 model p2p_transfer {
-  p2pTransferId   Int       @id @default(autoincrement())
-  group           p2p_group @relation(fields: [p2pGroupId], references: [p2pGroupId])
+  p2pTransferId   Int                 @id @default(autoincrement())
+  group           p2p_group           @relation(fields: [p2pGroupId], references: [p2pGroupId])
   p2pGroupId      Int
-  groupNo         String    @default("")
-  peerNodeId      String    @default("")
+  groupNo         String              @default("")
+  peerNodeId      String              @default("")
   transferType    String
   remoteMediaId   Int?
   remoteMangaId   Int?
   remoteChapterId Int?
   remoteName      String
   receivedPath    String
-  status          String    @default("pending")
-  progress        Int       @default(0)
+  status          String              @default("pending")
+  progress        Int                 @default(0)
   totalBytes      BigInt?
-  downloadedBytes BigInt    @default(0)
-  speedBps        Int       @default(0)
+  downloadedBytes BigInt              @default(0)
+  speedBps        Int                 @default(0)
   error           String?
   connectMode     String?
-  createTime      DateTime  @default(now())
-  updateTime      DateTime  @default(now()) @updatedAt
+  createTime      DateTime            @default(now())
+  updateTime      DateTime            @default(now()) @updatedAt
   startTime       DateTime?
   endTime         DateTime?
   tasks           p2p_transfer_task[]
@@ -608,7 +631,6 @@ model p2p_transfer_task {
   @@index([queueJobId])
   @@map("p2p_transfer_task")
 }
-
 
 // ============================================================
 //  Tracker 角色(公网服务端数据) - 前缀 tracker_
@@ -718,23 +740,23 @@ model tracker_share_manifest {
   remoteMediaId          Int?
   remoteMangaId          Int?
 
-  version                BigInt
-  contentHash            String
-  payloadTruncated       Int           @default(0)
-  payloadSize            Int           @default(0)
+  version          BigInt
+  contentHash      String
+  payloadTruncated Int    @default(0)
+  payloadSize      Int    @default(0)
 
-  shareName              String
-  coverUrl               String?
-  coverSize              Int?
-  describe               String?
-  mangaCount             Int           @default(0)
-  chapterCount           Int           @default(0)
-  totalSize              BigInt?
+  shareName    String
+  coverUrl     String?
+  coverSize    Int?
+  describe     String?
+  mangaCount   Int     @default(0)
+  chapterCount Int     @default(0)
+  totalSize    BigInt?
 
-  payload                String
+  payload String
 
-  createTime             DateTime      @default(now())
-  updateTime             DateTime      @default(now()) @updatedAt
+  createTime DateTime @default(now())
+  updateTime DateTime @default(now()) @updatedAt
 
   @@unique([trackerGroupId, nodeId, shareType, remoteMediaId, remoteMangaId], map: "uniqueShareManifest")
   @@index([trackerGroupId, updateTime], map: "idxShareManifestUpdate")
@@ -764,21 +786,21 @@ model p2p_peer_share_manifest {
   remoteMediaId          Int?
   remoteMangaId          Int?
 
-  version                BigInt
-  contentHash            String
-  payloadTruncated       Int       @default(0)
+  version          BigInt
+  contentHash      String
+  payloadTruncated Int    @default(0)
 
-  shareName              String
-  coverUrl               String?
-  describe               String?
-  mangaCount             Int       @default(0)
-  chapterCount           Int       @default(0)
-  totalSize              BigInt?
+  shareName    String
+  coverUrl     String?
+  describe     String?
+  mangaCount   Int     @default(0)
+  chapterCount Int     @default(0)
+  totalSize    BigInt?
 
-  payload                String?
+  payload String?
 
-  fetchTime              DateTime  @default(now())
-  updateTime             DateTime  @default(now()) @updatedAt
+  fetchTime  DateTime @default(now())
+  updateTime DateTime @default(now()) @updatedAt
 
   @@unique([p2pGroupId, ownerNodeId, shareType, remoteMediaId, remoteMangaId], map: "uniquePeerShareManifest")
   @@index([p2pGroupId, updateTime], map: "idxPeerShareManifestUpdate")
