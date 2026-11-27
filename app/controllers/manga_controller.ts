@@ -13,7 +13,7 @@ import {
   normalizeRelativeLibraryPath,
 } from '#services/library_path_service'
 import fs from 'fs'
-import { order_params, path_compress, read_json, s_delete } from '#utils/index'
+import { is_img, order_params, path_compress, read_json, s_delete } from '#utils/index'
 import path from 'path'
 import {
   listMangaValidator,
@@ -182,7 +182,11 @@ export default class MangaController {
       ...data,
       availability: source?.availability,
       mangaCover: canRead ? manga.mangaCover : null,
-      metas: canRead ? manga.metas : manga.metas.map(meta => ({ ...meta, metaFile: null })),
+      metas: manga.metas.map(meta => ({
+        ...meta,
+        hasImageFile: Boolean(meta.metaFile && is_img(meta.metaFile)),
+        metaFile: canRead ? meta.metaFile : null,
+      })),
       tags: manga.mangaTags.map((mangaTag) => mangaTag.tag),
       mangaTags: undefined,
     })

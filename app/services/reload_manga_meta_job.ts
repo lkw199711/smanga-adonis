@@ -5,7 +5,7 @@ import { error_log } from '#utils/log'
 import {
   is_img,
   get_config,
-  path_poster,
+  copiedPosterPath,
   path_cache,
   first_image,
   is_directory,
@@ -243,9 +243,7 @@ export default class ReloadMangaMetaJob {
    * @returns 封面路径
    */
   async manga_poster(dir: string) {
-    const posterPath = path_poster()
-    // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
-    const posterName = `${posterPath}/smanga_manga_${this.mangaRecord.mangaId}.jpg`
+    const posterName = copiedPosterPath('manga', this.mangaRecord.mangaId)
     // 压缩目标图片大小
     const maxSizeKB = get_config()?.compress?.poster ?? 300
     // 源封面
@@ -312,12 +310,7 @@ export default class ReloadMangaMetaJob {
 
     if (!sourcePoster) return ''
 
-    // 不复制封面,直接使用源文件
-    // 网盘库必须copy封面
-    // 或者封面太大需要压缩
-    const copyPoster =
-      (this.isCloudMedia && !this.hasDataMeta) ||
-      fs.statSync(sourcePoster).size > maxSizeKB * 1024
+    const copyPoster = !this.isCloudMedia && fs.statSync(sourcePoster).size > maxSizeKB * 1024
 
     const storedCover = copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster)
     await prisma.manga.update({
@@ -387,14 +380,11 @@ export default class ReloadMangaMetaJob {
    * @returns 封面路径
    */
   async chapter_poster(dir: string) {
-    const posterPath = path_poster()
-    // 为防止rar包内默认的文件名与chapterId重名,加入特定前缀
-    let posterName = `${posterPath}/smanga_chapter_${this.chapterRecord.chapterId}.jpg`
+    const posterName = copiedPosterPath('chapter', this.chapterRecord.chapterId)
     // 压缩目标图片大小
     const maxSizeKB = get_config()?.compress?.poster || 300
     // 是否在压缩包内找到封面
     let hasPosterInZip = false
-    let hasMetaChapterCover = false
     // 源封面
     let sourcePoster = ''
     // 检索平级目录封面图片
@@ -414,10 +404,8 @@ export default class ReloadMangaMetaJob {
       const picPath = path.join(dir, 'cover.jpg')
 
       if (fs.existsSync(metaChapterCover)) {
-        hasMetaChapterCover = true
         sourcePoster = metaChapterCover
       } else if (fs.existsSync(metaChapterCover2)) {
-        hasMetaChapterCover = true
         sourcePoster = metaChapterCover2
       } else if (fs.existsSync(sidePoster)) {
         sourcePoster = sidePoster
@@ -478,14 +466,8 @@ export default class ReloadMangaMetaJob {
     // 未找到封面
     if (!sourcePoster) return ''
 
-    // 不复制封面,直接使用源文件 网盘库必须copy封面
     const copyPoster =
-      // 压缩包内有封面
-      hasPosterInZip ||
-      // 云盘库 且没有移植元数据
-      (this.isCloudMedia && !hasMetaChapterCover) ||
-      // 封面过大需要压缩
-      fs.statSync(sourcePoster).size > maxSizeKB * 1024
+      !this.isCloudMedia && (hasPosterInZip || fs.statSync(sourcePoster).size > maxSizeKB * 1024)
 
     // 写入漫画与章节封面
     const storedCover = copyPoster ? posterName : this.libraryPath.toStoredDataPath(sourcePoster)

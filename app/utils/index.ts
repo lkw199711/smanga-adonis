@@ -95,6 +95,14 @@ export function path_poster(): string {
   }
 }
 
+export function posterBucket(id: number): string {
+  return String(Math.floor(id / 1000))
+}
+
+export function copiedPosterPath(kind: 'manga' | 'chapter', id: number): string {
+  return path.join(path_poster(), kind, posterBucket(id), `smanga_${kind}_${id}.jpg`)
+}
+
 export function path_bookmark() {
   if (platform === 'win32' || platform === 'darwin') {
     return path.join(rootDir, 'data', 'bookmark')

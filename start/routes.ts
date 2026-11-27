@@ -97,6 +97,7 @@ router.get('/test/zip2', [TestsController, 'zip2'])
 
 router.any('/image', [ImagesController, 'index'])
 router.post('/image/upload', [ImagesController, 'upload'])
+router.post('/image/cover/:kind/:id', [() => import('#controllers/covers_controller'), 'show'])
 
 // 部署
 router.get('/deploy/status', [DeploysController, 'status'])

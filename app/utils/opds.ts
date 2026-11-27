@@ -55,6 +55,10 @@ export function image_mime(filePath: string | null | undefined): string {
       return 'image/gif'
     case 'webp':
       return 'image/webp'
+    case 'avif':
+      return 'image/avif'
+    case 'apng':
+      return 'image/apng'
     case 'bmp':
       return 'image/bmp'
     case 'svg':
