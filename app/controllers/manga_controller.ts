@@ -337,6 +337,7 @@ export default class MangaController {
         mangaName: manga.mangaName,
         mangaId: manga.mangaId,
         isCloudMedia: pathInfo.media?.isCloudMedia,
+        forceChapterScan: true,
       },
       priority: TaskPriority.scanManga,
       timeout: 1000 * 60 * 60 * 2,

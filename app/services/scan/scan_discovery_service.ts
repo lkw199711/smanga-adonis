@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { is_img } from '#utils/index'
+import { scanPathKey, sourceFingerprint } from './scan_incremental_service.js'
 import {
   listConcreteScanTemplates,
   normalizeMetadataProfile,
@@ -56,6 +57,7 @@ export default class ScanDiscoveryService {
   discoverPath(input: ScanDiscoveryInput): ScanDiscoveryResult {
     this.input = input
     this.items = []
+    this.emitItems = true
     this.templateCandidates = []
     this.activeRule = null
     this.readDirCache.clear()
@@ -171,7 +173,7 @@ export default class ScanDiscoveryService {
       const mangas = this.discoverWithTemplate(root, template)
       const score = this.scoreTemplate(template, mangas)
       for (const manga of mangas) {
-        const mangaScore = this.scoreTemplate(template, [manga])
+        const mangaScore = manga.scanScore ?? this.scoreTemplate(template, [manga])
         if (!applyConfidenceThreshold || mangaScore >= 40) {
           ranked.push({
             manga,
@@ -186,7 +188,7 @@ export default class ScanDiscoveryService {
         label: template.label,
         pattern: template.pattern,
         mangaFound: mangas.length,
-        chapterFound: mangas.reduce((sum, manga) => sum + manga.chapters.length, 0),
+        chapterFound: mangas.reduce((sum, manga) => sum + this.chapterCount(manga), 0),
         score,
       }
     })
@@ -211,19 +213,25 @@ export default class ScanDiscoveryService {
     const ordered = [...byPath.values()].sort((a, b) => {
       const depthA = path.relative(root, a.manga.mangaPath).split(path.sep).length
       const depthB = path.relative(root, b.manga.mangaPath).split(path.sep).length
-      return b.score - a.score || b.priority - a.priority || depthA - depthB
+      const reusedA = Number(a.manga.reusedChapterCount !== undefined)
+      const reusedB = Number(b.manga.reusedChapterCount !== undefined)
+      return reusedB - reusedA || b.score - a.score || b.priority - a.priority || depthA - depthB
     })
     const selected: RankedManga[] = []
+    const selectedPaths = new Set<string>()
+    const selectedParents = new Set<string>()
+    const rootKey = scanPathKey(root)
     for (const candidate of ordered) {
-      const candidatePath = path.normalize(candidate.manga.mangaPath)
-      const overlaps = selected.some((other) => {
-        const otherPath = path.normalize(other.manga.mangaPath)
-        return (
-          candidatePath.startsWith(`${otherPath}${path.sep}`) ||
-          otherPath.startsWith(`${candidatePath}${path.sep}`)
-        )
-      })
-      if (!overlaps) selected.push(candidate)
+      const candidatePath = scanPathKey(candidate.manga.mangaPath)
+      if (selectedParents.has(candidatePath)) continue
+      const parents: string[] = []
+      for (let parent = path.dirname(candidatePath); parent !== rootKey; parent = path.dirname(parent)) {
+        parents.push(parent)
+      }
+      if (parents.some((parent) => selectedPaths.has(parent))) continue
+      selected.push(candidate)
+      selectedPaths.add(candidatePath)
+      for (const parent of parents) selectedParents.add(parent)
     }
 
     this.items.push({
@@ -318,11 +326,18 @@ export default class ScanDiscoveryService {
 
   private scoreTemplate(template: ScanTemplateInfo, mangas: DiscoveredManga[]) {
     const mangaFound = mangas.length
-    const chapterFound = mangas.reduce((sum, manga) => sum + manga.chapters.length, 0)
+    const chapterFound = mangas.reduce((sum, manga) => sum + this.chapterCount(manga), 0)
     const avgChapters = mangaFound ? chapterFound / mangaFound : 0
     let score = chapterFound * 20 + mangaFound * 10 + avgChapters * 40
 
     for (const manga of mangas) {
+      if (manga.reusedChapterCount !== undefined && manga.scanScore !== undefined) {
+        // The cached score was computed for one manga. Keep its penalties in the aggregate.
+        const individualBase = manga.reusedChapterCount * 60 + 10 -
+          (template.singleChapter ? 8 : 0) - template.mangaIndex * 3 - (template.chapterIndex ?? 0)
+        score += manga.scanScore - individualBase
+        continue
+      }
       if (this.looksLikeChapterName(manga.mangaName) || this.looksLikeVolumeName(manga.mangaName)) {
         score -= 45
       }
@@ -352,9 +367,33 @@ export default class ScanDiscoveryService {
     return Math.round(score)
   }
 
+  private chapterCount(manga: DiscoveredManga) {
+    return manga.reusedChapterCount ?? manga.chapters.length
+  }
+
+  private reusableScan(entryPath: string, stat: fs.Stats) {
+    const state = this.input.reusableMangas?.get(scanPathKey(entryPath))
+    return state?.fingerprint === sourceFingerprint(stat) ? state : undefined
+  }
+
+  private targetCandidate(root: string, target: string, depth: number): CandidateEntry[] {
+    const relative = path.relative(root, target)
+    const parts = relative.split(path.sep)
+    if (!relative || path.isAbsolute(relative) || parts[0] === '..' || parts.length !== depth + 1) {
+      return []
+    }
+    const name = parts[depth]
+    if (parts.some((part) => this.shouldSkipEntry(part, target))) return []
+    const stat = this.safeStat(target)
+    if (!stat) return []
+    return [{ name, entryPath: target, parentPath: path.dirname(target), ancestors: parts.slice(0, -1), stat }]
+  }
+
   private discoverWithTemplate(root: string, template: ScanTemplateInfo) {
     const mangas: DiscoveredManga[] = []
-    const mangaCandidates = this.collectEntriesAtDepth(root, template.mangaIndex)
+    const mangaCandidates = this.input.mangaTarget
+      ? this.targetCandidate(root, this.input.mangaTarget, template.mangaIndex)
+      : this.collectEntriesAtDepth(root, template.mangaIndex, 'manga')
 
     for (const candidate of mangaCandidates) {
       if (
@@ -398,10 +437,22 @@ export default class ScanDiscoveryService {
         mangaType,
         parentPath: candidate.parentPath,
         scanTemplateKey: template.key,
+        scanTemplatePattern: template.pattern,
+        fingerprint: sourceFingerprint(candidate.stat),
         chapters: [],
       }
 
       if (!this.shouldIncludeManga(manga)) continue
+
+      const cached = this.reusableScan(candidate.entryPath, candidate.stat)
+      if (cached) {
+        if (cached.templatePattern === template.pattern) {
+          manga.reusedChapterCount = cached.chapterCount
+          manga.scanScore = cached.score
+          mangas.push(manga)
+        }
+        continue
+      }
 
       if (template.singleChapter) {
         const chapter = this.singleChapterForManga(manga)
@@ -421,6 +472,7 @@ export default class ScanDiscoveryService {
         }
       }
 
+      manga.scanScore = this.scoreTemplate(template, [manga])
       mangas.push(manga)
     }
 
@@ -464,7 +516,7 @@ export default class ScanDiscoveryService {
     }
 
     const chapterEntryDepth = Math.max((template.chapterIndex ?? 1) - template.mangaIndex - 1, 0)
-    const entries = this.collectEntriesAtDepth(manga.mangaPath, chapterEntryDepth)
+    const entries = this.collectEntriesAtDepth(manga.mangaPath, chapterEntryDepth, 'chapter')
     const chapters: DiscoveredChapter[] = []
 
     for (const entry of entries) {
@@ -503,7 +555,7 @@ export default class ScanDiscoveryService {
     return chapters
   }
 
-  private collectEntriesAtDepth(root: string, targetDepth: number) {
+  private collectEntriesAtDepth(root: string, targetDepth: number, purpose: 'manga' | 'chapter') {
     const result: CandidateEntry[] = []
     const visit = (dir: string, depth: number, ancestors: string[]) => {
       const entries = this.safeReadDir(dir, depth === 0 ? 'path' : 'directory')
@@ -514,6 +566,9 @@ export default class ScanDiscoveryService {
 
         const stat = this.safeStat(entryPath)
         if (!stat) continue
+
+        const cached = this.reusableScan(entryPath, stat)
+        if (cached && (purpose === 'chapter' || depth < targetDepth)) continue
 
         if (depth === targetDepth) {
           result.push({
@@ -538,6 +593,7 @@ export default class ScanDiscoveryService {
 
   private addFoundItems(mangas: DiscoveredManga[], template: ScanTemplateInfo) {
     for (const manga of mangas) {
+      if (manga.reusedChapterCount !== undefined) continue
       this.items.push({
         level: 'info',
         category: 'found',
@@ -547,11 +603,9 @@ export default class ScanDiscoveryService {
         targetPath: manga.mangaPath,
         extra: {
           mangaType: manga.mangaType,
-          chapterCount: manga.chapters.length,
+          chapterCount: this.chapterCount(manga),
           scanTemplateKey: manga.scanTemplateKey || template.key,
-          scanTemplatePattern:
-            this.templateCandidates.find((candidate) => candidate.key === manga.scanTemplateKey)
-              ?.pattern || template.pattern,
+          scanTemplatePattern: manga.scanTemplatePattern || template.pattern,
         },
       })
     }
@@ -634,6 +688,7 @@ export default class ScanDiscoveryService {
     if (profile === 'none') return summary
 
     for (const manga of mangas) {
+      if (manga.reusedChapterCount !== undefined) continue
       if (this.safeStat(manga.mangaPath)?.isDirectory()) {
         if (profile === 'auto' || profile === 'smanga') {
           if (fs.existsSync(path.join(manga.mangaPath, '.smanga'))) summary.smanga += 1
@@ -736,16 +791,15 @@ export default class ScanDiscoveryService {
       this.readDirCache.set(dir, entries)
       return entries
     } catch (e: any) {
-      if (this.emitItems) {
-        this.items.push({
-          level: 'error',
-          category: 'error',
-          targetType,
-          reasonCode: 'READ_DIR_FAILED',
-          reason: e?.message || '目录读取失败',
-          targetPath: dir,
-        })
-      }
+      this.readDirCache.set(dir, [])
+      this.items.push({
+        level: 'error',
+        category: 'error',
+        targetType,
+        reasonCode: 'READ_DIR_FAILED',
+        reason: e?.message || '目录读取失败',
+        targetPath: dir,
+      })
       return []
     }
   }
@@ -757,16 +811,14 @@ export default class ScanDiscoveryService {
       this.statCache.set(filePath, stat)
       return stat
     } catch (e: any) {
-      if (this.emitItems) {
-        this.items.push({
-          level: 'warning',
-          category: 'warning',
-          targetType: 'file',
-          reasonCode: 'STAT_FAILED',
-          reason: e?.message || '文件状态读取失败',
-          targetPath: filePath,
-        })
-      }
+      this.items.push({
+        level: 'warning',
+        category: 'warning',
+        targetType: 'file',
+        reasonCode: 'STAT_FAILED',
+        reason: e?.message || '文件状态读取失败',
+        targetPath: filePath,
+      })
       this.statCache.set(filePath, null)
       return null
     }
@@ -840,9 +892,12 @@ export default class ScanDiscoveryService {
 
     return {
       ok: errors === 0,
+      filesystemComplete: !this.items.some((item) =>
+        item.reasonCode === 'READ_DIR_FAILED' || item.reasonCode === 'STAT_FAILED'
+      ),
       summary: {
         mangaFound: mangas.length,
-        chapterFound: mangas.reduce((sum, manga) => sum + manga.chapters.length, 0),
+        chapterFound: mangas.reduce((sum, manga) => sum + this.chapterCount(manga), 0),
         skipped,
         warnings,
         errors,

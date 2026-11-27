@@ -1,4 +1,6 @@
 import path from 'node:path'
+import os from 'node:os'
+import fs from 'node:fs'
 import { test } from '@japa/runner'
 import ScanDiscoveryService from '#services/scan/scan_discovery_service'
 import {
@@ -6,6 +8,7 @@ import {
   resolveScanTemplate,
 } from '#services/scan/scan_template_service'
 import type { ScanTemplateKey } from '#services/scan/scan_types'
+import { canReuseMangaScan, scanConfigKey, scanPathKey } from '#services/scan/scan_incremental_service'
 import {
   parseMetadataProfileConfig,
   parseScanTemplateConfig,
@@ -106,6 +109,75 @@ test.group('scan templates', () => {
         'manga_volume_chapter_image',
       ].sort()
     )
+  })
+
+  test('discovers new manga in an existing category while reusing recent chapter results', ({ assert }) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'smanga-scan-'))
+    try {
+      const mangaPath = path.join(root, '分类', '现有漫画')
+      const volume = path.join(mangaPath, 'Vol 01')
+      fs.mkdirSync(volume, { recursive: true })
+      fs.writeFileSync(path.join(volume, 'Chapter 01.cbz'), '')
+      // Simulate a write inside an existing volume that leaves the title directory unchanged.
+      const directoryTime = new Date('2025-01-01T00:00:00.000Z')
+      fs.utimesSync(mangaPath, directoryTime, directoryTime)
+
+      const input = {
+        pathContent: root,
+        mediaType: 0,
+        directoryFormat: 0,
+        scanTemplateKey: 'auto',
+        metadataProfileKey: 'none',
+        ignoreHiddenFiles: true,
+        engine: 'template-v2',
+      } as const
+      const discovery = new ScanDiscoveryService()
+      const first = discovery.discoverPath(input)
+      assert.equal(first.summary.mangaFound, 1)
+      assert.equal(first.summary.chapterFound, 1)
+      const manga = first.mangas[0]
+      assert.equal(manga.scanTemplateKey, 'category_manga_volume_chapter_image')
+      const observedAt = new Date('2025-01-02T00:00:00.000Z')
+      const key = scanConfigKey([input])
+      const state = {
+        checkedAt: observedAt,
+        scanKey: key,
+        templatePattern: manga.scanTemplatePattern!,
+        fingerprint: manga.fingerprint!,
+        score: manga.scanScore!,
+        chapterCount: manga.chapters.length,
+      }
+      const reusableMangas = new Map([[scanPathKey(mangaPath), state]])
+
+      const newMangaPath = path.join(root, '分类', '新漫画')
+      fs.mkdirSync(newMangaPath)
+      fs.writeFileSync(path.join(newMangaPath, 'Chapter 01.cbz'), '')
+      fs.writeFileSync(path.join(volume, 'Chapter 02.cbz'), '')
+
+      const incremental = discovery.discoverPath({ ...input, reusableMangas })
+      assert.isTrue(incremental.filesystemComplete)
+      assert.equal(incremental.summary.mangaFound, 2)
+      assert.equal(incremental.summary.chapterFound, 2)
+      assert.equal(incremental.mangas.find((item) => item.mangaPath === mangaPath)?.reusedChapterCount, 1)
+      assert.lengthOf(incremental.mangas.find((item) => item.mangaPath === newMangaPath)!.chapters, 1)
+
+      assert.isTrue(canReuseMangaScan(state, key, new Date('2025-01-02T23:59:59.999Z')))
+      assert.isFalse(canReuseMangaScan(state, key, new Date('2025-01-03T00:00:00.000Z')))
+      assert.isFalse(canReuseMangaScan(state, scanConfigKey([{ ...input, exclude: '分类' }]), observedAt))
+      const rechecked = discovery.discoverPath(input)
+      assert.equal(rechecked.summary.chapterFound, 3)
+
+      const single = discovery.discoverPath({ ...input, mangaTarget: mangaPath })
+      assert.deepEqual(single.mangas.map((item) => item.mangaPath), [mangaPath])
+      assert.equal(single.summary.chapterFound, 2)
+
+      fs.utimesSync(mangaPath, observedAt, observedAt)
+      const changed = discovery.discoverPath({ ...input, reusableMangas })
+      assert.equal(changed.summary.chapterFound, 3)
+      assert.isUndefined(changed.mangas.find((item) => item.mangaPath === mangaPath)?.reusedChapterCount)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
   })
 
   test('keeps template-v1 available as a runtime rollback mode', ({ assert }) => {

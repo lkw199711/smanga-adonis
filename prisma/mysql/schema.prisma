@@ -194,8 +194,21 @@ model manga {
   mangaTags     mangaTag[]
   shares        share[]
 
+  scanState     mangaScanState?
+
   @@unique([pathId, mangaPath], map: "uniqueMangaPath")
   @@index([mediaId], map: "mangaMediaId")
+}
+
+model mangaScanState {
+  mangaId       Int      @id @db.UnsignedInt
+  scanKey       String   @db.VarChar(64)
+  fingerprint   String   @db.VarChar(191)
+  templatePattern String? @db.VarChar(191)
+  chapterCount  Int
+  score         Int
+  checkedAt     DateTime @db.DateTime(3)
+  manga         manga    @relation(fields: [mangaId], references: [mangaId], onDelete: Cascade)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations

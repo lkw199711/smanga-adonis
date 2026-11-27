@@ -25,9 +25,11 @@ import { metaKeyType } from '../type/index.js'
 import { comicinfo_transform } from '#utils/meta'
 import type { DiscoveredChapter } from './scan/scan_types.js'
 import { normalizeMetadataProfile } from './scan/scan_template_service.js'
-import { parseMetadataProfileConfig } from './scan/scan_config_service.js'
+import { parseMetadataProfileConfig, resolveScanEngine } from './scan/scan_config_service.js'
 import type { MetadataProfileConfig, MetadataSource } from './scan/scan_types.js'
 import ScanReportService from './scan/scan_report_service.js'
+import ScanDiscoveryService from './scan/scan_discovery_service.js'
+import { mangaScanInput, scanConfigKey, sourceFingerprint, type MangaScanSnapshot } from './scan/scan_incremental_service.js'
 import { LibraryPathContext, type StorageRootLike } from './library_path_service.js'
 type PathRecord = sqlPathType & { media: sqlMediaType; storageRoot: StorageRootLike | null }
 const logModule = '[manga scan]'
@@ -57,6 +59,8 @@ export default class ScanMangaJob {
   private discoveredChapters: DiscoveredChapter[] = []
   private parsedMetadataConfig: MetadataProfileConfig | null = null
   private scanRunId?: number
+  private forceChapterScan: boolean
+  private scanState?: MangaScanSnapshot
   private reportService = new ScanReportService()
   private libraryPath = new LibraryPathContext()
 
@@ -68,6 +72,8 @@ export default class ScanMangaJob {
     isCloudMedia,
     chapters,
     scanRunId,
+    forceChapterScan = false,
+    scanState,
   }: {
     pathId: number
     pathInfo: any
@@ -78,6 +84,8 @@ export default class ScanMangaJob {
     isCloudMedia: boolean
     chapters?: DiscoveredChapter[]
     scanRunId?: number
+    forceChapterScan?: boolean
+    scanState?: MangaScanSnapshot
   }) {
     this.pathId = pathId
     this.mangaPath = mangaPath
@@ -87,6 +95,8 @@ export default class ScanMangaJob {
     this.isCloudMedia = isCloudMedia
     this.discoveredChapters = Array.isArray(chapters) ? chapters : []
     this.scanRunId = scanRunId
+    this.forceChapterScan = forceChapterScan
+    this.scanState = scanState
 
     const config = get_config()
     this.ignoreHiddenFiles = config.scan?.ignoreHiddenFiles === 1
@@ -222,7 +232,7 @@ export default class ScanMangaJob {
         chapterPath: this.libraryPath.toStored(item.chapterPath),
         browseType: this.mediaRecord!.browseType,
         subTitle: chapterSubTitle,
-        chapterType: this.compress_type(item.chapterPath),
+        chapterType: item.chapterType,
         chapterNumber: this.chapter_index(item.chapterName),
       }
 
@@ -263,7 +273,35 @@ export default class ScanMangaJob {
 
   async run() {
     await this.runInternal()
+    await this.recordScanState()
     await this.reportService.recordMangaCompleted(this.scanRunId, this.mangaName, this.storedMangaPath)
+  }
+
+  private async recordScanState() {
+    if (!this.mangaRecord || this.mangaRecord.pathId !== this.pathId) return
+    const mangaId: number = this.mangaRecord.mangaId
+    const snapshot = this.scanState
+    if (!snapshot) {
+      if (this.forceChapterScan) await prisma.mangaScanState.deleteMany({ where: { mangaId } })
+      return
+    }
+
+    const stat = await fs.promises.stat(this.mangaPath)
+    if (sourceFingerprint(stat) !== snapshot.fingerprint) return
+    const chapterCount = this.discoveredChapters.length || await prisma.chapter.count({
+      where: { mangaId, deleteFlag: 0 },
+    })
+    const checkedAt = new Date(snapshot.checkedAt)
+    const data = { ...snapshot, chapterCount, checkedAt }
+    const where = { mangaId, checkedAt: { lte: checkedAt } }
+    const updated = await prisma.mangaScanState.updateMany({ where, data })
+    if (updated.count) return
+    try {
+      await prisma.mangaScanState.create({ data: { ...data, mangaId } })
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      await prisma.mangaScanState.updateMany({ where, data })
+    }
   }
 
   private async runInternal() {
@@ -301,17 +339,45 @@ export default class ScanMangaJob {
       throw new Error('漫画文件不存在或挂载尚未就绪')
     }
 
+    if (this.scanState || this.forceChapterScan) {
+      const engine = resolveScanEngine()
+      const input = mangaScanInput(
+        this.libraryPath.resolve(this.pathInfo.pathContent),
+        this.pathInfo, this.mediaRecord, engine, this.ignoreHiddenFiles
+      )
+      if (this.scanState) {
+        const currentKey = scanConfigKey([input, this.pathInfo.storageRootId])
+        const stat = await fs.promises.stat(mangaPath)
+        if (currentKey !== this.scanState.scanKey || sourceFingerprint(stat) !== this.scanState.fingerprint) {
+          throw new Error('排队期间漫画或扫描配置发生变化，请重新扫描')
+        }
+      } else if (engine !== 'legacy' || this.mediaRecord.mediaType === 1) {
+        const discovery = new ScanDiscoveryService().discoverPath({
+          ...input,
+          scanTemplateKey: engine === 'legacy' ? 'legacy' : input.scanTemplateKey,
+          mangaTarget: mangaPath,
+        })
+        const manga = discovery.mangas[0]
+        if (!discovery.ok || !discovery.filesystemComplete || !manga) {
+          throw new Error('未能完整识别这部漫画的章节，请检查漫画目录和扫描模板')
+        }
+        this.discoveredChapters = manga.chapters
+      }
+    }
+
     this.cachePath = path_cache()
 
     // 检查漫画是否有 smanga 元数据文件夹
     this.smangaMetaFolder = this.smanga_meta_folder()
 
     // 更新路径扫描时间
-    await prisma.path
-      .update({ where: { pathId }, data: { lastScanTime: new Date() } })
-      .catch(async (e) => {
-        await error_log(logModule, e.message)
-      })
+    if (!this.scanState) {
+      await prisma.path
+        .update({ where: { pathId }, data: { lastScanTime: new Date() } })
+        .catch(async (e) => {
+          await error_log(logModule, e.message)
+        })
+    }
 
     let mangaInsert: Prisma.mangaCreateInput
 
@@ -357,7 +423,7 @@ export default class ScanMangaJob {
     if (this.mangaRecord) {
       this.alreadyExistManga = true
       this.shouldSmangaMetaUpdate = await this.should_smanga_meta_update()
-      this.shouldChapterUpdate = await this.should_chapter_update()
+      this.shouldChapterUpdate = this.forceChapterScan || await this.should_chapter_update()
     }
 
     if (this.discoveredChapters.length) {

@@ -65,7 +65,18 @@ export type DiscoveredManga = {
   mangaType: string
   parentPath: string
   scanTemplateKey?: string
+  scanTemplatePattern?: string
+  scanScore?: number
+  fingerprint?: string
+  reusedChapterCount?: number
   chapters: DiscoveredChapter[]
+}
+
+export type ReusableMangaScan = {
+  fingerprint: string
+  templatePattern: string | null
+  chapterCount: number
+  score: number
 }
 
 export type ScanDiscoveryInput = {
@@ -84,6 +95,8 @@ export type ScanDiscoveryInput = {
   isCloudMedia?: number
   sampleLimit?: number
   engine?: ScanEngine
+  mangaTarget?: string
+  reusableMangas?: ReadonlyMap<string, ReusableMangaScan>
 }
 
 export type ScanTemplateRuleConfig = {
@@ -130,6 +143,7 @@ export type ScanMetadataSummary = {
 
 export type ScanDiscoveryResult = {
   ok: boolean
+  filesystemComplete: boolean
   summary: ScanDiscoverySummary
   template: ScanTemplateInfo
   templateCandidates: ScanTemplateCandidate[]
