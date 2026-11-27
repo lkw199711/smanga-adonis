@@ -177,7 +177,6 @@ export class SqlQueueWorkerService {
         try {
           console.log(`[queue] job ${job.id} started: ${job.command}`)
           await this.runJobInChildProcess(job)
-          console.log(`[queue] job ${job.id} completed: ${job.command}`)
         } catch (error) {
           console.error(`[queue] job ${job.id} failed: ${job.command}`, error)
           const outcome = await markJobFailedOrRetry(job, error)
@@ -232,6 +231,7 @@ export class SqlQueueWorkerService {
           const ok = await extendRunningJobLock({
             jobId: job.id,
             workerId: this.workerId,
+            attemptsMade: job.attempts_made,
             lockedUntil,
           })
           if (!ok) {
@@ -249,7 +249,7 @@ export class SqlQueueWorkerService {
         child.kill('SIGTERM')
         // 5 秒后强制 SIGKILL
         setTimeout(() => {
-          if (!child.killed) child.kill('SIGKILL')
+          if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
         }, 5000)
       }, timeoutMs)
 
@@ -258,7 +258,9 @@ export class SqlQueueWorkerService {
         clearInterval(lockRenewTimer)
         try {
           if (code === 0) {
-            await markJobCompleted(job.id)
+            if (await markJobCompleted(job)) {
+              console.log(`[queue] job ${job.id} completed: ${job.command}`)
+            }
           } else {
             const reason = buildChildFailureReason({
               job,
@@ -268,10 +270,10 @@ export class SqlQueueWorkerService {
               stderr,
             })
             console.error(`[queue] ${reason}`)
-            await handleP2PQueueJobFailure(args, new Error(reason))
             const error = new Error(reason)
             const outcome = await markJobFailedOrRetry(job, error)
             if (outcome === 'failed') {
+              await handleP2PQueueJobFailure(args, error)
               await handleScanQueueTerminalFailure(job.command, args, error)
             }
           }
@@ -295,9 +297,9 @@ export class SqlQueueWorkerService {
           })
           const error = new Error(`${reason}\nspawn error: ${err.message}`)
           console.error(`[queue] ${error.message}`)
-          await handleP2PQueueJobFailure(args, error)
           const outcome = await markJobFailedOrRetry(job, error)
           if (outcome === 'failed') {
+            await handleP2PQueueJobFailure(args, error)
             await handleScanQueueTerminalFailure(job.command, args, error)
           }
         } catch {

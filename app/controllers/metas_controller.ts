@@ -1,3 +1,4 @@
+import { activeManga } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { resolveLibraryFiles } from '#services/library_file_response'
@@ -27,6 +28,7 @@ export default class MetasController {
 
   public async index({ response }: HttpContext) {
     const rows = await prisma.meta.findMany({
+      where: { manga: activeManga },
       include: { manga: { select: { pathId: true } } },
     })
     const list = await this.resolveFiles(rows)
@@ -36,7 +38,7 @@ export default class MetasController {
   public async show({ params, response }: HttpContext) {
     const { metaId } = await idParamMetaValidator.validate(params)
     const meta = await prisma.meta.findUnique({
-      where: { metaId },
+      where: { metaId, manga: activeManga },
       include: { manga: { select: { pathId: true } } },
     })
     const data = meta ? (await this.resolveFiles([meta]))[0] : null

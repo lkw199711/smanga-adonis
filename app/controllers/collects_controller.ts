@@ -1,3 +1,4 @@
+import { activeManga, activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { resolveLibraryFiles } from '#services/library_file_response'
@@ -17,7 +18,7 @@ import {
 export default class CollectsController {
   public async index({ request, response }: HttpContext) {
     const { userId } = request as any
-    const collect = await prisma.collect.findMany({ where: { userId } })
+    const collect = await prisma.collect.findMany({ where: { userId, manga: activeManga, OR: [{ chapterId: null }, { chapter: activeChapter }] } })
     return response.json({ code: 200, message: '', list: collect, count: collect.length })
   }
 
@@ -25,7 +26,7 @@ export default class CollectsController {
     const { userId } = request as any
     const { page, pageSize } = await listCollectValidator.validate(request.qs())
 
-    const where = { userId, collectType: 'manga' }
+    const where = { userId, collectType: 'manga', manga: activeManga }
     const queryParams = {
       where,
       include: {
@@ -91,7 +92,7 @@ export default class CollectsController {
     const { userId } = request as any
     const { page, pageSize } = await listCollectValidator.validate(request.qs())
 
-    const where = { userId, collectType: 'chapter' }
+    const where = { userId, collectType: 'chapter', chapter: activeChapter }
     const queryParams = {
       where,
       include: {

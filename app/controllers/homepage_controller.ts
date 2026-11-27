@@ -3,6 +3,7 @@
  *               提供漫画系统的基础聚合统计数据，用于 homepage 仪表盘展示。
  *               参考: https://gethomepage.dev/widgets/services/customapi/
  */
+import { activeManga, activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import env from '#start/env'
 import prisma from '#start/prisma'
@@ -63,8 +64,8 @@ export default class HomepageController {
       latestChapter,
     ] = await Promise.all([
       prisma.media.count({ where: { deleteFlag: 0 } }),
-      prisma.manga.count({ where: { deleteFlag: 0 } }),
-      prisma.chapter.count({ where: { deleteFlag: 0 } }),
+      prisma.manga.count({ where: activeManga }),
+      prisma.chapter.count({ where: activeChapter }),
       prisma.tag.count(),
       prisma.user.count(),
       prisma.collect.count(),
@@ -73,12 +74,12 @@ export default class HomepageController {
       prisma.history.count({ where: { createTime: { gte: todayStart } } }),
       prisma.history.count({ where: { createTime: { gte: weekStart } } }),
       prisma.manga.findFirst({
-        where: { deleteFlag: 0 },
+        where: activeManga,
         orderBy: { createTime: 'desc' },
         select: { mangaId: true, mangaName: true, createTime: true },
       }),
       prisma.chapter.findFirst({
-        where: { deleteFlag: 0 },
+        where: activeChapter,
         orderBy: { createTime: 'desc' },
         select: { chapterId: true, chapterName: true, mangaId: true, createTime: true },
       }),

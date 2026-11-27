@@ -6,6 +6,7 @@
  * 2. p2p_local_share 上记录的物理路径(sharePath)
  */
 
+import { activeManga, activeChapter } from '#services/library_visibility'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -113,7 +114,7 @@ async function buildDbBackedManifestMangas(
   const mangaIds = mangaList.map((m) => m.mangaId)
   const chapters = mangaIds.length
     ? await prisma.chapter.findMany({
-        where: { mangaId: { in: mangaIds }, deleteFlag: 0 },
+        where: { mangaId: { in: mangaIds }, ...activeChapter },
         orderBy: [{ mangaId: 'asc' }, { chapterNumber: 'asc' }],
         select: {
           chapterId: true,
@@ -247,13 +248,13 @@ export async function buildShareManifest(share: {
   let shareDescribe: string | null = null
 
   if (share.shareType === 'media' && share.mediaId) {
-    const media = await prisma.media.findUnique({ where: { mediaId: share.mediaId } })
+    const media = await prisma.media.findUnique({ where: { mediaId: share.mediaId, deleteFlag: 0 } })
     if (!media) return null
     shareCover = media.mediaCover || null
     shareCoverSize = shareCover ? safeFileSize(shareCover) || null : null
 
     const mangaList = await prisma.manga.findMany({
-      where: { mediaId: share.mediaId, deleteFlag: 0 },
+      where: { mediaId: share.mediaId, ...activeManga },
       orderBy: { mangaName: 'asc' },
       select: {
         mangaId: true,
@@ -283,7 +284,7 @@ export async function buildShareManifest(share: {
 
   if (share.shareType === 'manga' && share.mangaId) {
     const manga = await prisma.manga.findUnique({
-      where: { mangaId: share.mangaId },
+      where: { mangaId: share.mangaId, ...activeManga },
       select: {
         mangaId: true,
         mangaName: true,

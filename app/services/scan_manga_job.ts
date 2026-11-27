@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import prisma from '#start/prisma'
+import { purgeChapter } from '#services/library_delete_service'
 import { Prisma } from '@prisma/client'
 import {
   copiedPosterPath,
@@ -180,13 +181,6 @@ export default class ScanMangaJob {
       return
     }
 
-    if (this.mangaRecord.deleteFlag) {
-      await prisma.manga.update({
-        where: { mangaId: this.mangaRecord.mangaId },
-        data: { deleteFlag: 0 },
-      })
-    }
-
     const chapterList = this.discoveredChapters
     const chapterListSql: any = await prisma.chapter.findMany({
       where: { mangaId: this.mangaRecord.mangaId },
@@ -251,7 +245,7 @@ export default class ScanMangaJob {
 
     for (let index = 0; index < delChapterList.length; index++) {
       const element = delChapterList[index]
-      await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
+      await purgeChapter(element.chapterId, false, pathId)
     }
 
     if (newChapterList.length || delChapterList.length) {
@@ -320,7 +314,7 @@ export default class ScanMangaJob {
       throw new Error(`pathId ${pathId} 路径不存在`)
     }
 
-    if (!this.mediaRecord) {
+    if (!this.mediaRecord || this.mediaRecord.deleteFlag) {
       error_log(logModule, `pathId ${pathId}媒体库不存在`)
       throw new Error(`pathId ${pathId} 媒体库不存在`)
     }
@@ -420,6 +414,7 @@ export default class ScanMangaJob {
       },
     })
 
+    if (this.mangaRecord?.deleteFlag) return
     if (this.mangaRecord) {
       this.alreadyExistManga = true
       this.shouldSmangaMetaUpdate = await this.should_smanga_meta_update()
@@ -438,13 +433,6 @@ export default class ScanMangaJob {
 
       // 漫画已存在 跳过此漫画
       if (this.mangaRecord) {
-        // 如果漫画已被标记为删除,则恢复漫画
-        if (this.mangaRecord.deleteFlag) {
-          await prisma.manga.update({
-            where: { mangaId: this.mangaRecord.mangaId },
-            data: { deleteFlag: 0 },
-          })
-        }
         return
       }
 
@@ -529,14 +517,6 @@ export default class ScanMangaJob {
         where: { mangaId: this.mangaRecord.mangaId },
       })
 
-      // 如果漫画已被标记为删除,则恢复漫画
-      if (this.mangaRecord.deleteFlag) {
-        await prisma.manga.update({
-          where: { mangaId: this.mangaRecord.mangaId },
-          data: { deleteFlag: 0 },
-        })
-      }
-
       const newChapterList = chapterList.filter((item: any) => {
         return !chapterListSql.some(
           (sqlItem: any) =>
@@ -599,7 +579,7 @@ export default class ScanMangaJob {
 
       for (let index = 0; index < delChapterList.length; index++) {
         const element = delChapterList[index]
-        await prisma.chapter.delete({ where: { chapterId: element.chapterId } })
+        await purgeChapter(element.chapterId, false, pathId)
       }
 
       if (newChapterList.length || delChapterList.length) {

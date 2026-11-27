@@ -1,4 +1,6 @@
 import prisma from '#start/prisma'
+import type { Prisma } from '@prisma/client'
+import { TaskPriority } from '#type/index'
 import { sql_parse_json } from '#utils/index'
 import { getQueueConfig, getQueueName } from './queue_config.js'
 
@@ -81,6 +83,7 @@ export function toJobLike(job: QueueJobRecord | null) {
     },
     attemptsMade: job.attempts_made,
     status: job.status,
+    canRemove: job.status === 'pending' && !libraryDeletionCommands.includes(job.command),
     timestamp: job.created_at?.getTime?.() ?? Date.now(),
     processedOn: job.started_at?.getTime?.() ?? null,
     failedReason: job.last_error,
@@ -95,13 +98,13 @@ export async function enqueueJob(input: EnqueueJobInput) {
   return toJobLike(job)
 }
 
-function queueJobData(input: EnqueueJobInput, config = getQueueConfig()) {
+export function queueJobData(input: EnqueueJobInput, config = getQueueConfig()) {
   return {
     queue_name: getQueueName(),
     task_queue: input.taskQueue,
     task_name: input.taskName,
     command: input.command,
-    args: encodeJson(input.args),
+    args: encodeJson(input.args) as Prisma.queue_jobCreateManyInput['args'],
     status: 'pending',
     priority: input.priority ?? 10,
     attempts_made: 0,
@@ -196,23 +199,109 @@ export async function removeJob(id: string | number) {
   const jobId = Number(id)
   if (!Number.isFinite(jobId)) return false
 
-  await db.queue_job.deleteMany({
-    where: {
-      id: jobId,
-      queue_name: getQueueName(),
-    },
+  const result = await db.queue_job.deleteMany({
+    where: { id: jobId, ...removableJobs() },
   })
 
-  return true
+  return result.count > 0
+}
+
+const libraryDeletionCommands = ['deleteMedia', 'deletePath', 'deleteManga', 'deleteChapter', 'deleteLibraryFile']
+
+export type LibraryDeletionKind = 'media' | 'path' | 'manga' | 'chapter'
+type LibraryDeletionScope = Partial<Record<`${LibraryDeletionKind}Id`, number>>
+type ScopedDeletion = { kind: LibraryDeletionKind; scope: LibraryDeletionScope }
+
+export async function activeLibraryDeletionScopes(tx: Prisma.TransactionClient): Promise<ScopedDeletion[]> {
+  const jobs = await tx.queue_job.findMany({
+    where: {
+      queue_name: getQueueName(),
+      status: { in: ['pending', 'running'] },
+      command: { in: libraryDeletionCommands },
+      task_name: { endsWith: '_purge' },
+    },
+    select: { args: true },
+  })
+  return jobs.map(job => decodeJson(job.args)).filter(args => args?.kind && args.scope)
+}
+
+export function libraryDeletionOverlaps(request: ScopedDeletion, queued: ScopedDeletion) {
+  const requestId = `${request.kind}Id` as const
+  const queuedId = `${queued.kind}Id` as const
+  return (request.scope[queuedId] !== undefined && request.scope[queuedId] === queued.scope[queuedId]) ||
+    (queued.scope[requestId] !== undefined && queued.scope[requestId] === request.scope[requestId])
+}
+
+function removableJobs() {
+  return { queue_name: getQueueName(), status: 'pending', command: { notIn: libraryDeletionCommands } }
 }
 
 export async function cleanJobs(states?: string[]) {
-  await db.queue_job.deleteMany({
-    where: {
-      queue_name: getQueueName(),
-      status: { in: normalizeStates(states) },
-    },
+  if (!normalizeStates(states).includes('pending')) return 0
+  const result = await db.queue_job.deleteMany({ where: removableJobs() })
+  return result.count
+}
+
+export async function listFailedDeletions() {
+  const jobs = await db.queue_failed_job.findMany({
+    where: { queue_name: getQueueName(), command: { in: libraryDeletionCommands } },
+    orderBy: { id: 'desc' },
   })
+  return jobs.map((job: any) => toJobLike({
+    ...job, status: 'failed', priority: 0, timeout_ms: 0, last_error: job.error,
+  }))
+}
+
+async function setManualItemDeletionFlag(
+  tx: Prisma.TransactionClient,
+  job: Pick<QueueJobRecord, 'command' | 'args'>,
+  deleteFlag: 0 | 1
+) {
+  const args = decodeJson(job.args)
+  if (!args?.purge) return
+  if (job.command === 'deleteManga' && Number.isSafeInteger(args.mangaId) && args.mangaId > 0) {
+    await tx.manga.updateMany({ where: { mangaId: args.mangaId }, data: { deleteFlag } })
+  } else if (job.command === 'deleteChapter' && Number.isSafeInteger(args.chapterId) && args.chapterId > 0) {
+    await tx.chapter.updateMany({ where: { chapterId: args.chapterId }, data: { deleteFlag } })
+  }
+}
+
+export async function retryFailedDeletion(id: number) {
+  const config = getQueueConfig()
+  return db.$transaction(async (tx: any) => {
+    const failed = await tx.queue_failed_job.findFirst({
+      where: { id, queue_name: getQueueName(), command: { in: libraryDeletionCommands } },
+    })
+    if (!failed) return null
+    const existing = await tx.queue_job.findFirst({
+      where: {
+        queue_name: failed.queue_name,
+        task_name: failed.task_name,
+        status: { in: ['pending', 'running'] },
+      },
+    })
+    const args = decodeJson(failed.args)
+    if (!existing && args?.kind && args.scope) {
+      const scopes = await activeLibraryDeletionScopes(tx)
+      if (scopes.some(scope => libraryDeletionOverlaps(args, scope))) return 'conflict' as const
+    }
+    const claimed = await tx.queue_failed_job.deleteMany({ where: { id: failed.id } })
+    if (!claimed.count) return null
+    if (existing) return toJobLike(existing)
+
+    await setManualItemDeletionFlag(tx, failed, 1)
+    const job = await tx.queue_job.create({
+      data: queueJobData({
+        taskQueue: failed.task_queue,
+        taskName: failed.task_name,
+        command: failed.command,
+        args,
+        priority: failed.command === 'deleteLibraryFile' ? TaskPriority.deleteFile : TaskPriority.deleteManga,
+        timeout: failed.command === 'deleteLibraryFile' ? Math.max(config.timeout, 600000) : config.timeout,
+      }),
+    })
+    return toJobLike(job)
+  }, { isolationLevel: 'Serializable' })
 }
 
 export async function pathJobExists(taskName: string) {
@@ -276,13 +365,24 @@ export async function claimNextJob(input: ClaimInput): Promise<QueueJobRecord | 
   return null
 }
 
-export async function markJobCompleted(jobId: number) {
-  await db.queue_job.deleteMany({ where: { id: jobId } })
+function runningAttempt(job: QueueJobRecord) {
+  return {
+    id: job.id,
+    status: 'running',
+    locked_by: job.locked_by,
+    attempts_made: job.attempts_made,
+  }
+}
+
+export async function markJobCompleted(job: QueueJobRecord) {
+  const result = await db.queue_job.deleteMany({ where: runningAttempt(job) })
+  return result.count > 0
 }
 
 export async function extendRunningJobLock(input: {
   jobId: number
   workerId: string
+  attemptsMade: number
   lockedUntil: Date
 }) {
   const result = await db.queue_job.updateMany({
@@ -290,6 +390,7 @@ export async function extendRunningJobLock(input: {
       id: input.jobId,
       status: 'running',
       locked_by: input.workerId,
+      attempts_made: input.attemptsMade,
     },
     data: {
       locked_until: input.lockedUntil,
@@ -315,14 +416,15 @@ function errorMessage(error: unknown) {
 
 export async function markJobFailedOrRetry(
   job: QueueJobRecord,
-  error: unknown
-): Promise<'retry' | 'failed'> {
+  error: unknown,
+  stalledBefore?: Date
+): Promise<'retry' | 'failed' | 'stale'> {
   const now = new Date()
   const message = errorMessage(error)
 
   if (job.attempts_made < job.max_attempts) {
-    await db.queue_job.update({
-      where: { id: job.id },
+    const result = await db.queue_job.updateMany({
+      where: runningAttempt(job),
       data: {
         status: 'pending',
         available_at: new Date(now.getTime() + retryDelay(job.attempts_made)),
@@ -332,11 +434,14 @@ export async function markJobFailedOrRetry(
         updated_at: now,
       },
     })
-    return 'retry'
+    return result.count ? 'retry' : 'stale'
   }
 
-  await db.$transaction([
-    db.queue_failed_job.create({
+  return db.$transaction(async (tx: any) => {
+    const where = { ...runningAttempt(job), ...(stalledBefore && { locked_until: { lt: stalledBefore } }) }
+    const removed = await tx.queue_job.deleteMany({ where })
+    if (!removed.count) return 'stale'
+    await tx.queue_failed_job.create({
       data: {
         original_job_id: job.id,
         queue_name: job.queue_name,
@@ -349,10 +454,10 @@ export async function markJobFailedOrRetry(
         error: message,
         failed_at: now,
       },
-    }),
-    db.queue_job.deleteMany({ where: { id: job.id } }),
-  ])
-  return 'failed'
+    })
+    await setManualItemDeletionFlag(tx, job, 0)
+    return 'failed'
+  })
 }
 
 export async function recoverStalledJobs() {
@@ -369,7 +474,7 @@ export async function recoverStalledJobs() {
   for (const job of stalledJobs) {
     if (job.attempts_made >= job.max_attempts) {
       const error = new Error(job.last_error || 'Job stalled')
-      const outcome = await markJobFailedOrRetry(job, error)
+      const outcome = await markJobFailedOrRetry(job, error, now)
       if (outcome === 'failed') {
         const { handleScanQueueTerminalFailure } = await import('../scan/scan_report_service.js')
         await handleScanQueueTerminalFailure(job.command, decodeJson(job.args), error)
@@ -383,8 +488,8 @@ export async function recoverStalledJobs() {
         }
       }
     } else {
-      await db.queue_job.update({
-        where: { id: job.id },
+      await db.queue_job.updateMany({
+        where: { ...runningAttempt(job), locked_until: { lt: now } },
         data: {
           status: 'pending',
           available_at: now,

@@ -1,5 +1,6 @@
 import app from '@adonisjs/core/services/app'
 import { HttpContext, ExceptionHandler } from '@adonisjs/core/http'
+import { LibraryDeleteConflict, LibraryDeleteNotFound } from '#services/library_delete_service'
 import { errors as vineErrors } from '@vinejs/vine'
 
 export default class HttpExceptionHandler extends ExceptionHandler {
@@ -23,6 +24,10 @@ export default class HttpExceptionHandler extends ExceptionHandler {
       })
     }
 
+    if (error instanceof LibraryDeleteConflict || error instanceof LibraryDeleteNotFound) {
+      const code = error instanceof LibraryDeleteConflict ? 409 : 404
+      return ctx.response.status(code).json({ code, message: error.message })
+    }
     return super.handle(error, ctx)
   }
 

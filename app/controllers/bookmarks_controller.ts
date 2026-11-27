@@ -1,3 +1,4 @@
+import { activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import path from 'node:path'
 import prisma from '#start/prisma'
@@ -52,6 +53,7 @@ export default class BookmarksController {
   private async no_paginate(userId: number, chapterId: number | undefined, orderBy: OrderBy) {
     const where = {
       ...(chapterId && { chapterId }),
+      chapter: activeChapter,
       userId,
     }
 
@@ -70,6 +72,7 @@ export default class BookmarksController {
   ) {
     const where = {
       ...(chapterId && { chapterId }),
+      chapter: activeChapter,
       userId,
     }
 
@@ -128,7 +131,7 @@ export default class BookmarksController {
 
     // 归属校验
     const bookmark = await prisma.bookmark.findFirst({
-      where: { bookmarkId, userId },
+      where: { bookmarkId, userId, chapter: activeChapter },
     })
     if (!bookmark) {
       return response.status(404).json({ code: 404, message: '书签不存在或无权访问' })

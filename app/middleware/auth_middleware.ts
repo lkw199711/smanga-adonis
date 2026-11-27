@@ -100,11 +100,6 @@ export default class AuthMiddleware {
         .json(new SResponse({ code: 1, message: '用户信息失效', status: 'token error' }))
     }
 
-    if (userToken === 'apitest-lkw') {
-      await next()
-      return
-    }
-
     // 动态引入 Prisma，只在需要的时候才加载它
     // const { default: prisma } = await import('#start/prisma')
 
@@ -119,6 +114,10 @@ export default class AuthMiddleware {
       where: { userId: token.userId },
       include: { mediaPermissons: true, userPermissons: true },
     })
+
+    if (!user) {
+      return response.status(401).json(new SResponse({ code: 1, message: '用户信息失效', status: 'token error' }))
+    }
 
     // const permissonRoutes = ['/user', '/media', '/collect', '/compress', '/history', '/latest', '/log', '/task', '/path', '/bookmark', '/tag', '/manga', '/chapter', '/image', '/manga-tag', '/chart', '/search', '/config']
 

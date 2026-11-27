@@ -1,3 +1,4 @@
+import { activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
@@ -23,8 +24,20 @@ export default class LatestsController {
         ? this.raw_sql_select_postgres({ userId, page: effectivePage, pageSize: effectivePageSize })
         : this.raw_sql_select_mysql({ userId, page: effectivePage, pageSize: effectivePageSize }),
       isPgsql
-        ? prisma.$queryRaw`SELECT COUNT(DISTINCT "mangaId") AS "count" FROM "latest" WHERE "userId" = ${userId}`
-        : prisma.$queryRaw`SELECT COUNT(DISTINCT mangaId) AS count FROM latest WHERE userId = ${userId}`,
+        ? prisma.$queryRaw`SELECT COUNT(DISTINCT "latest"."mangaId") AS "count"
+        FROM "latest"
+        JOIN "manga" ON "latest"."mangaId" = "manga"."mangaId"
+        JOIN "chapter" ON "latest"."chapterId" = "chapter"."chapterId"
+        JOIN "media" ON "manga"."mediaId" = "media"."mediaId"
+        JOIN "path" ON "manga"."pathId" = "path"."pathId"
+        WHERE "latest"."userId" = ${userId} AND "manga"."deleteFlag" = 0 AND "chapter"."deleteFlag" = 0 AND "media"."deleteFlag" = 0 AND "path"."deleteFlag" = 0`
+        : prisma.$queryRaw`SELECT COUNT(DISTINCT latest.mangaId) AS count
+        FROM latest
+        JOIN manga ON latest.mangaId = manga.mangaId
+        JOIN chapter ON latest.chapterId = chapter.chapterId
+        JOIN media ON manga.mediaId = media.mediaId
+        JOIN path ON manga.pathId = path.pathId
+        WHERE latest.userId = ${userId} AND manga.deleteFlag = 0 AND chapter.deleteFlag = 0 AND media.deleteFlag = 0 AND path.deleteFlag = 0`,
     ])
 
     // 批量统计未观看章节数
@@ -149,7 +162,7 @@ export default class LatestsController {
 
   private async resolve_progress_item(userId: number, mangaId: number) {
     const latest = await prisma.latest.findFirst({
-      where: { userId, mangaId },
+      where: { userId, mangaId, chapter: activeChapter },
       orderBy: [{ updateTime: 'desc' }, { latestId: 'desc' }],
       include: {
         manga: {
@@ -181,7 +194,7 @@ export default class LatestsController {
 
     if (latest.finish) {
       const chapters = await prisma.chapter.findMany({
-        where: { mangaId },
+        where: { mangaId, ...activeChapter },
         orderBy: { chapterNumber: 'asc' },
         select: {
           chapterId: true,
@@ -248,8 +261,11 @@ export default class LatestsController {
           "latest"
       JOIN 
           "manga" ON "latest"."mangaId" = "manga"."mangaId"
-      WHERE 
-          "latest"."userId" = ${userId}
+      JOIN "chapter" ON "latest"."chapterId" = "chapter"."chapterId"
+      JOIN "media" ON "manga"."mediaId" = "media"."mediaId"
+      JOIN "path" ON "manga"."pathId" = "path"."pathId"
+      WHERE
+          "latest"."userId" = ${userId} AND "manga"."deleteFlag" = 0 AND "chapter"."deleteFlag" = 0 AND "media"."deleteFlag" = 0 AND "path"."deleteFlag" = 0
       GROUP BY 
           "latest"."mangaId"
       ORDER BY 
@@ -277,8 +293,11 @@ export default class LatestsController {
           latest
       JOIN 
           manga ON latest.mangaId = manga.mangaId
-      WHERE 
-          latest.userId = ${userId}
+      JOIN chapter ON latest.chapterId = chapter.chapterId
+      JOIN media ON manga.mediaId = media.mediaId
+      JOIN path ON manga.pathId = path.pathId
+      WHERE
+          latest.userId = ${userId} AND manga.deleteFlag = 0 AND chapter.deleteFlag = 0 AND media.deleteFlag = 0 AND path.deleteFlag = 0
       GROUP BY 
           latest.mangaId
       ORDER BY 
@@ -297,6 +316,7 @@ export default class LatestsController {
       where: {
         userId,
         mangaId,
+        chapter: activeChapter,
       },
       orderBy: {
         updateTime: 'desc',
@@ -318,7 +338,7 @@ export default class LatestsController {
     })
 
     const chapters = await prisma.chapter.findMany({
-      where: { mangaId },
+      where: { mangaId, ...activeChapter },
       orderBy: { chapterNumber: 'asc' },
     })
     const latestChapterIndex = chapters.findIndex(

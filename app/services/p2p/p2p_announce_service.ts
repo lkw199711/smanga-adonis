@@ -3,6 +3,8 @@
  *
  * 从 p2p_shares_controller.ts 提取,供 controller 和后台 job 共用
  */
+import { activeManga } from '#services/library_visibility'
+import { isLocalShareVisible } from './path_share_resolver.js'
 import prisma from '#start/prisma'
 import { get_config } from '#utils/index'
 import TrackerClient from './tracker_client.js'
@@ -54,10 +56,12 @@ export async function announce_group(groupNo: string) {
     if (!clients.length) return
     const group = await prisma.p2p_group.findUnique({ where: { groupNo } })
     if (!group) return
-    const shares = await prisma.p2p_local_share.findMany({
+    const enabledShares = await prisma.p2p_local_share.findMany({
       where: { p2pGroupId: group.p2pGroupId, enable: 1 },
     }) as ShareRecord[]
 
+    const visible = await Promise.all(enabledShares.map(isLocalShareVisible))
+    const shares = enabledShares.filter((_share, index) => visible[index])
     const localShareIds = shares.map((s: ShareRecord) => s.p2pLocalShareId)
     const cachedManifests = localShareIds.length
       ? await prisma.p2p_local_share_manifest.findMany({
@@ -77,7 +81,7 @@ export async function announce_group(groupNo: string) {
       shares.map(async (s: ShareRecord): Promise<BuiltShare> => {
         let mangaCount: number | undefined
         if (s.shareType === 'media' && s.mediaId) {
-          mangaCount = await prisma.manga.count({ where: { mediaId: s.mediaId } })
+          mangaCount = await prisma.manga.count({ where: { mediaId: s.mediaId, ...activeManga } })
         }
 
         const manifest = await buildShareManifest({

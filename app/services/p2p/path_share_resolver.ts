@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import prisma from '#start/prisma'
+import { activeChapter, activeManga, archivedLibraryRoots, isArchivedLibraryFile } from '#services/library_visibility'
 
 export type ShareLike = {
   p2pLocalShareId: number
@@ -144,7 +145,7 @@ function estimateImageDirSize(dir: string) {
 
 async function resolveChaptersFromDb(mangaId: number) {
   const rows = await prisma.chapter.findMany({
-    where: { mangaId, deleteFlag: 0 },
+    where: { mangaId, ...activeChapter },
     orderBy: [{ chapterNumber: 'asc' }, { chapterName: 'asc' }],
     select: {
       chapterId: true,
@@ -176,7 +177,7 @@ async function resolveMangaByPath(opts: {
   if (!fileExists(mangaPath)) return null
 
   const local = await prisma.manga.findFirst({
-    where: { mangaPath, deleteFlag: 0 },
+    where: { mangaPath, ...activeManga },
     select: {
       mangaId: true,
       mangaName: true,
@@ -290,9 +291,19 @@ async function resolveMangaByPath(opts: {
   }
 }
 
+export async function isLocalShareVisible(share: ShareLike) {
+  if (share.mediaId && !(await prisma.media.findFirst({
+    where: { mediaId: share.mediaId, deleteFlag: 0 }, select: { mediaId: true },
+  }))) return false
+  if (share.mangaId && !(await prisma.manga.findFirst({
+    where: { mangaId: share.mangaId, ...activeManga }, select: { mangaId: true },
+  }))) return false
+  return !share.sharePath || !(await isArchivedLibraryFile(share.sharePath))
+}
+
 export async function resolvePathShareMangas(share: ShareLike) {
   const rawPath = share.sharePath || null
-  if (!fileExists(rawPath)) return []
+  if (!fileExists(rawPath) || !(await isLocalShareVisible(share))) return []
 
   if (share.shareType === 'manga') {
     const manga = await resolveMangaByPath({
@@ -320,8 +331,10 @@ export async function resolvePathShareMangas(share: ShareLike) {
     .filter((item) => item !== '.' && item !== '..' && !/^\./.test(item) && !/smanga-info/.test(item))
 
   const mangas: ResolvedManga[] = []
+  const archivedRoots = await archivedLibraryRoots()
   for (const entry of entries) {
     const entryPath = path.join(rootPath, entry)
+    if (await isArchivedLibraryFile(entryPath, archivedRoots)) continue
     const entryStat = safeStat(entryPath)
     if (!entryStat) continue
     if (!entryStat.isDirectory()) {

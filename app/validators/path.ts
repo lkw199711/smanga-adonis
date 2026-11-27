@@ -47,6 +47,7 @@ const metadataProfileConfigField = vine
 export const listPathValidator = vine.compile(
   vine.object({
     ...paginationFields,
+    archived: vine.boolean().optional(),
     mediaId: vine.number().positive().optional(),
   })
 )

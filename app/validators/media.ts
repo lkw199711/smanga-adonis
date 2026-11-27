@@ -18,6 +18,7 @@ import { paginationFields } from './shared.js'
 export const listMediaValidator = vine.compile(
   vine.object({
     ...paginationFields,
+    archived: vine.boolean().optional(),
   })
 )
 
@@ -62,5 +63,6 @@ export const batchIdsMediaValidator = vine.compile(
   vine.object({
     mediaIds: vine.array(vine.number().positive()).minLength(1),
     deleteFile: vine.boolean().optional(),
+    purge: vine.boolean().optional(),
   })
 )

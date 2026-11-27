@@ -97,8 +97,10 @@ export default class HistoriesController {
           "manga" ON "history"."mangaId" = "manga"."mangaId"
       JOIN 
           "chapter" ON "history"."chapterId" = "chapter"."chapterId"
-      WHERE 
-          "history"."userId" = ${userId}
+      JOIN "media" ON "manga"."mediaId" = "media"."mediaId"
+      JOIN "path" ON "manga"."pathId" = "path"."pathId"
+      WHERE
+          "history"."userId" = ${userId} AND "manga"."deleteFlag" = 0 AND "chapter"."deleteFlag" = 0 AND "media"."deleteFlag" = 0 AND "path"."deleteFlag" = 0
       GROUP BY 
           "history"."mangaId"
       ORDER BY 
@@ -108,7 +110,13 @@ export default class HistoriesController {
       OFFSET
         ${(page - 1) * pageSize}
       `,
-      prisma.$queryRaw`SELECT COUNT(DISTINCT "mangaId") AS "count" FROM "history" WHERE "userId" = ${userId}`,
+      prisma.$queryRaw`SELECT COUNT(DISTINCT "history"."mangaId") AS "count"
+        FROM "history"
+        JOIN "manga" ON "history"."mangaId" = "manga"."mangaId"
+        JOIN "chapter" ON "history"."chapterId" = "chapter"."chapterId"
+        JOIN "media" ON "manga"."mediaId" = "media"."mediaId"
+      JOIN "path" ON "manga"."pathId" = "path"."pathId"
+        WHERE "history"."userId" = ${userId} AND "manga"."deleteFlag" = 0 AND "chapter"."deleteFlag" = 0 AND "media"."deleteFlag" = 0 AND "path"."deleteFlag" = 0`,
     ])
   }
 
@@ -139,8 +147,10 @@ export default class HistoriesController {
           manga ON history.mangaId = manga.mangaId
       JOIN 
           chapter ON history.chapterId = chapter.chapterId
-      WHERE 
-          history.userId = ${userId}
+      JOIN media ON manga.mediaId = media.mediaId
+      JOIN path ON manga.pathId = path.pathId
+      WHERE
+          history.userId = ${userId} AND manga.deleteFlag = 0 AND chapter.deleteFlag = 0 AND media.deleteFlag = 0 AND path.deleteFlag = 0
       GROUP BY 
           history.mangaId
       ORDER BY 
@@ -150,7 +160,13 @@ export default class HistoriesController {
       OFFSET
         ${(page - 1) * pageSize}
       `,
-      prisma.$queryRaw`SELECT COUNT(DISTINCT mangaId) AS count FROM history WHERE userId = ${userId}`,
+      prisma.$queryRaw`SELECT COUNT(DISTINCT history.mangaId) AS count
+        FROM history
+        JOIN manga ON history.mangaId = manga.mangaId
+        JOIN chapter ON history.chapterId = chapter.chapterId
+        JOIN media ON manga.mediaId = media.mediaId
+      JOIN path ON manga.pathId = path.pathId
+        WHERE history.userId = ${userId} AND manga.deleteFlag = 0 AND chapter.deleteFlag = 0 AND media.deleteFlag = 0 AND path.deleteFlag = 0`,
     ])
   }
 

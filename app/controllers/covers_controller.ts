@@ -1,3 +1,4 @@
+import { activeManga, activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -75,21 +76,21 @@ export async function serveCover(
   const manga =
     kind === 'manga'
       ? await prisma.manga.findUnique({
-          where: { mangaId: id },
+          where: { mangaId: id, ...activeManga },
           include: { media },
         })
       : null
   const chapter =
     kind === 'chapter'
       ? await prisma.chapter.findUnique({
-          where: { chapterId: id },
+          where: { chapterId: id, ...activeChapter },
           include: { media, manga: { select: { deleteFlag: true } } },
         })
       : null
   const meta =
     kind === 'meta'
       ? await prisma.meta.findUnique({
-          where: { metaId: id },
+          where: { metaId: id, manga: activeManga },
           include: { manga: { include: { media } }, chapter: { select: { deleteFlag: true } } },
         })
       : null

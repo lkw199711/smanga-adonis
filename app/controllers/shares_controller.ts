@@ -1,3 +1,4 @@
+import { activeManga, activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { v4 as uuidv4 } from 'uuid'
@@ -165,10 +166,13 @@ export default class SharesController {
         .json({ code: 403, message: '分享已过期', status: 'share expired' })
     }
 
+    const sharedMedia = await prisma.media.findFirst({ where: { mediaId: share.mediaId, deleteFlag: 0 } })
+    if (!sharedMedia) return response.status(404).json({ code: 404, message: '媒体库不存在或已停用' })
+
     // 如果传了 mangaId，优先返回该漫画的章节信息
     if (mangaId) {
       const mangaFound = await prisma.manga.findUnique({
-        where: { mangaId },
+        where: { mangaId, ...activeManga },
         include: { media: true },
       })
 
@@ -181,7 +185,7 @@ export default class SharesController {
       const sourceWebsite = mangaFound.media.sourceWebsite
       const libraryPath = await libraryPathContextForPathId(mangaFound.pathId)
       const chapters = await prisma.chapter.findMany({
-        where: { mangaId },
+        where: { mangaId, ...activeChapter },
         orderBy: { chapterNumber: 'asc' },
       })
 
@@ -224,7 +228,7 @@ export default class SharesController {
     // 如果传了 chapterId，返回该章节的详细信息
     if (chapterId) {
       const chapter = await prisma.chapter.findUnique({
-        where: { chapterId },
+        where: { chapterId, ...activeChapter },
       })
       if (!chapter) {
         return response
@@ -253,11 +257,11 @@ export default class SharesController {
       }
 
       media.mangaCount = await prisma.manga.count({
-        where: { mediaId: share.mediaId },
+        where: { mediaId: share.mediaId, ...activeManga },
       })
     } else if (share.shareType === 'manga' && share.mangaId) {
       manga = await prisma.manga.findUnique({
-        where: { mangaId: share.mangaId },
+        where: { mangaId: share.mangaId, ...activeManga },
         include: {
           media: {
             select: {
@@ -310,7 +314,7 @@ export default class SharesController {
     const { mangaId } = await analysisChaptersShareValidator.validate(request.all())
 
     const manga = await prisma.manga.findUnique({
-      where: { mangaId },
+      where: { mangaId, ...activeManga },
       include: { media: true },
     })
 
@@ -323,7 +327,7 @@ export default class SharesController {
     const sourceWebsite = manga.media.sourceWebsite
     const libraryPath = await libraryPathContextForPathId(manga.pathId)
     const chapters = await prisma.chapter.findMany({
-      where: { mangaId },
+      where: { mangaId, ...activeChapter },
       orderBy: { chapterNumber: 'asc' },
     })
 
@@ -363,7 +367,7 @@ export default class SharesController {
   async analysis_images({ request, response }: HttpContext) {
     const { chapterId } = await analysisImagesShareValidator.validate(request.all())
     const chapter = await prisma.chapter.findUnique({
-      where: { chapterId },
+      where: { chapterId, ...activeChapter },
     })
     if (!chapter) {
       return response
@@ -384,7 +388,7 @@ export default class SharesController {
     const { mediaId } = await analysisMangasShareValidator.validate(request.all())
 
     const mangas = await prisma.manga.findMany({
-      where: { mediaId },
+      where: { mediaId, ...activeManga },
       orderBy: { mangaName: 'asc' },
       include: {
         path: { include: { storageRoot: true } },

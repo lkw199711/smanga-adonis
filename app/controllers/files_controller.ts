@@ -1,3 +1,4 @@
+import { activePath, activeChapter, isArchivedLibraryFile } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'fs'
 import path from 'path'
@@ -9,7 +10,7 @@ import { isWithinLibraryDirectory, LibraryPathContext } from '#services/library_
 // 获取所有媒体库允许的路径前缀
 async function getAllowedPaths(): Promise<string[]> {
   const paths = await prisma.path.findMany({
-    where: { deleteFlag: 0 },
+    where: activePath,
     include: { storageRoot: true },
   })
   const allowedPaths: string[] = []
@@ -20,13 +21,22 @@ async function getAllowedPaths(): Promise<string[]> {
       // 单个存储根停用时，其他媒体库仍然可读。
     }
   }
-  // 同时允许 compress 目录
-  allowedPaths.push(path_compress())
   return allowedPaths
 }
 
 function isPathAllowed(filePath: string, allowedPaths: string[]): boolean {
   return allowedPaths.some((allowed) => isWithinLibraryDirectory(allowed, filePath))
+}
+
+async function isActiveCompressFile(file: string) {
+  const root = path_compress()
+  if (!isWithinLibraryDirectory(root, file)) return false
+  const topDirectory = path.relative(root, file).split(path.sep)[0]
+  if (!topDirectory) return false
+  return Boolean(await prisma.compress.findFirst({
+    where: { compressPath: path.join(root, topDirectory), chapter: activeChapter },
+    select: { compressId: true },
+  }))
 }
 
 export default class FilesController {
@@ -35,7 +45,8 @@ export default class FilesController {
 
     // 路径安全校验：只允许访问媒体库路径和解压目录下的文件
     const allowedPaths = await getAllowedPaths()
-    if (!isPathAllowed(file, allowedPaths)) {
+    if (await isArchivedLibraryFile(file) ||
+        (!isPathAllowed(file, allowedPaths) && !(await isActiveCompressFile(file)))) {
       return response.status(403).json({
         message: '无权访问该路径',
         error: 'path not allowed.',

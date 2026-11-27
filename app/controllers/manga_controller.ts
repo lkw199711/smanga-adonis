@@ -1,8 +1,10 @@
+import { activeManga, activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
+import { submitLibraryDeletion } from '#services/library_delete_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
 import { resolveReadableSource } from '#services/library_availability_service'
@@ -78,7 +80,7 @@ export default class MangaController {
     const queryParams = {
       where: {
         ...(mediaId && { mediaId }),
-        deleteFlag: 0,
+        ...activeManga,
       },
       orderBy: order_params(order, 'manga'),
     }
@@ -98,7 +100,7 @@ export default class MangaController {
       where: {
         ...(mediaId && { mediaId }),
         ...(keyWord && { subTitle: { contains: keyWord } }),
-        deleteFlag: 0,
+        ...activeManga,
       },
       orderBy: order_params(order, 'manga'),
     }
@@ -113,7 +115,7 @@ export default class MangaController {
     const [chapterCounts, historyCounts] = await Promise.all([
       prisma.chapter.groupBy({
         by: ['mangaId'],
-        where: { mangaId: { in: mangaIds } },
+        where: { ...activeChapter, mangaId: { in: mangaIds } },
         _count: { chapterId: true },
       }),
       prisma.history.groupBy({
@@ -143,7 +145,7 @@ export default class MangaController {
   public async show({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
     const manga = await prisma.manga.findUnique({
-      where: { mangaId },
+      where: { mangaId, ...activeManga },
       include: {
         metas: true,
         path: { include: { storageRoot: true } },
@@ -241,62 +243,30 @@ export default class MangaController {
   }
 
   public async destroy({ params, request, response }: HttpContext) {
+    if ((request as any).user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
+    }
+
     const { mangaId } = await idParamMangaValidator.validate(params)
-    const existManga = await prisma.manga.findUnique({ where: { mangaId } })
-    if (!existManga) {
-      return response.status(404).json({ code: 404, message: '漫画不存在' })
-    }
-
-    const userId = (request as any).userId
-    if (!(await this.checkMediaPermission(userId, existManga.mediaId))) {
-      return response
-        .status(403)
-        .json({ code: 403, message: '没有权限访问', status: 'no permission' })
-    }
-
     const deleteFile = deleteFileRequested(request.input('deleteFile'))
-    const manga = await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
-
-    await addTask({
-      taskName: `delete_manga_${manga.mangaId}`,
-      command: 'deleteManga',
-      args: { mangaId: manga.mangaId, deleteFile },
-      priority: TaskPriority.deleteManga,
-      timeout: 1000 * 60 * 10,
-    })
-
-    return response.json({ code: 200, message: '删除成功', data: await resolveLibraryFileRecord(manga) })
+    const jobs = await submitLibraryDeletion('manga', [mangaId], deleteFile)
+    if (!jobs.length) return response.status(404).json({ code: 404, message: '漫画不存在' })
+    return response.status(202).json({ code: 200, message: '永久清理已加入队列', taskIds: jobs.map(job => job!.id) })
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
-    const { mangaIds, deleteFile = false } = await batchIdsMangaValidator.validate(request.all())
-    const userId = (request as any).userId
-
-    for (const mangaId of mangaIds) {
-      const existManga = await prisma.manga.findUnique({ where: { mangaId } })
-      if (!existManga) continue
-      if (!(await this.checkMediaPermission(userId, existManga.mediaId))) {
-        return response
-          .status(403)
-          .json({ code: 403, message: '没有权限访问', status: 'no permission' })
-      }
-
-      await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 1 } })
-      await addTask({
-        taskName: `delete_manga_${mangaId}`,
-        command: 'deleteManga',
-        args: { mangaId, deleteFile },
-        priority: TaskPriority.deleteManga,
-        timeout: 1000 * 60 * 10,
-      })
+    if ((request as any).user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
     }
 
-    return response.json({ code: 200, message: '删除成功', data: mangaIds })
+    const { mangaIds, deleteFile = false } = await batchIdsMangaValidator.validate(request.all())
+    const jobs = await submitLibraryDeletion('manga', mangaIds, deleteFile)
+    return response.status(202).json({ code: 200, message: '永久清理已加入队列', taskIds: jobs.map(job => job!.id) })
   }
 
   public async scan({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga) {
       return response
         .status(404)
@@ -353,7 +323,7 @@ export default class MangaController {
   public async edit_meta({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
 
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga) {
       return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
@@ -445,7 +415,7 @@ export default class MangaController {
   public async reload_meta({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
 
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga) {
       return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
@@ -465,7 +435,7 @@ export default class MangaController {
   public async add_tags({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
 
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga) {
       return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
@@ -517,7 +487,7 @@ export default class MangaController {
   public async compress_all({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
 
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga) {
       return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
@@ -570,7 +540,7 @@ export default class MangaController {
   public async compress_delete({ params, request, response }: HttpContext) {
     const { mangaId } = await idParamMangaValidator.validate(params)
 
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga) {
       return response.status(404).json({ code: 404, message: '漫画不存在' })
     }

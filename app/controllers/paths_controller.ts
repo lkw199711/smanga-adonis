@@ -2,6 +2,8 @@ import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
+import { deleteFileRequested } from '#services/physical_delete_service'
+import { hideLibraryContainer, restoreLibraryContainer, submitLibraryDeletion } from '#services/library_delete_service'
 import { create_scan_cron } from '#services/cron_service'
 import ScanDiscoveryService from '#services/scan/scan_discovery_service'
 import ScanReportService from '#services/scan/scan_report_service'
@@ -61,7 +63,10 @@ export default class PathsController {
   public async index({ request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
-    const { mediaId, page, pageSize } = await listPathValidator.validate(request.qs())
+    const { mediaId, page, pageSize, archived } = await listPathValidator.validate(request.qs())
+    if (archived && (request as any).user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
+    }
     const queryParams = {
       ...(page && {
         skip: (page - 1) * (pageSize ?? 10),
@@ -69,7 +74,7 @@ export default class PathsController {
       }),
       where: {
         ...(mediaId && { mediaId }),
-        deleteFlag: 0,
+        ...(archived ? { deleteFlag: 1 } : { deleteFlag: 0, media: { deleteFlag: 0 } }),
       },
     }
 
@@ -86,7 +91,7 @@ export default class PathsController {
 
     const { pathId } = await idParamPathValidator.validate(params)
     const pathInfo = await prisma.path.findUnique({
-      where: { pathId },
+      where: { pathId, deleteFlag: 0, media: { deleteFlag: 0 } },
       include: { storageRoot: true },
     })
     const data = pathInfo
@@ -106,7 +111,7 @@ export default class PathsController {
       include: { media: true, storageRoot: true },
     })
 
-    if (!pathInfo || !pathInfo.media) return null
+    if (!pathInfo || pathInfo.deleteFlag || pathInfo.media.deleteFlag) return null
 
     return {
       mediaId: pathInfo.mediaId,
@@ -196,6 +201,9 @@ export default class PathsController {
     const insertData = this.normalizeScanConfigs(validatedData, response)
     if (!insertData) return
 
+    const media = await prisma.media.findFirst({ where: { mediaId: insertData.mediaId, deleteFlag: 0 } })
+    if (!media) return response.status(404).json({ code: 404, message: '媒体库不存在或已停用' })
+
     let physicalPath = insertData.pathContent
     try {
       if (insertData.storageRootId) {
@@ -232,10 +240,7 @@ export default class PathsController {
         data: insertData as any,
       })
     } else if (path?.deleteFlag === 1) {
-      await prisma.path.update({
-        where: { pathId: path.pathId },
-        data: { deleteFlag: 0, storageRootId: insertData.storageRootId ?? null },
-      })
+      path = await restoreLibraryContainer('path', path.pathId) as typeof path
     } else {
       return response.status(400).json({ code: 400, message: '路径已存在', data: path })
     }
@@ -320,44 +325,44 @@ export default class PathsController {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathId } = await idParamPathValidator.validate(params)
-    const path = await prisma.path.update({ where: { pathId }, data: { deleteFlag: 1 } })
-
-    await addTask({
-      taskName: `delete_path_${path.pathId}`,
-      command: 'deletePath',
-      args: { pathId: path.pathId },
-      priority: TaskPriority.delete,
-    })
-
-    return response.json({ code: 200, message: '删除成功', data: path })
+    const deleteFile = deleteFileRequested(request.input('deleteFile'))
+    if (deleteFile || deleteFileRequested(request.input('purge'))) {
+      const jobs = await submitLibraryDeletion('path', [pathId], deleteFile)
+      if (!jobs.length) return response.status(404).json({ code: 404, message: '路径不存在' })
+      return response.status(202).json({ code: 200, message: '永久清理已加入队列', taskIds: jobs.map(job => job!.id) })
+    }
+    const { count } = await hideLibraryContainer('path', [pathId])
+    if (!count) return response.status(404).json({ code: 404, message: '路径不存在' })
+    return response.json({ code: 200, message: '路径已移除' })
   }
 
   public async destroy_batch({ params, request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathIds } = await batchIdsParamPathValidator.validate(params)
-    const paths = await prisma.path.updateMany({
-      where: { pathId: { in: pathIds } },
-      data: { deleteFlag: 1 },
-    })
-
-    for (const id of pathIds) {
-      await addTask({
-        taskName: `delete_path_${id}`,
-        command: 'deletePath',
-        args: { pathId: id },
-        priority: TaskPriority.delete,
-      })
+    const deleteFile = deleteFileRequested(request.input('deleteFile'))
+    if (deleteFile || deleteFileRequested(request.input('purge'))) {
+      const jobs = await submitLibraryDeletion('path', pathIds, deleteFile)
+      return response.status(202).json({ code: 200, message: '永久清理已加入队列', taskIds: jobs.map(job => job!.id) })
     }
+    const data = await hideLibraryContainer('path', pathIds)
+    return response.json({ code: 200, message: '路径已移除', data })
+  }
 
-    return response.json({ code: 200, message: '删除成功', data: paths })
+  public async restore({ params, request, response }: HttpContext) {
+    if ((request as any).user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
+    }
+    const { pathId } = await idParamPathValidator.validate(params)
+    const data = await restoreLibraryContainer('path', pathId)
+    return response.json({ code: 200, message: '路径已恢复', data })
   }
 
   public async scan({ params, request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathId } = await idParamPathValidator.validate(params)
-    const path = await prisma.path.findUnique({ where: { pathId } })
+    const path = await prisma.path.findFirst({ where: { pathId, deleteFlag: 0, media: { deleteFlag: 0 } } })
     if (!path) {
       return response.status(404).json({ code: 404, message: '路径不存在' })
     }
@@ -392,7 +397,7 @@ export default class PathsController {
     if (!(await this.checkAdmin(request, response))) return
 
     const { pathId } = await idParamPathValidator.validate(params)
-    const path = await prisma.path.findUnique({ where: { pathId } })
+    const path = await prisma.path.findFirst({ where: { pathId, deleteFlag: 0, media: { deleteFlag: 0 } } })
     if (!path) {
       return response.status(404).json({ code: 404, message: '路径不存在' })
     }
@@ -403,7 +408,7 @@ export default class PathsController {
       mediaId: path.mediaId,
       pathId: path.pathId,
       pathContent: path.pathContent,
-      message: '重新扫描会先删除路径下已有漫画，再按当前目录重新创建',
+      message: '重新扫描会核对目录内容，并保留仍存在的漫画和阅读数据',
     })
 
     const task = await addTask({

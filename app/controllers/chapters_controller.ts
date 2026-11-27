@@ -1,3 +1,4 @@
+import { activeChapter, activeManga } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import * as fs from 'fs'
@@ -6,6 +7,7 @@ import { path_compress, order_params, extract_numbers, get_config, s_delete } fr
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
+import { submitLibraryDeletion } from '#services/library_delete_service'
 import { unzipFile } from '#utils/unzip'
 import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
 import { resolveReadableSource, type ResourceAvailability } from '#services/library_availability_service'
@@ -42,7 +44,7 @@ export default class ChaptersController {
     const userId = (request as any).userId
     const manga = mangaId
       ? await prisma.manga.findUnique({
-          where: { mangaId },
+          where: { mangaId, ...activeManga },
           select: {
             mediaId: true,
             mangaPath: true,
@@ -119,7 +121,7 @@ export default class ChaptersController {
       where: {
         ...(mangaId && { mangaId }),
         ...(mediaId && { mediaId }),
-        deleteFlag: 0,
+        ...activeChapter,
       },
       include: {
         latests: {
@@ -156,7 +158,7 @@ export default class ChaptersController {
         ...(mangaId && { mangaId }),
         ...(mediaId && { mediaId }),
         ...(keyWord && { subTitle: { contains: keyWord } }),
-        deleteFlag: 0,
+        ...activeChapter,
       },
       include: {
         latests: {
@@ -196,7 +198,7 @@ export default class ChaptersController {
 
   public async show({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
     if (!chapter) {
       return response.status(404).json({ code: 404, message: '章节不存在' })
     }
@@ -215,7 +217,7 @@ export default class ChaptersController {
     const { mangaId, order } = await firstChapterValidator.validate(request.qs())
 
     const userId = (request as any).userId
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga) {
       return response.status(404).json({ code: 404, message: '漫画不存在' })
     }
@@ -226,7 +228,7 @@ export default class ChaptersController {
     }
 
     const chapter = await prisma.chapter.findFirst({
-      where: { mangaId },
+      where: { mangaId, ...activeChapter },
       orderBy: order_params(order),
     })
 
@@ -236,7 +238,7 @@ export default class ChaptersController {
   public async images({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
     const { orderChapterByNumber, reTry } = await imagesChapterValidator.validate(request.all())
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
     if (!chapter) {
       return response.status(404).json({ code: 404, message: '章节不存在', data: [], status: 'failed' })
     }
@@ -488,46 +490,31 @@ export default class ChaptersController {
   }
 
   public async destroy({ params, request, response }: HttpContext) {
+    if ((request as any).user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
+    }
+
     const { chapterId } = await idParamChapterValidator.validate(params)
     const deleteFile = deleteFileRequested(request.input('deleteFile'))
-    const chapter = await prisma.chapter.update({ where: { chapterId }, data: { deleteFlag: 1 } })
-
-    await addTask({
-      taskName: `delete_chapter_${chapter.chapterId}`,
-      command: 'deleteChapter',
-      args: { chapterId: chapter.chapterId, deleteFile },
-      priority: TaskPriority.deleteManga,
-    })
-
-    return response.json({ code: 200, message: '删除成功', data: await resolveLibraryFileRecord(chapter) })
+    const jobs = await submitLibraryDeletion('chapter', [chapterId], deleteFile)
+    if (!jobs.length) return response.status(404).json({ code: 404, message: '章节不存在' })
+    return response.status(202).json({ code: 200, message: '永久清理已加入队列', taskIds: jobs.map(job => job!.id) })
   }
 
   public async destroy_batch({ params, request, response }: HttpContext) {
-    const { chapterIds } = await batchIdsParamChapterValidator.validate(params)
-    const deleteFile = deleteFileRequested(request.input('deleteFile'))
-    const chapters = await prisma.chapter.updateMany({
-      where: {
-        chapterId: { in: chapterIds },
-      },
-      data: { deleteFlag: 1 },
-    })
-
-    const chapterIdList = chapterIds as number[]
-    for (const id of chapterIdList) {
-      await addTask({
-        taskName: `delete_chapter_${id}`,
-        command: 'deleteChapter',
-        args: { chapterId: id, deleteFile },
-        priority: TaskPriority.deleteManga,
-      })
+    if ((request as any).user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
     }
 
-    return response.json({ code: 200, message: '删除成功', data: chapters })
+    const { chapterIds } = await batchIdsParamChapterValidator.validate(params)
+    const deleteFile = deleteFileRequested(request.input('deleteFile'))
+    const jobs = await submitLibraryDeletion('chapter', chapterIds, deleteFile)
+    return response.status(202).json({ code: 200, message: '永久清理已加入队列', taskIds: jobs.map(job => job!.id) })
   }
 
   public async download({ request, response }: HttpContext) {
     const { chapterId } = await downloadChapterValidator.validate(request.all())
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
     if (!chapter) {
       return response.status(404).json({ code: 404, message: '章节不存在' })
     }
@@ -575,7 +562,7 @@ export default class ChaptersController {
   public async compress_delete({ params, request, response }: HttpContext) {
     const { chapterId } = await idParamChapterValidator.validate(params)
 
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
     if (chapter) {
       const userId = (request as any).userId
       if (!(await this.checkMediaPermission(userId, chapter.mediaId))) {

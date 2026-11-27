@@ -16,7 +16,6 @@ import {
 } from './scan/scan_incremental_service.js'
 import type { DiscoveredManga, ReusableMangaScan, ScanDiscoverySummary, ScanReportItem } from './scan/scan_types.js'
 import { LibraryPathContext } from './library_path_service.js'
-import DeleteMangaJob from './delete_manga_job.js'
 
 type mangaItem = Omit<DiscoveredManga, 'chapters'> & { chapters?: DiscoveredManga['chapters'] }
 
@@ -100,7 +99,7 @@ export default class ScanPathJob {
     this.mediaInfo = this.pathInfo?.media
 
     // 不存在路径 结束扫面任务
-    if (!this.pathInfo || this.pathInfo.deleteFlag === 1 || !this.mediaInfo) {
+    if (!this.pathInfo || this.pathInfo.deleteFlag === 1 || !this.mediaInfo || this.mediaInfo.deleteFlag) {
       console.log('不存在路径或媒体库')
       await this.reportService.finishFailed(this.scanRunId, '路径或媒体库不存在')
       return
@@ -201,12 +200,12 @@ export default class ScanPathJob {
     const scannedPaths = new Set(discoveredMangas.map(item => this.normalize_scan_path(item.mangaPath)))
     const savedPaths = new Set(mangaListSql.map(item => this.normalize_scan_path(item.mangaPath)))
     const delMangaList = mangaListSql.filter(item =>
-      this.rebuild || !scannedPaths.has(this.normalize_scan_path(item.mangaPath))
+      !scannedPaths.has(this.normalize_scan_path(item.mangaPath))
     )
 
     const reportItems: ScanReportItem[] = []
     const newMangaList = discoveredMangas.filter(item =>
-      this.rebuild || !savedPaths.has(this.normalize_scan_path(item.mangaPath))
+      !savedPaths.has(this.normalize_scan_path(item.mangaPath))
     )
     for (const item of newMangaList) {
       reportItems.push({
@@ -224,8 +223,8 @@ export default class ScanPathJob {
         category: 'change',
         targetType: 'manga',
         action: 'delete',
-        reasonCode: this.rebuild ? 'MANGA_RESCAN_REBUILD' : 'MANGA_NOT_FOUND_ON_DISK',
-        reason: this.rebuild ? '完整重扫将重新创建漫画记录' : '数据库中存在，但本次扫描未在目录中发现',
+        reasonCode: 'MANGA_NOT_FOUND_ON_DISK',
+        reason: '数据库中存在，但本次扫描未在目录中发现',
         targetName: item.mangaName,
         targetPath: item.mangaPath,
       })
@@ -235,10 +234,6 @@ export default class ScanPathJob {
     // 删除目录中不存在的漫画
     for (let index = 0; index < delMangaList.length; index++) {
       const item = delMangaList[index]
-      if (this.rebuild) {
-        await new DeleteMangaJob({ mangaId: item.mangaId }).run()
-        continue
-      }
       // 生成参数
       const args = {
         pathId: this.pathId,

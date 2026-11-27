@@ -12,6 +12,7 @@
  *   /opds/chapter/:chapterId/cover 章节封面
  */
 
+import { activeManga, activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import * as fs from 'fs'
@@ -303,7 +304,7 @@ export default class OpdsController {
     let count = 0
     if (q) {
       const baseWhere: any = {
-        deleteFlag: 0,
+        ...activeManga,
         ...media_where_for_user(user),
         OR: [
           { mangaName: { contains: q } },
@@ -373,7 +374,7 @@ export default class OpdsController {
     const page = Math.max(1, Number(request.input('page', 1)) || 1)
     const skip = (page - 1) * ps
 
-    const where = { deleteFlag: 0, ...media_where_for_user(user) }
+    const where = { ...activeManga, ...media_where_for_user(user) }
     const [list, count] = await Promise.all([
       prisma.manga.findMany({
         where,
@@ -408,7 +409,7 @@ export default class OpdsController {
     const page = Math.max(1, Number(request.input('page', 1)) || 1)
     const skip = (page - 1) * ps
 
-    const where = { userId, collectType: 'manga' }
+    const where = { userId, collectType: 'manga', manga: activeManga }
     const [list, count] = await Promise.all([
       prisma.collect.findMany({
         where,
@@ -492,14 +493,14 @@ export default class OpdsController {
       return response.status(403).send('Forbidden')
     }
 
-    const media = await prisma.media.findUnique({ where: { mediaId } })
+    const media = await prisma.media.findUnique({ where: { mediaId, deleteFlag: 0 } })
     if (!media) return response.status(404).send('media not found')
 
     const ps = page_size()
     const page = Math.max(1, Number(request.input('page', 1)) || 1)
     const skip = (page - 1) * ps
 
-    const where = { mediaId, deleteFlag: 0 }
+    const where = { mediaId, ...activeManga }
     const [list, count] = await Promise.all([
       prisma.manga.findMany({
         where,
@@ -598,7 +599,7 @@ export default class OpdsController {
     const mangaId = Number(params.mangaId)
     if (!Number.isFinite(mangaId)) return response.status(400).send('invalid mangaId')
 
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga || manga.deleteFlag === 1) return response.status(404).send('manga not found')
 
     if (!user_can_access_media(user, manga.mediaId)) {
@@ -609,7 +610,7 @@ export default class OpdsController {
     const page = Math.max(1, Number(request.input('page', 1)) || 1)
     const skip = (page - 1) * ps
 
-    const where = { mangaId, deleteFlag: 0 }
+    const where = { mangaId, ...activeChapter }
     const [list, count] = await Promise.all([
       prisma.chapter.findMany({
         where,
@@ -735,7 +736,7 @@ export default class OpdsController {
     const chapterId = Number(params.chapterId)
     if (!Number.isFinite(chapterId)) return response.status(400).send('invalid chapterId')
 
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
     if (!chapter) return response.status(404).send('chapter not found')
     if (!user_can_access_media(user, chapter.mediaId)) {
       return response.status(403).send('Forbidden')
@@ -792,7 +793,7 @@ export default class OpdsController {
     const chapterId = Number(params.chapterId)
     if (!Number.isFinite(chapterId)) return response.status(400).send('invalid chapterId')
 
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
     if (!chapter) return response.status(404).send('chapter not found')
     if (!user_can_access_media(user, chapter.mediaId)) {
       return response.status(403).send('Forbidden')
@@ -872,7 +873,7 @@ export default class OpdsController {
     const mangaId = Number(params.mangaId)
     if (!Number.isFinite(mangaId)) return response.status(400).send('invalid mangaId')
 
-    const manga = await prisma.manga.findUnique({ where: { mangaId } })
+    const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
     if (!manga) return response.status(404).send('manga not found')
     if (!user_can_access_media(user, manga.mediaId)) {
       return response.status(403).send('Forbidden')
@@ -887,7 +888,7 @@ export default class OpdsController {
     const chapterId = Number(params.chapterId)
     if (!Number.isFinite(chapterId)) return response.status(400).send('invalid chapterId')
 
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
     if (!chapter) return response.status(404).send('chapter not found')
     if (!user_can_access_media(user, chapter.mediaId)) {
       return response.status(403).send('Forbidden')
@@ -1015,7 +1016,7 @@ export default class OpdsController {
       return response.status(400).send('invalid params')
     }
 
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
     if (!chapter) return response.status(404).send('chapter not found')
     if (!user_can_access_media(user, chapter.mediaId)) {
       return response.status(403).send('Forbidden')

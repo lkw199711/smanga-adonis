@@ -4,6 +4,7 @@ const require = createRequire(import.meta.url)
 const cron = require('node-cron')
 import { get_config } from '#utils/index'
 import prisma from '#start/prisma'
+import { activePath } from '#services/library_visibility'
 import { addTask } from './queue_service.js'
 import { TaskPriority } from '#type/index'
 import _ from 'lodash'
@@ -27,8 +28,7 @@ function create_scan_cron() {
   try {
     scanCron = cron.schedule(scanInterval, async () => {
       const reportService = new ScanReportService()
-      const paths = await prisma.path.findMany()
-      const autoScanPaths = paths.filter((path: any) => path.autoScan == 1 && path.deleteFlag == 0)
+      const autoScanPaths = await prisma.path.findMany({ where: { ...activePath, autoScan: 1 } })
       for (let i = 0; i < autoScanPaths.length; i++) {
         const path = autoScanPaths[i]
         const scanRun = await reportService.createRun({
@@ -111,8 +111,7 @@ function create_media_poster_cron() {
   // 定时扫描任务
   try {
     createMediaPosterCron = cron.schedule(mediaPosterInterval, async () => {
-      const paths = await prisma.path.findMany()
-      const autoScanPaths = paths.filter((path: any) => path.autoScan == 1 && path.deleteFlag == 0)
+      const autoScanPaths = await prisma.path.findMany({ where: { ...activePath, autoScan: 1 } })
       const autoScanPathsUniqueMedia = _.uniqBy(autoScanPaths, 'mediaId')
       for (let i = 0; i < autoScanPathsUniqueMedia.length; i++) {
         const path = autoScanPathsUniqueMedia[i]

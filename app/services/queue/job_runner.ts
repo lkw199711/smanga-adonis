@@ -4,6 +4,7 @@ import DeleteChapterJob from '../delete_chapter_job.js'
 import DeleteMangaJob from '../delete_manga_job.js'
 import DeletePathJob from '../delete_path_job.js'
 import DeleteMediaJob from '../delete_media_job.js'
+import { deleteLibraryFile } from '../library_file_cleanup.js'
 import CopyPosterJob from '../copy_poster_job.js'
 import CreateMediaPosterJob from '../create_media_poster_job.js'
 import ReloadMangaMetaJob from '../reload_manga_meta_job.js'
@@ -34,6 +35,9 @@ export async function runJobCommand(command: string, args: any) {
       break
     case 'finalizeScanRun':
       await new FinalizeScanRunJob(args).run()
+      break
+    case 'deleteLibraryFile':
+      await deleteLibraryFile(args)
       break
     case 'deleteMedia':
       await new DeleteMediaJob(args).run()

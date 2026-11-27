@@ -28,7 +28,7 @@ export function csvToPositiveIds(value: unknown): number[] {
 
   const ids = source
     .map((item) => Number(String(item).trim()))
-    .filter((n) => Number.isFinite(n) && n > 0)
+    .filter((n) => Number.isSafeInteger(n) && n > 0)
 
   return Array.from(new Set(ids))
 }

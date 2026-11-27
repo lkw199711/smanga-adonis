@@ -47,7 +47,7 @@ async function addTask({ taskName, command, args, priority, timeout }: AddTaskTy
 
   const config = get_config()
   const dispatchSync = config.debug?.dispatchSync === 1 || config.debug?.dispatchSync === '1'
-  if (dispatchSync) {
+  if (dispatchSync && !command.startsWith('delete')) {
     await runTaskSync(command, args)
     return {
       id: 'sync',

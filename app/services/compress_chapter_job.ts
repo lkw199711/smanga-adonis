@@ -2,6 +2,7 @@ import { unzipFile } from '#utils/unzip'
 import { extractRar } from '#utils/unrar'
 import { extract7z } from '#utils/un7z'
 import prisma from '#start/prisma'
+import { activeChapter } from '#services/library_visibility'
 import { libraryPathContextForPathId } from '#services/library_path_service'
 
 export default class CompressChapterJob {
@@ -30,7 +31,7 @@ export default class CompressChapterJob {
     this.compressPath = compressPath
   }
   public async run() {
-    const chapter = await prisma.chapter.findUnique({ where: { chapterId: this.chapterId } })
+    const chapter = await prisma.chapter.findUnique({ where: { chapterId: this.chapterId, ...activeChapter } })
     if (!chapter || chapter.deleteFlag === 1) throw new Error('章节不存在')
     const libraryPath = await libraryPathContextForPathId(chapter.pathId)
     this.chapterPath = libraryPath.resolve(chapter.chapterPath)

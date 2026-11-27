@@ -1,11 +1,14 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { scanQueue } from '#services/queue_service'
+import {
+  cleanJobs, listFailedDeletions, removeJob, retryFailedDeletion,
+} from '#services/queue/sql_queue_repository'
 import { idParamTaskValidator, batchIdsParamTaskValidator } from '#validators/task'
 
 export default class TasksController {
   private async checkAdmin(request: any, response: any): Promise<boolean> {
     const user = (request as any).user
-    if (!user || (user.role !== 'admin' && user.mediaPermit !== 'all')) {
+    if (user?.role !== 'admin') {
       response.status(403).json({ code: 403, message: '无权限', status: 'no permission' })
       return false
     }
@@ -42,7 +45,9 @@ export default class TasksController {
       return response.status(404).json({ code: 404, message: '任务未找到', status: 'not found' })
     }
 
-    await job.remove()
+    if (!(await removeJob(taskId))) {
+      return response.status(409).json({ code: 409, message: '任务已开始执行或属于永久清理' })
+    }
     return response.json({ code: 200, message: '任务已删除', status: 'success' })
   }
 
@@ -50,17 +55,37 @@ export default class TasksController {
     if (!(await this.checkAdmin(request, response))) return
 
     const { taskIds } = await batchIdsParamTaskValidator.validate(params)
+    const removed: number[] = []
+    const skipped: number[] = []
     for (const taskId of taskIds) {
-      const job = await scanQueue.getJob(taskId)
-      if (job) await job.remove()
+      const result = await removeJob(taskId)
+      const ids = result ? removed : skipped
+      ids.push(taskId)
     }
-    return response.json({ code: 200, message: '任务已删除', status: 'success' })
+    return response.json({ code: 200, data: { removed, skipped } })
   }
 
   async destroy_all({ request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
-    await scanQueue.clean(0)
-    return response.json({ code: 200, message: '任务已清空', status: 'success' })
+    const count = await cleanJobs()
+    return response.json({ code: 200, message: '可移除的待执行任务已清空', count })
+  }
+
+  async failed({ request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+    const list = await listFailedDeletions()
+    return response.json({ code: 200, list, count: list.length })
+  }
+
+  async retry({ params, request, response }: HttpContext) {
+    if (!(await this.checkAdmin(request, response))) return
+    const { taskId } = await idParamTaskValidator.validate(params)
+    const job = await retryFailedDeletion(taskId)
+    if (!job) return response.status(404).json({ code: 404, message: '失败任务不存在' })
+    if (job === 'conflict') {
+      return response.status(409).json({ code: 409, message: '上级或下级记录已有永久清理任务' })
+    }
+    return response.status(202).json({ code: 200, message: '任务已重新入队', data: job })
   }
 }

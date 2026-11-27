@@ -3,6 +3,7 @@ import path from 'node:path'
 import prisma from '#start/prisma'
 import { addTask } from '#services/queue_service'
 import { TaskPriority } from '#type/index'
+import { activePath as activePathFilter } from '#services/library_visibility'
 import { announce_group } from '../p2p_announce_service.js'
 import { resolvePathShareMangas } from '../path_share_resolver.js'
 import { safeName } from './pull_context.js'
@@ -57,39 +58,16 @@ async function buildUniqueMediaName(baseName: string) {
 async function resolveOrCreateScanPath(transfer: { remoteName: string; receivedPath: string }) {
   const receivedPath = path.resolve(transfer.receivedPath)
   const activePath = await prisma.path.findFirst({
-    where: { pathContent: receivedPath, deleteFlag: 0 },
+    where: { pathContent: receivedPath, ...activePathFilter },
     include: { media: true },
     orderBy: { pathId: 'asc' },
   })
-  if (activePath) {
-    if (activePath.media?.deleteFlag) {
-      await prisma.media.update({
-        where: { mediaId: activePath.mediaId },
-        data: { deleteFlag: 0 },
-      })
-    }
-    return activePath
-  }
+  if (activePath) return activePath
 
-  const deletedPath = await prisma.path.findFirst({
-    where: { pathContent: receivedPath },
-    include: { media: true },
-    orderBy: { pathId: 'asc' },
+  const archivedPath = await prisma.path.findFirst({
+    where: { pathContent: receivedPath }, select: { pathId: true },
   })
-  if (deletedPath) {
-    const revived = await prisma.path.update({
-      where: { pathId: deletedPath.pathId },
-      data: { deleteFlag: 0, autoScan: 1 },
-      include: { media: true },
-    })
-    if (revived.media?.deleteFlag) {
-      await prisma.media.update({
-        where: { mediaId: revived.mediaId },
-        data: { deleteFlag: 0 },
-      })
-    }
-    return revived
-  }
+  if (archivedPath) return null
 
   const mediaName = await buildUniqueMediaName(`P2P ${transfer.remoteName}`.trim())
   const media = await prisma.media.create({
@@ -236,6 +214,7 @@ export async function finalizePulledTransferToLocalShare(transferId: number) {
     remoteName: transfer.remoteName,
     receivedPath,
   })
+  if (!scanPath) return false
 
   await upsertTransferShare({
     p2pGroupId: transfer.p2pGroupId,

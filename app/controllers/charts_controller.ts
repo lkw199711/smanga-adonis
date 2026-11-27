@@ -1,3 +1,4 @@
+import { activeManga, activeChapter } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { sliceChartValidator } from '#validators/chart'
@@ -24,13 +25,13 @@ export default class ChartsController {
 
     const [mangaCount, chapterCount, mangaWeekAdd, chapterWeekAdd, readToday, readThisWeek] =
       await Promise.all([
-        prisma.manga.count({ where: { deleteFlag: 0, ...(mediaWhere as any) } }),
-        prisma.chapter.count({ where: { deleteFlag: 0, ...(mediaWhere as any) } }),
+        prisma.manga.count({ where: { ...activeManga, ...(mediaWhere as any) } }),
+        prisma.chapter.count({ where: { ...activeChapter, ...(mediaWhere as any) } }),
         prisma.manga.count({
-          where: { deleteFlag: 0, createTime: { gte: weekStart }, ...(mediaWhere as any) },
+          where: { ...activeManga, createTime: { gte: weekStart }, ...(mediaWhere as any) },
         }),
         prisma.chapter.count({
-          where: { deleteFlag: 0, createTime: { gte: weekStart }, ...(mediaWhere as any) },
+          where: { ...activeChapter, createTime: { gte: weekStart }, ...(mediaWhere as any) },
         }),
         prisma.history.count({ where: { userId, createTime: { gte: todayStart } } }),
         prisma.history.count({ where: { userId, createTime: { gte: weekStart } } }),
@@ -55,6 +56,7 @@ export default class ChartsController {
 
     const browseTypeCounts = await prisma.manga.groupBy({
       by: ['browseType'],
+      where: activeManga,
       _count: {
         browseType: true,
       },

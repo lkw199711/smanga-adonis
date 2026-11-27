@@ -9,6 +9,7 @@
  *  - 后续如需更细粒度安全,可在 p2p_peer_auth_middleware 中接入 Tracker 下发的 groupSecret + HMAC 签名
  */
 
+import { activeManga, activeChapter, isArchivedLibraryFile } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import fs from 'fs'
@@ -302,7 +303,7 @@ export default class P2PServeController {
       }
 
       const mangas = await prisma.manga.findMany({
-        where: { mediaId },
+        where: { mediaId, ...activeManga },
         orderBy: { mangaName: 'asc' },
         include: { path: { include: { storageRoot: true } } },
       })
@@ -347,7 +348,7 @@ export default class P2PServeController {
         return response.json({ code: 200, message: '', list: chapters, count: chapters.length })
       }
 
-      const manga = await prisma.manga.findUnique({ where: { mangaId } })
+      const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
       if (!manga) {
         console.warn(`[p2p-serve] chapters 404 漫画不存在 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId}`)
         return response
@@ -356,7 +357,7 @@ export default class P2PServeController {
       }
 
       const chapters = await prisma.chapter.findMany({
-        where: { mangaId },
+        where: { mangaId, ...activeChapter },
         orderBy: { chapterNumber: 'asc' },
       })
       const libraryPath = await libraryPathContextForPathId(manga.pathId)
@@ -394,7 +395,7 @@ export default class P2PServeController {
         return response.json({ code: 200, message: '', list: images, count: images.length })
       }
 
-      const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+      const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
       if (!chapter) {
         console.warn(`[p2p-serve] images 404 章节不存在 | caller=${callerNodeId} groupNo=${groupNo} chapterId=${chapterId}`)
         return response
@@ -456,7 +457,7 @@ export default class P2PServeController {
         })
       }
 
-      const manga = await prisma.manga.findUnique({ where: { mangaId } })
+      const manga = await prisma.manga.findUnique({ where: { mangaId, ...activeManga } })
       if (!manga) {
         console.warn(`[p2p-serve] tree 404 漫画不存在 | caller=${callerNodeId} groupNo=${groupNo} mangaId=${mangaId}`)
         return response
@@ -594,7 +595,7 @@ export default class P2PServeController {
         })
       }
 
-      const chapter = await prisma.chapter.findUnique({ where: { chapterId } })
+      const chapter = await prisma.chapter.findUnique({ where: { chapterId, ...activeChapter } })
       if (!chapter) {
         return response
           .status(404)
@@ -686,6 +687,9 @@ export default class P2PServeController {
       const { groupNo, callerNodeId } = (request as any).p2pContext || {}
       const { file } = await fileBodyValidator.validate(request.all())
 
+      if (await isArchivedLibraryFile(file)) {
+        return response.status(404).json({ code: 404, message: '文件所属媒体库已停用' })
+      }
       if (!fs.existsSync(file)) {
         console.warn(`[p2p-serve] file_stat 404 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
         return response.status(404).json({ code: 404, message: `file not found: ${file}` })
@@ -713,6 +717,9 @@ export default class P2PServeController {
       const merged: any = { ...(request.qs?.() || {}), ...(request.all?.() || {}) }
       const { file } = await fileBodyValidator.validate(merged)
 
+      if (await isArchivedLibraryFile(file)) {
+        return response.status(404).json({ code: 404, message: '文件所属媒体库已停用' })
+      }
       if (!fs.existsSync(file)) {
         console.warn(`[p2p-serve] file 404 文件不存在 | caller=${callerNodeId} groupNo=${groupNo} file=${file}`)
         return response.status(404).json({ code: 404, message: `file not found: ${file}` })

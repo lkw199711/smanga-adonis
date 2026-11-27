@@ -4,6 +4,11 @@ import { mediaAvailability } from '#services/library_availability_service'
 import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
+import {
+  hideLibraryContainer,
+  restoreLibraryContainer,
+  submitLibraryDeletion,
+} from '#services/library_delete_service'
 import CreateMediaPosterJob from '#services/create_media_poster_job'
 import ScanReportService from '#services/scan/scan_report_service'
 import {
@@ -39,9 +44,12 @@ export default class MediaController {
         select: { mediaId: true },
       })) || []
 
-    const { page, pageSize } = await listMediaValidator.validate(request.qs())
+    const { page, pageSize, archived } = await listMediaValidator.validate(request.qs())
+    if (archived && user.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
+    }
     const where = {
-      deleteFlag: 0,
+      deleteFlag: archived ? 1 : 0,
       ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item) => item.mediaId) } }),
     }
     const queryParams = {
@@ -55,7 +63,7 @@ export default class MediaController {
         orderBy: { mediaId: 'desc' },
         include: {
           _count: {
-            select: { mangas: true },
+            select: { mangas: { where: { deleteFlag: 0, path: { deleteFlag: 0 } } } },
           },
         },
       }),
@@ -94,7 +102,7 @@ export default class MediaController {
         .status(403)
         .json({ code: 403, message: '无权限查看', status: 'no permission' })
     }
-    const media = await prisma.media.findUnique({ where: { mediaId } })
+    const media = await prisma.media.findFirst({ where: { mediaId, deleteFlag: 0 } })
     if (!media) return response.json({ code: 200, message: '', data: null })
     const availability = await mediaAvailability([mediaId])
     return response.json({
@@ -114,10 +122,9 @@ export default class MediaController {
 
     // 如果存在媒体库则取消删除标识
     if (media) {
-      media = await prisma.media.update({
-        where: { mediaId: media.mediaId },
-        data: { deleteFlag: 0 },
-      })
+      if (media.deleteFlag) {
+        media = await restoreLibraryContainer('media', media.mediaId) as typeof media
+      }
     } else {
       media = await prisma.media.create({
         data: insertData as any,
@@ -144,35 +151,35 @@ export default class MediaController {
 
     const { mediaId } = await idParamMediaValidator.validate(params)
     const deleteFile = deleteFileRequested(request.input('deleteFile'))
-    const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
-
-    await addTask({
-      taskName: `delete_media_${media.mediaId}`,
-      command: 'deleteMedia',
-      args: { mediaId: media.mediaId, deleteFile },
-      priority: TaskPriority.deleteManga,
-    })
-
-    return response.json({ code: 200, message: '删除成功', data: media })
+    if (deleteFile || deleteFileRequested(request.input('purge'))) {
+      const jobs = await submitLibraryDeletion('media', [mediaId], deleteFile)
+      if (!jobs.length) return response.status(404).json({ code: 404, message: '媒体库不存在' })
+      return response.status(202).json({ code: 200, message: '永久清理已加入队列', taskIds: jobs.map(job => job!.id) })
+    }
+    const { count } = await hideLibraryContainer('media', [mediaId])
+    if (!count) return response.status(404).json({ code: 404, message: '媒体库不存在' })
+    return response.json({ code: 200, message: '媒体库已停用' })
   }
 
   public async destroy_batch({ request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
 
-    const { mediaIds, deleteFile = false } = await batchIdsMediaValidator.validate(request.all())
-
-    for (const mediaId of mediaIds) {
-      const media = await prisma.media.update({ where: { mediaId }, data: { deleteFlag: 1 } })
-
-      await addTask({
-        taskName: `delete_media_${media.mediaId}`,
-        command: 'deleteMedia',
-        args: { mediaId: media.mediaId, deleteFile },
-        priority: TaskPriority.deleteManga,
-      })
+    const { mediaIds, deleteFile = false, purge = false } = await batchIdsMediaValidator.validate(request.all())
+    if (deleteFile || purge) {
+      const jobs = await submitLibraryDeletion('media', mediaIds, deleteFile)
+      return response.status(202).json({ code: 200, message: '永久清理已加入队列', taskIds: jobs.map(job => job!.id) })
     }
+    const data = await hideLibraryContainer('media', mediaIds)
+    return response.json({ code: 200, message: '媒体库已停用', data })
+  }
 
-    return response.json({ code: 200, message: '删除成功' })
+  public async restore({ params, request, response }: HttpContext) {
+    if ((request as any).user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
+    }
+    const { mediaId } = await idParamMediaValidator.validate(params)
+    const data = await restoreLibraryContainer('media', mediaId)
+    return response.json({ code: 200, message: '媒体库已恢复', data })
   }
 
   public async poster({ params, request, response }: HttpContext) {
@@ -189,7 +196,7 @@ export default class MediaController {
 
     const { mediaId } = await idParamMediaValidator.validate(params)
     const paths = await prisma.path.findMany({
-      where: { mediaId, deleteFlag: 0 },
+      where: { mediaId, deleteFlag: 0, media: { deleteFlag: 0 } },
     })
 
     const scanRunIds: number[] = []

@@ -1,101 +1,10 @@
-/*
- * @Author: lkw199711 lkw199711@163.com
- * @Date: 2024-08-11 10:49:45
- * @LastEditors: lkw199711 lkw199711@163.com
- * @LastEditTime: 2025-02-10 18:40:30
- * @FilePath: \smanga-adonis\app\services\delete_manga_job.ts
- */
-import prisma from '#start/prisma'
-import { s_delete } from '#utils/index'
-import { deletePhysicalTarget } from '#services/physical_delete_service'
-import { isManagedCover, LibraryPathContext } from '#services/library_path_service'
+import { purgeManga } from './library_delete_service.js'
 
 export default class DeleteMangaJob {
-  private mangaId: number
-  private deleteFile: boolean
-
-  constructor({ mangaId, deleteFile = false }: { mangaId: number; deleteFile?: boolean }) {
-    this.mangaId = mangaId
-    this.deleteFile = deleteFile
-  }
+  constructor(private args: { mangaId: number; deleteFile?: boolean; pathId?: number }) {}
 
   async run() {
-    const mangaId = this.mangaId
-
-    if (!mangaId) return
-    
-    // 标记为删除
-    const manga = await prisma.manga.update({
-      where: { mangaId },
-      data: { deleteFlag: 1 },
-      include: { path: { include: { storageRoot: true } }, media: true },
-    })
-
-    if (this.deleteFile) {
-      try {
-        if (manga.media.isCloudMedia) {
-          throw new Error('云媒体库不支持删除本地实体文件')
-        }
-        const libraryPath = new LibraryPathContext(manga.path)
-        deletePhysicalTarget(
-          libraryPath.resolve(manga.mangaPath),
-          libraryPath.resolve(manga.path.pathContent)
-        )
-      } catch (error) {
-        await prisma.manga.update({ where: { mangaId }, data: { deleteFlag: 0 } })
-        throw error
-      }
-    }
-
-    // 删除书签
-    const bookmarks = await prisma.bookmark.findMany({ where: { mangaId } })
-    for (let index = 0; index < bookmarks.length; index++) {
-      const bookmark = bookmarks[index];
-      if (bookmark.pageImage && /smanga_bookmark/.test(bookmark.pageImage)) {
-        s_delete(bookmark.pageImage)
-      }
-    }
-
-    await prisma.bookmark.deleteMany({ where: { mangaId } })
-    // 删除收藏
-    await prisma.collect.deleteMany({ where: { mangaId } })
-    // 删除压缩
-    const compresses = await prisma.compress.findMany({ where: { mangaId } })
-    for (let index = 0; index < compresses.length; index++) {
-      const compress = compresses[index];
-      s_delete(compress.compressPath)
-    }
-    await prisma.compress.deleteMany({ where: { mangaId } })
-    // 删除历史
-    await prisma.history.deleteMany({ where: { mangaId } })
-    // 删除最后阅读记录
-    await prisma.latest.deleteMany({ where: { mangaId } })
-    // 删除标签关联
-    await prisma.mangaTag.deleteMany({ where: { mangaId } })
-    // 删除元数据
-    await prisma.meta.deleteMany({ where: { mangaId } })
-    // 删除分享记录
-    await prisma.share.deleteMany({ where: { mangaId } })
-    // 删除章节 先删除章节封面
-    const chapters = await prisma.chapter.findMany({ where: { mangaId } })
-    for (let index = 0; index < chapters.length; index++) {
-      const chapter = chapters[index];
-      if (chapter.chapterCover && isManagedCover(chapter.chapterCover, 'chapter', chapter.chapterId)) {
-        s_delete(chapter.chapterCover)
-      }
-    }
-    await prisma.chapter.deleteMany({ where: { mangaId } })
-
-    // 删除漫画元数据
-    await prisma.meta.deleteMany({ where: { mangaId } })
-    // 删除漫画标签数据
-    await prisma.mangaTag.deleteMany({ where: { mangaId } })
-
-    // 删除漫画封面
-    if (manga.mangaCover && isManagedCover(manga.mangaCover, 'manga', mangaId)) {
-      s_delete(manga.mangaCover)
-    }
-    // 删除漫画
-    await prisma.manga.delete({ where: { mangaId } })
+    const { mangaId, deleteFile = false, pathId } = this.args
+    if (mangaId) await purgeManga(mangaId, deleteFile, pathId)
   }
 }

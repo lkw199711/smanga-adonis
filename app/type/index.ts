@@ -2,6 +2,7 @@ enum TaskPriority {
   compress = 100000,
   delete = 200000,
   deleteManga = 210000,
+  deleteFile = 220000,
   scan = 300000,
   scanManga = 310000,
   finalizeScan = 315000,

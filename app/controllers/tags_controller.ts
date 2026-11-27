@@ -1,3 +1,4 @@
+import { activeManga } from '#services/library_visibility'
 import type { HttpContext } from '@adonisjs/core/http'
 import prisma from '#start/prisma'
 import { resolveLibraryFiles } from '#services/library_file_response'
@@ -254,7 +255,7 @@ export default class TagsController {
       where: {
         tagId: { in: tagIds },
         manga: {
-          deleteFlag: 0,
+          ...activeManga,
           ...(!isAdmin && { mediaId: { in: mediaPermissons.map((item: any) => item.mediaId) } }),
         },
       },
