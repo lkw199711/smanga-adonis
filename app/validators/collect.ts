@@ -15,7 +15,11 @@
  *   GET    /collect/is/chapter/:chapterId    -> isCollectChapterParamValidator
  */
 import vine from '@vinejs/vine'
-import { paginationFields } from './shared.js'
+import { batchIdList, paginationFields } from './shared.js'
+
+export const batchCollectValidator = vine.compile(
+  vine.object({ collectIds: batchIdList().minLength(1).maxLength(100) })
+)
 
 // 列表 / 分页 (mangas / chapters)
 export const listCollectValidator = vine.compile(

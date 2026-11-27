@@ -5,6 +5,7 @@ import { TaskPriority } from '#type/index'
 import { addTask } from '#services/queue_service'
 import { deleteFileRequested } from '#services/physical_delete_service'
 import { submitLibraryDeletion } from '#services/library_delete_service'
+import { BatchTagsError, batchMangaTags } from '#services/batch_manga_tags_service'
 import ReloadMangaMetaJob from '#services/reload_manga_meta_job'
 import { resolveLibraryFileRecord, resolveLibraryFiles } from '#services/library_file_response'
 import { resolveReadableSource } from '#services/library_availability_service'
@@ -23,6 +24,7 @@ import {
   createMangaValidator,
   updateMangaValidator,
   batchIdsMangaValidator,
+  batchTagsMangaValidator,
   editMetaMangaValidator,
   addTagsMangaValidator,
 } from '#validators/manga'
@@ -449,17 +451,14 @@ export default class MangaController {
 
     const { tags, metaWriteJson } = await addTagsMangaValidator.validate(request.all())
 
-    // 删除旧的标签
-    await prisma.mangaTag.deleteMany({ where: { mangaId } })
-
-    // 添加新的标签
     const mangaTags = (tags as any[]).map((tag: any) => ({
       mangaId,
       tagId: tag.tagId,
     }))
-    const createdTags = await prisma.mangaTag.createMany({
-      data: mangaTags,
-    })
+    const [, createdTags] = await prisma.$transaction([
+      prisma.mangaTag.deleteMany({ where: { mangaId } }),
+      prisma.mangaTag.createMany({ data: mangaTags }),
+    ])
 
     if (metaWriteJson) {
       const libraryPath = await libraryPathContextForPathId(manga.pathId)
@@ -482,6 +481,20 @@ export default class MangaController {
     }
 
     return response.json({ code: 200, message: '标签添加成功', data: createdTags })
+  }
+
+  public async batch_tags({ request, response }: HttpContext) {
+    if ((request as any).user?.role !== 'admin') {
+      return response.status(403).json({ code: 403, message: '无权限' })
+    }
+    const input = await batchTagsMangaValidator.validate(request.all())
+    try {
+      const data = await batchMangaTags(input)
+      return response.json({ code: 200, data })
+    } catch (error) {
+      if (!(error instanceof BatchTagsError)) throw error
+      return response.status(422).json({ code: 422, message: error.message })
+    }
   }
 
   public async compress_all({ params, request, response }: HttpContext) {

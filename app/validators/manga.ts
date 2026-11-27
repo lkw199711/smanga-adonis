@@ -16,7 +16,7 @@
  *   DELETE /manga/:mangaId/compress       -> idParamMangaValidator
  */
 import vine from '@vinejs/vine'
-import { paginationFields } from './shared.js'
+import { batchIdList, paginationFields } from './shared.js'
 
 // 列表查询
 export const listMangaValidator = vine.compile(
@@ -61,6 +61,16 @@ export const batchIdsMangaValidator = vine.compile(
   vine.object({
     mangaIds: vine.array(vine.number().positive()).minLength(1),
     deleteFile: vine.boolean().optional(),
+  })
+)
+
+export const batchTagsMangaValidator = vine.compile(
+  vine.object({
+    target: vine.enum(['manga', 'chapter']),
+    ids: batchIdList().minLength(1).maxLength(1000),
+    operation: vine.enum(['add', 'remove', 'replace']),
+    tagIds: batchIdList().maxLength(100),
+    metaWriteJson: vine.boolean().optional(),
   })
 )
 

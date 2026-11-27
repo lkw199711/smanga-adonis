@@ -266,7 +266,7 @@ export default class BookmarksController {
 
     const ownedIds = bookmarks.map((b) => b.bookmarkId)
     const deleteResponse = await prisma.bookmark.deleteMany({
-      where: { bookmarkId: { in: ownedIds } },
+      where: { userId, bookmarkId: { in: ownedIds } },
     })
 
     return response.json({ code: 200, message: '删除成功', data: deleteResponse })

@@ -42,3 +42,5 @@ export const csvIdsField = vine
   .trim()
   .minLength(1)
   .transform((value) => csvToPositiveIds(value))
+
+export const batchIdList = () => vine.array(vine.number().withoutDecimals().min(1).max(2147483647))

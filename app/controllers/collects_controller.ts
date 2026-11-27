@@ -4,6 +4,7 @@ import prisma from '#start/prisma'
 import { resolveLibraryFiles } from '#services/library_file_response'
 import {
   listCollectValidator,
+  batchCollectValidator,
   idParamCollectValidator,
   mangaParamCollectValidator,
   collectMangaBodyValidator,
@@ -273,5 +274,14 @@ export default class CollectsController {
 
     const collect = await prisma.collect.delete({ where: { collectId } })
     return response.json({ code: 200, message: '删除成功', data: collect })
+  }
+
+  public async destroy_batch({ request, response }: HttpContext) {
+    const { userId } = request as any
+    const { collectIds } = await batchCollectValidator.validate(request.all())
+    const data = await prisma.collect.deleteMany({
+      where: { userId, collectId: { in: collectIds } },
+    })
+    return response.json({ code: 200, data })
   }
 }

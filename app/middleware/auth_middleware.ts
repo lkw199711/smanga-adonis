@@ -134,7 +134,9 @@ export default class AuthMiddleware {
     }
 
     // 检验method为delete
-    if (request.method() === 'DELETE' && user.role !== 'admin') {
+    // The batch bookmark controller limits every ID to the authenticated owner.
+    const isOwnBookmarkBatch = /^\/bookmark\/\d+(?:(?:,|%2c)\d+)*\/batch$/i.test(url)
+    if (request.method() === 'DELETE' && user.role !== 'admin' && !isOwnBookmarkBatch) {
       return response
         .status(401)
         .json(new SResponse({ code: 1, message: '无权限操作', status: 'permisson error' }))

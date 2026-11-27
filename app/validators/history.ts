@@ -12,7 +12,11 @@
  *   POST   /history/manga/:mangaId/unread-all   -> mangaParamHistoryValidator
  */
 import vine from '@vinejs/vine'
-import { paginationFields } from './shared.js'
+import { batchIdList, paginationFields } from './shared.js'
+
+export const batchHistoryValidator = vine.compile(
+  vine.object({ chapterIds: batchIdList().minLength(1).maxLength(100) })
+)
 
 // 列表查询 (分页必填, 原控制器 raw SQL 直接 LIMIT/OFFSET)
 export const listHistoryValidator = vine.compile(

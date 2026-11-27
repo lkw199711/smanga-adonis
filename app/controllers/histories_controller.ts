@@ -4,6 +4,7 @@ import { resolveLibraryFiles } from '#services/library_file_response'
 import { get_config } from '#utils/index'
 import {
   listHistoryValidator,
+  batchHistoryValidator,
   idParamHistoryValidator,
   chapterParamHistoryValidator,
   mangaParamHistoryValidator,
@@ -214,6 +215,13 @@ export default class HistoriesController {
     const { chapterId } = await chapterParamHistoryValidator.validate(params)
     const data = await prisma.history.deleteMany({ where: { chapterId, userId } })
     return response.json({ code: 200, message: '', data })
+  }
+
+  public async destroy_batch({ request, response }: HttpContext) {
+    const { userId } = request as any
+    const { chapterIds } = await batchHistoryValidator.validate(request.all())
+    const data = await prisma.history.deleteMany({ where: { userId, chapterId: { in: chapterIds } } })
+    return response.json({ code: 200, data })
   }
 
   public async read_all_chapters({ request, params, response }: HttpContext) {
