@@ -21,8 +21,11 @@ import PullMetaJob from '../p2p/pull/pull_meta_sub_job.js'
 import AnnounceAfterScanJob from '../announce_after_scan_job.js'
 import FinalizeScanRunJob from '../finalize_scan_run_job.js'
 import RescanPathJob from '../rescan_path_job.js'
+import DirectoryMigrationJob from '../directory_migration_job.js'
+import { copyMigrationDirectory } from '../directory_migration_service.js'
+import type { QueueJobAttempt } from './sql_queue_repository.js'
 
-export async function runJobCommand(command: string, args: any) {
+export async function runJobCommand(command: string, args: any, attempt?: QueueJobAttempt) {
   switch (command) {
     case 'taskScanPath':
       await new ScanPathJob(args).run()
@@ -92,6 +95,11 @@ export async function runJobCommand(command: string, args: any) {
       break
     case 'announceAfterScan':
       await new AnnounceAfterScanJob(args).run()
+      break
+    case 'taskDirectoryMigration':
+      return new DirectoryMigrationJob(args).run(attempt)
+    case 'taskDirectoryMigrationCopy':
+      await copyMigrationDirectory(args, (attempt?.attempts_made ?? 0) > 1)
       break
     default:
       console.warn(`[queue] unknown command: ${command}`)

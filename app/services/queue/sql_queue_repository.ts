@@ -3,6 +3,11 @@ import type { Prisma } from '@prisma/client'
 import { TaskPriority } from '#type/index'
 import { sql_parse_json } from '#utils/index'
 import { getQueueConfig, getQueueName } from './queue_config.js'
+import {
+  directoryMigrationsConflict,
+  type DirectoryMigrationCopyInput,
+  type DirectoryMigrationInput,
+} from '../directory_migration_service.js'
 
 type QueueJobRecord = {
   id: number
@@ -34,6 +39,9 @@ type EnqueueJobInput = {
   timeout?: number
 }
 
+export type QueueJobAttempt = Pick<QueueJobRecord, 'id' | 'locked_by' | 'attempts_made'>
+export const QUEUE_DEFERRED_EXIT_CODE = 75
+
 type ClaimInput = {
   workerId: string
   taskQueues: string[]
@@ -41,6 +49,12 @@ type ClaimInput = {
 }
 
 const db = prisma as any
+// 迁移可能持续多天，使用数据库 Int 和 Node.js 定时器共同支持的最大值。
+const directoryMigrationTimeoutMs = 2_147_483_647
+const directoryMigrationCommand = 'taskDirectoryMigration'
+const directoryMigrationCopyCommand = 'taskDirectoryMigrationCopy'
+const directoryMigrationCommands = [directoryMigrationCommand, directoryMigrationCopyCommand]
+const directoryCopyBatchSize = 80
 
 function encodeJson(value: any) {
   return sql_parse_json(value ?? {})
@@ -83,7 +97,8 @@ export function toJobLike(job: QueueJobRecord | null) {
     },
     attemptsMade: job.attempts_made,
     status: job.status,
-    canRemove: job.status === 'pending' && !libraryDeletionCommands.includes(job.command),
+    canRemove: job.status === 'pending' && !protectedQueueCommands.includes(job.command) &&
+      (job.command !== directoryMigrationCommand || !job.started_at),
     timestamp: job.created_at?.getTime?.() ?? Date.now(),
     processedOn: job.started_at?.getTime?.() ?? null,
     failedReason: job.last_error,
@@ -109,7 +124,9 @@ export function queueJobData(input: EnqueueJobInput, config = getQueueConfig()) 
     priority: input.priority ?? 10,
     attempts_made: 0,
     max_attempts: config.attempts,
-    timeout_ms: input.timeout ?? config.timeout,
+    timeout_ms: directoryMigrationCommands.includes(input.command)
+      ? directoryMigrationTimeoutMs
+      : input.timeout ?? config.timeout,
     available_at: new Date(),
   }
 }
@@ -158,6 +175,8 @@ export async function enqueueNamedJobIfIdle(input: EnqueueJobInput) {
           },
         })
         if (active > 0) return null
+        if (input.command === 'taskDirectoryMigration' &&
+          await hasActiveDirectoryMigrationConflict(tx, queueName, input.args)) return null
         return tx.queue_job.create({ data: queueJobData(input) })
       },
       { isolationLevel: 'Serializable' }
@@ -167,6 +186,26 @@ export async function enqueueNamedJobIfIdle(input: EnqueueJobInput) {
     if (error?.code === 'P2034') return null
     throw error
   }
+}
+
+async function hasActiveDirectoryMigrationConflict(
+  tx: Prisma.TransactionClient,
+  queueName: string,
+  input: DirectoryMigrationInput,
+  ignoreCopyRunId?: string
+) {
+  const jobs = await tx.queue_job.findMany({
+    where: {
+      queue_name: queueName,
+      command: { in: directoryMigrationCommands },
+      status: { in: ['pending', 'running'] },
+    },
+    select: { args: true },
+  })
+  return jobs.some((job) => {
+    const args = decodeJson(job.args)
+    return !(ignoreCopyRunId && args?.runId === ignoreCopyRunId) && directoryMigrationsConflict(input, args)
+  })
 }
 
 export async function listJobs(states?: string[]) {
@@ -207,6 +246,8 @@ export async function removeJob(id: string | number) {
 }
 
 const libraryDeletionCommands = ['deleteMedia', 'deletePath', 'deleteManga', 'deleteChapter', 'deleteLibraryFile']
+const retryableCommands = [...libraryDeletionCommands, directoryMigrationCommand]
+const protectedQueueCommands = [...libraryDeletionCommands, directoryMigrationCopyCommand]
 
 export type LibraryDeletionKind = 'media' | 'path' | 'manga' | 'chapter'
 type LibraryDeletionScope = Partial<Record<`${LibraryDeletionKind}Id`, number>>
@@ -233,7 +274,12 @@ export function libraryDeletionOverlaps(request: ScopedDeletion, queued: ScopedD
 }
 
 function removableJobs() {
-  return { queue_name: getQueueName(), status: 'pending', command: { notIn: libraryDeletionCommands } }
+  return {
+    queue_name: getQueueName(),
+    status: 'pending',
+    command: { notIn: protectedQueueCommands },
+    OR: [{ command: { not: directoryMigrationCommand } }, { started_at: null }],
+  }
 }
 
 export async function cleanJobs(states?: string[]) {
@@ -242,9 +288,9 @@ export async function cleanJobs(states?: string[]) {
   return result.count
 }
 
-export async function listFailedDeletions() {
+export async function listFailedJobs() {
   const jobs = await db.queue_failed_job.findMany({
-    where: { queue_name: getQueueName(), command: { in: libraryDeletionCommands } },
+    where: { queue_name: getQueueName(), command: { in: retryableCommands } },
     orderBy: { id: 'desc' },
   })
   return jobs.map((job: any) => toJobLike({
@@ -266,13 +312,18 @@ async function setManualItemDeletionFlag(
   }
 }
 
-export async function retryFailedDeletion(id: number) {
+export async function retryFailedJob(id: number) {
   const config = getQueueConfig()
   return db.$transaction(async (tx: any) => {
     const failed = await tx.queue_failed_job.findFirst({
-      where: { id, queue_name: getQueueName(), command: { in: libraryDeletionCommands } },
+      where: { id, queue_name: getQueueName(), command: { in: retryableCommands } },
     })
     if (!failed) return null
+    const args = decodeJson(failed.args)
+    if (failed.command === 'taskDirectoryMigration' &&
+      await hasActiveDirectoryMigrationConflict(tx, failed.queue_name, args, args?.copyRunId)) {
+      return 'migrationConflict' as const
+    }
     const existing = await tx.queue_job.findFirst({
       where: {
         queue_name: failed.queue_name,
@@ -280,7 +331,6 @@ export async function retryFailedDeletion(id: number) {
         status: { in: ['pending', 'running'] },
       },
     })
-    const args = decodeJson(failed.args)
     if (!existing && args?.kind && args.scope) {
       const scopes = await activeLibraryDeletionScopes(tx)
       if (scopes.some(scope => libraryDeletionOverlaps(args, scope))) return 'conflict' as const
@@ -290,18 +340,33 @@ export async function retryFailedDeletion(id: number) {
     if (existing) return toJobLike(existing)
 
     await setManualItemDeletionFlag(tx, failed, 1)
+    const directoryMigration = failed.command === 'taskDirectoryMigration'
+    if (directoryMigration && args?.copyRunId) {
+      await requeueFailedDirectoryCopies(tx, failed.queue_name, args.copyRunId, config)
+    }
     const job = await tx.queue_job.create({
-      data: queueJobData({
-        taskQueue: failed.task_queue,
-        taskName: failed.task_name,
-        command: failed.command,
-        args,
-        priority: failed.command === 'deleteLibraryFile' ? TaskPriority.deleteFile : TaskPriority.deleteManga,
-        timeout: failed.command === 'deleteLibraryFile' ? Math.max(config.timeout, 600000) : config.timeout,
-      }),
+      data: {
+        ...queueJobData({
+          taskQueue: failed.task_queue,
+          taskName: failed.task_name,
+          command: failed.command,
+          args,
+          priority: directoryMigration
+            ? TaskPriority.directoryMigration
+            : failed.command === 'deleteLibraryFile'
+              ? TaskPriority.deleteFile
+              : TaskPriority.deleteManga,
+          timeout: failed.command === 'deleteLibraryFile'
+            ? Math.max(config.timeout, 600000)
+            : config.timeout,
+        }),
+        ...(directoryMigration && (args?.copyRunId || args?.sourceCleanupStarted) && {
+          started_at: new Date(),
+        }),
+      },
     })
     return toJobLike(job)
-  }, { isolationLevel: 'Serializable' })
+  }, { isolationLevel: 'Serializable', timeout: 60_000 })
 }
 
 export async function pathJobExists(taskName: string) {
@@ -346,6 +411,7 @@ export async function claimNextJob(input: ClaimInput): Promise<QueueJobRecord | 
       where: {
         id: candidate.id,
         status: 'pending',
+        available_at: { lte: now },
       },
       data: {
         status: 'running',
@@ -365,13 +431,136 @@ export async function claimNextJob(input: ClaimInput): Promise<QueueJobRecord | 
   return null
 }
 
-function runningAttempt(job: QueueJobRecord) {
+function runningAttempt(job: QueueJobAttempt) {
   return {
     id: job.id,
     status: 'running',
     locked_by: job.locked_by,
     attempts_made: job.attempts_made,
   }
+}
+
+function directoryCopyScope(queueName: string, runId: string) {
+  return {
+    queue_name: queueName,
+    command: directoryMigrationCopyCommand,
+    task_name: { startsWith: `directory_migration_copy_${runId}_` },
+  }
+}
+
+function directoryCopyJobBuilder(config: ReturnType<typeof getQueueConfig>) {
+  const base = queueJobData({
+    taskQueue: 'sync',
+    taskName: '',
+    command: directoryMigrationCopyCommand,
+    args: {},
+    priority: TaskPriority.directoryMigration - 1,
+  }, config)
+  const stringArgs = typeof base.args === 'string'
+  return (taskName: string, args: DirectoryMigrationCopyInput) => ({
+    ...base,
+    task_name: taskName,
+    args: (stringArgs ? JSON.stringify(args) : args) as Prisma.queue_jobCreateManyInput['args'],
+  })
+}
+
+export async function publishDirectoryCopies(
+  job: QueueJobAttempt,
+  args: DirectoryMigrationInput & { copyRunId: string; directoryCount: number },
+  directories: string[]
+) {
+  const copyJobData = directoryCopyJobBuilder(getQueueConfig())
+  await db.$transaction(async (tx: Prisma.TransactionClient) => {
+    const updated = await tx.queue_job.updateMany({
+      where: {
+        ...runningAttempt(job),
+        command: directoryMigrationCommand,
+        locked_until: { gt: new Date() },
+      },
+      data: {
+        args: encodeJson(args) as Prisma.queue_jobCreateManyInput['args'],
+        updated_at: new Date(),
+      },
+    })
+    if (updated.count !== 1) throw new Error('迁移主任务已失去队列锁，未创建子任务')
+
+    // 发布阶段和子任务一起提交。Worker 中断后会看到完整的计划，或重新规划。
+    for (let offset = 0; offset < directories.length; offset += directoryCopyBatchSize) {
+      const rows = directories.slice(offset, offset + directoryCopyBatchSize).map((relativePath, index) =>
+        copyJobData(`directory_migration_copy_${args.copyRunId}_${offset + index}`, {
+          sourcePath: args.sourcePath,
+          targetPath: args.targetPath,
+          runId: args.copyRunId,
+          relativePath,
+        })
+      )
+      await tx.queue_job.createMany({ data: rows })
+    }
+  }, { timeout: 60_000 })
+}
+
+export async function getDirectoryCopyState(runId: string) {
+  const scope = directoryCopyScope(getQueueName(), runId)
+  const active: number = await db.queue_job.count({ where: { ...scope, status: { in: ['pending', 'running'] } } })
+  if (active > 0) return { active }
+  const failed = await db.queue_failed_job.findFirst({ where: scope, select: { args: true, error: true } })
+  return { active, failed: failed ? { relativePath: decodeJson(failed.args)?.relativePath, error: failed.error } : undefined }
+}
+
+async function requeueFailedDirectoryCopies(
+  tx: Prisma.TransactionClient,
+  queueName: string,
+  runId: string,
+  config: ReturnType<typeof getQueueConfig>
+) {
+  const scope = directoryCopyScope(queueName, runId)
+  const copyJobData = directoryCopyJobBuilder(config)
+  while (true) {
+    const failed = await tx.queue_failed_job.findMany({
+      where: scope,
+      take: directoryCopyBatchSize,
+      select: { id: true, task_name: true, args: true },
+    })
+    if (failed.length === 0) return
+    await tx.queue_job.createMany({
+      data: failed.map((job) => copyJobData(job.task_name, {
+        ...decodeJson(job.args),
+        recoverPartials: true,
+      })),
+    })
+    await tx.queue_failed_job.deleteMany({ where: { id: { in: failed.map((job) => job.id) } } })
+  }
+}
+
+export async function deferDirectoryMigration(job: QueueJobAttempt) {
+  const result = await db.queue_job.updateMany({
+    where: {
+      ...runningAttempt(job),
+      command: directoryMigrationCommand,
+      locked_until: { gt: new Date() },
+    },
+    data: {
+      status: 'pending',
+      available_at: new Date(Date.now() + 5000),
+      attempts_made: { decrement: 1 },
+      locked_by: null,
+      locked_until: null,
+      last_error: null,
+    },
+  })
+  if (result.count !== 1) throw new Error('迁移主任务已失去队列锁，无法等待子任务')
+}
+
+export async function saveDirectoryMigrationCheckpoint(job: QueueJobAttempt, args: unknown) {
+  const result = await db.queue_job.updateMany({
+    where: {
+      ...runningAttempt(job),
+      command: 'taskDirectoryMigration',
+      locked_until: { gt: new Date() },
+    },
+    data: { args: encodeJson(args), updated_at: new Date() },
+  })
+  if (result.count !== 1) throw new Error('迁移任务已失去队列锁，无法记录源文件清理进度')
 }
 
 export async function markJobCompleted(job: QueueJobRecord) {
@@ -439,6 +628,13 @@ export async function markJobFailedOrRetry(
 
   return db.$transaction(async (tx: any) => {
     const where = { ...runningAttempt(job), ...(stalledBefore && { locked_until: { lt: stalledBefore } }) }
+    // The child may have saved a checkpoint after the parent claimed the job.
+    let args = job.args
+    if (job.command === 'taskDirectoryMigration') {
+      const current = await tx.queue_job.findFirst({ where, select: { args: true } })
+      if (!current) return 'stale'
+      args = current.args
+    }
     const removed = await tx.queue_job.deleteMany({ where })
     if (!removed.count) return 'stale'
     await tx.queue_failed_job.create({
@@ -448,7 +644,7 @@ export async function markJobFailedOrRetry(
         task_queue: job.task_queue,
         task_name: job.task_name,
         command: job.command,
-        args: job.args,
+        args,
         attempts_made: job.attempts_made,
         max_attempts: job.max_attempts,
         error: message,

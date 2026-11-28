@@ -24,9 +24,11 @@ try {
 
 async function main() {
   const { runJobCommand } = await import('#services/queue/job_runner')
+  const { QUEUE_DEFERRED_EXIT_CODE } = await import('#services/queue/sql_queue_repository')
   try {
-    await runJobCommand(command!, args)
-    process.exit(0)
+    const attempt = JSON.parse(process.env.QUEUE_JOB_ATTEMPT || 'null')
+    const result = await runJobCommand(command!, args, attempt ?? undefined)
+    process.exit(result === 'deferred' ? QUEUE_DEFERRED_EXIT_CODE : 0)
   } catch (error: any) {
     console.error('[queue child] job failed:', error?.message || error)
     process.exit(1)

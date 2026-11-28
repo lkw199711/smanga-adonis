@@ -1,7 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { scanQueue } from '#services/queue_service'
 import {
-  cleanJobs, listFailedDeletions, removeJob, retryFailedDeletion,
+  cleanJobs, listFailedJobs, removeJob, retryFailedJob,
 } from '#services/queue/sql_queue_repository'
 import { idParamTaskValidator, batchIdsParamTaskValidator } from '#validators/task'
 
@@ -74,17 +74,20 @@ export default class TasksController {
 
   async failed({ request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
-    const list = await listFailedDeletions()
+    const list = await listFailedJobs()
     return response.json({ code: 200, list, count: list.length })
   }
 
   async retry({ params, request, response }: HttpContext) {
     if (!(await this.checkAdmin(request, response))) return
     const { taskId } = await idParamTaskValidator.validate(params)
-    const job = await retryFailedDeletion(taskId)
+    const job = await retryFailedJob(taskId)
     if (!job) return response.status(404).json({ code: 404, message: '失败任务不存在' })
     if (job === 'conflict') {
       return response.status(409).json({ code: 409, message: '上级或下级记录已有永久清理任务' })
+    }
+    if (job === 'migrationConflict') {
+      return response.status(409).json({ code: 409, message: '已有目录冲突的迁移任务在队列中' })
     }
     return response.status(202).json({ code: 200, message: '任务已重新入队', data: job })
   }

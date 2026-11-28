@@ -47,7 +47,7 @@ async function addTask({ taskName, command, args, priority, timeout }: AddTaskTy
 
   const config = get_config()
   const dispatchSync = config.debug?.dispatchSync === 1 || config.debug?.dispatchSync === '1'
-  if (dispatchSync && !command.startsWith('delete')) {
+  if (dispatchSync && !command.startsWith('delete') && command !== 'taskDirectoryMigration') {
     await runTaskSync(command, args)
     return {
       id: 'sync',
@@ -73,7 +73,11 @@ async function addTask({ taskName, command, args, priority, timeout }: AddTaskTy
       return false
     }
     return job
-  } else if (command === 'taskScanManga' || command === 'finalizeScanRun') {
+  } else if (
+    command === 'taskScanManga' ||
+    command === 'finalizeScanRun' ||
+    command === 'taskDirectoryMigration'
+  ) {
     const queueConfig = getQueueConfig()
     const taskQueue = resolveTaskQueue(taskName, command)
     return enqueueNamedJobIfIdle({

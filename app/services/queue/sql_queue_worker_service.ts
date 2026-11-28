@@ -6,6 +6,7 @@ import path from 'node:path'
 import { getQueueConfig, getWorkerConfig, getEffectiveWorkerQueues, type QueueWorkerGroup } from './queue_config.js'
 import {
   claimNextJob,
+  deferDirectoryMigration,
   extendRunningJobLock,
   heartbeatWorker,
   markJobCompleted,
@@ -13,6 +14,7 @@ import {
   recoverStalledJobs,
   stopWorker,
   decodeJson,
+  QUEUE_DEFERRED_EXIT_CODE,
 } from './sql_queue_repository.js'
 import { handleP2PQueueJobFailure, reconcileOrphanTransfers } from '../p2p/pull/pull_child_tracker.js'
 import { handleScanQueueTerminalFailure } from '../scan/scan_report_service.js'
@@ -212,6 +214,11 @@ export class SqlQueueWorkerService {
           ...process.env,
           QUEUE_JOB_COMMAND: job.command,
           QUEUE_JOB_ARGS: JSON.stringify(args),
+          QUEUE_JOB_ATTEMPT: JSON.stringify({
+            id: job.id,
+            locked_by: job.locked_by,
+            attempts_made: job.attempts_made,
+          }),
         },
         silent: true,
       })
@@ -257,7 +264,9 @@ export class SqlQueueWorkerService {
         clearTimeout(timeoutId)
         clearInterval(lockRenewTimer)
         try {
-          if (code === 0) {
+          if (code === QUEUE_DEFERRED_EXIT_CODE && job.command === 'taskDirectoryMigration') {
+            await deferDirectoryMigration(job)
+          } else if (code === 0) {
             if (await markJobCompleted(job)) {
               console.log(`[queue] job ${job.id} completed: ${job.command}`)
             }

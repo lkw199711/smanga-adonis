@@ -11,6 +11,7 @@ enum TaskPriority {
   syncMedia = 500000,
   syncManga = 510000,
   syncChapter = 520000,
+  directoryMigration = 550000,
   p2pPullMedia = 600000,
   p2pPullManga = 610000,
   p2pPullChapter = 620000,

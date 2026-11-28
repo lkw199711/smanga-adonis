@@ -73,6 +73,7 @@ const P2PPeersController = () => import('#controllers/p2p/p2p_peers_controller')
 const P2PServeController = () => import('#controllers/p2p/p2p_serve_controller')
 const P2PVerifyController = () => import('#controllers/p2p/p2p_verify_controller')
 const P2PTransfersController = () => import('#controllers/p2p/p2p_transfers_controller')
+const SystemToolsController = () => import('#controllers/system_tools_controller')
 
 router.group(() => {
 router.get('/', async () => {
@@ -183,6 +184,11 @@ router.get('/task/:taskId', [TasksController, 'show'])
 router.delete('/task/:taskId', [TasksController, 'destroy'])
 router.delete('/task', [TasksController, 'destroy_all'])
 router.delete('/task/:taskIds/batch', [TasksController, 'destroy_batch'])
+
+// 系统工具
+router.post('/system-tools/directory-migration/check', [SystemToolsController, 'checkDirectoryMigration'])
+router.post('/system-tools/directory-migration/target', [SystemToolsController, 'createDirectoryMigrationTarget'])
+router.post('/system-tools/directory-migration', [SystemToolsController, 'createDirectoryMigration'])
 
 // 扫描报告
 router.get('/scan-run', [ScanRunsController, 'index'])

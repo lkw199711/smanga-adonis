@@ -176,6 +176,10 @@ export function resolveTaskQueue(taskName: string, command: string) {
     return 'sync'
   }
 
+  if (command === 'taskDirectoryMigration') {
+    return 'sync'
+  }
+
   if (/p2p/i.test(taskName) || /^taskP2P/.test(command)) {
     return 'p2p'
   }
