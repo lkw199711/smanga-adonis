@@ -1,7 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { constants as fsConstants, createReadStream, type Stats } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { pipeline } from 'node:stream/promises'
 
 export type DirectoryMigrationInput = {
   sourcePath: string
@@ -14,7 +15,15 @@ export type DirectoryMigrationCopyInput = Pick<DirectoryMigrationInput, 'sourceP
   relativePath: string
   runId: string
   recoverPartials?: boolean
+  pendingFile?: PendingCopyFile | null
 }
+
+type PendingCopyFile = {
+  name: string
+  identity?: { dev: string; ino: string }
+}
+
+type SavePendingCopy = (file: PendingCopyFile | null) => Promise<void>
 
 type SourceCleanupCheckpoint = {
   started: boolean
@@ -219,15 +228,19 @@ async function hasTargetFile(target: string) {
   return !!stat
 }
 
-export async function copyMigrationDirectory(input: DirectoryMigrationCopyInput, isRetry = false) {
+export async function copyMigrationDirectory(
+  input: DirectoryMigrationCopyInput,
+  isRetry = false,
+  savePending?: SavePendingCopy
+) {
   const stats = migrationStats()
   if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(input.runId)) {
     throw new Error('迁移任务标识无效')
   }
   const { source, target } = await resolveCopyDirectories(input, stats)
   const partialPrefix = `.smanga-${input.runId}-`
-  let supportsHardLinks = true
 
+  // 清理旧版任务在崩溃时留下的同一批次临时文件。
   if (isRetry || input.recoverPartials) {
     for (const entry of await fs.readdir(target, { withFileTypes: true })) {
       if (entry.isFile() && entry.name.startsWith(partialPrefix) &&
@@ -235,6 +248,10 @@ export async function copyMigrationDirectory(input: DirectoryMigrationCopyInput,
         await unlinkPartial(path.join(target, entry.name))
       }
     }
+  }
+
+  if (input.pendingFile) {
+    await recoverPendingCopy(source, target, input.pendingFile)
   }
 
   for (const entry of await fs.readdir(source, { withFileTypes: true })) {
@@ -247,48 +264,56 @@ export async function copyMigrationDirectory(input: DirectoryMigrationCopyInput,
       continue
     }
 
-    // 每次写入使用独立路径，失去队列锁的旧进程不能发布新进程正在写的临时文件。
-    const partial = path.join(target, `${partialPrefix}${randomUUID()}.partial`)
+    const before = await existingType(sourceFile)
+    if (!before?.isFile()) throw new Error(`源文件已失效：${sourceFile}`)
+    const pending = { name: entry.name }
+    await savePending?.(pending)
+    let handle: Awaited<ReturnType<typeof fs.open>>
     try {
-      const before = await existingType(sourceFile)
-      if (!before?.isFile()) throw new Error(`源文件已失效：${sourceFile}`)
-      await fs.copyFile(sourceFile, partial, fsConstants.COPYFILE_EXCL)
-      if (!fileUnchanged(before, await existingType(sourceFile)) || (await fs.stat(partial)).size !== before.size) {
-        throw new Error(`复制期间源文件有变化或临时文件大小不符：${sourceFile}`)
-      }
-      if (supportsHardLinks) {
-        try {
-          // 支持硬链接的文件系统可以原子地发布，且绝不会覆盖已有文件。
-          await fs.link(partial, targetFile)
-          stats.copiedFiles++
-          continue
-        } catch (error: any) {
-          if (error?.code === 'EEXIST' && await hasTargetFile(targetFile)) {
-            stats.skippedFiles++
-            continue
-          }
-          if (!['ENOSYS', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'EPERM', 'EACCES', 'EINVAL'].includes(error?.code)) throw error
-          supportsHardLinks = false
-        }
-      }
-
-      // 网盘一般不支持硬链接。在同一目录内改名，并在改名前再次检查目标。
-      if (await hasTargetFile(targetFile)) {
-        stats.skippedFiles++
-      } else {
-        try {
-          await fs.rename(partial, targetFile)
-          stats.copiedFiles++
-        } catch (error: any) {
-          if (error?.code !== 'EEXIST' || !await hasTargetFile(targetFile)) throw error
-          stats.skippedFiles++
-        }
-      }
-    } finally {
-      await unlinkPartial(partial)
+      handle = await fs.open(targetFile, 'wx', before.mode & 0o777)
+    } catch (error: any) {
+      if (error?.code !== 'EEXIST' || !await hasTargetFile(targetFile)) throw error
+      await savePending?.(null)
+      stats.skippedFiles++
+      continue
     }
+    try {
+      if (savePending) {
+        const stat = await handle.stat({ bigint: true })
+        await savePending({ ...pending, identity: { dev: String(stat.dev), ino: String(stat.ino) } })
+      }
+      await pipeline(createReadStream(sourceFile), handle.createWriteStream())
+    } finally {
+      await handle.close()
+    }
+    const copied = await existingType(targetFile)
+    if (!fileUnchanged(before, await existingType(sourceFile)) || !copied?.isFile() || copied.size !== before.size) {
+      throw new Error(`复制期间源文件有变化或目标文件大小不符：${sourceFile}`)
+    }
+    stats.copiedFiles++
   }
   return stats
+}
+
+async function recoverPendingCopy(source: string, target: string, pending: PendingCopyFile) {
+  if (path.basename(pending.name) !== pending.name || ['.', '..', ''].includes(pending.name)) {
+    throw new Error('目录复制进度中的文件名无效')
+  }
+  const targetFile = path.join(target, pending.name)
+  const sourceFile = path.join(source, pending.name)
+  if (!await hasTargetFile(targetFile) || await canRemoveSourceFile(sourceFile, targetFile)) return
+  if (!(await existingType(sourceFile))?.isFile()) {
+    throw new Error(`源文件不可用，已保留上次复制的目标文件：${targetFile}`)
+  }
+
+  // 只重建能确认为本任务打开的文件，保留其他进程创建的同名文件。
+  const stat = await fs.lstat(targetFile, { bigint: true })
+  if (stat.isFile() && stat.ino !== BigInt(0) &&
+    String(stat.ino) === pending.identity?.ino && String(stat.dev) === pending.identity.dev) {
+    await fs.unlink(targetFile)
+    return
+  }
+  throw new Error(`上次复制中断，目标文件未通过验证且无法确认归属，已保留：${targetFile}`)
 }
 
 async function unlinkPartial(partial: string) {

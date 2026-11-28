@@ -555,12 +555,12 @@ export async function saveDirectoryMigrationCheckpoint(job: QueueJobAttempt, arg
   const result = await db.queue_job.updateMany({
     where: {
       ...runningAttempt(job),
-      command: 'taskDirectoryMigration',
+      command: { in: directoryMigrationCommands },
       locked_until: { gt: new Date() },
     },
     data: { args: encodeJson(args), updated_at: new Date() },
   })
-  if (result.count !== 1) throw new Error('迁移任务已失去队列锁，无法记录源文件清理进度')
+  if (result.count !== 1) throw new Error('迁移任务已失去队列锁，无法记录进度')
 }
 
 export async function markJobCompleted(job: QueueJobRecord) {
@@ -630,7 +630,7 @@ export async function markJobFailedOrRetry(
     const where = { ...runningAttempt(job), ...(stalledBefore && { locked_until: { lt: stalledBefore } }) }
     // The child may have saved a checkpoint after the parent claimed the job.
     let args = job.args
-    if (job.command === 'taskDirectoryMigration') {
+    if (directoryMigrationCommands.includes(job.command)) {
       const current = await tx.queue_job.findFirst({ where, select: { args: true } })
       if (!current) return 'stale'
       args = current.args

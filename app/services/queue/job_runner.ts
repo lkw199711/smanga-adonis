@@ -23,7 +23,7 @@ import FinalizeScanRunJob from '../finalize_scan_run_job.js'
 import RescanPathJob from '../rescan_path_job.js'
 import DirectoryMigrationJob from '../directory_migration_job.js'
 import { copyMigrationDirectory } from '../directory_migration_service.js'
-import type { QueueJobAttempt } from './sql_queue_repository.js'
+import { saveDirectoryMigrationCheckpoint, type QueueJobAttempt } from './sql_queue_repository.js'
 
 export async function runJobCommand(command: string, args: any, attempt?: QueueJobAttempt) {
   switch (command) {
@@ -99,7 +99,10 @@ export async function runJobCommand(command: string, args: any, attempt?: QueueJ
     case 'taskDirectoryMigration':
       return new DirectoryMigrationJob(args).run(attempt)
     case 'taskDirectoryMigrationCopy':
-      await copyMigrationDirectory(args, (attempt?.attempts_made ?? 0) > 1)
+      if (!attempt) throw new Error('目录复制必须从数据库队列执行')
+      await copyMigrationDirectory(args, attempt.attempts_made > 1, (pendingFile) =>
+        saveDirectoryMigrationCheckpoint(attempt, { ...args, pendingFile })
+      )
       break
     default:
       console.warn(`[queue] unknown command: ${command}`)

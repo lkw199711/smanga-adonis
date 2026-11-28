@@ -7,6 +7,7 @@ import {
   checkDirectoryMigrationPaths,
   copyMigrationDirectory,
   createMigrationTarget,
+  type DirectoryMigrationCopyInput,
   finishDirectoryMigration,
   planDirectoryCopies,
 } from '#services/directory_migration_service'
@@ -68,6 +69,39 @@ test.group('directory migration', () => {
       assert.isFalse((await createMigrationTarget(file)).available)
       assert.equal(await fs.readFile(file, 'utf8'), 'preserve')
       assert.isFalse((await createMigrationTarget('relative-target')).available)
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('rewrites an interrupted direct copy only when the recorded destination belongs to the job', async ({ assert }) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'smanga-direct-copy-retry-'))
+    try {
+      const sourcePath = path.join(root, 'source')
+      const targetPath = path.join(root, 'target')
+      const name = 'comic.cbz'
+      const targetFile = path.join(targetPath, name)
+      await fs.mkdir(sourcePath)
+      await fs.mkdir(targetPath)
+      await fs.writeFile(path.join(sourcePath, name), 'complete archive')
+      await fs.writeFile(targetFile, 'partial')
+      const original = await fs.lstat(targetFile, { bigint: true })
+      const input = { sourcePath, targetPath, relativePath: '', runId: randomUUID() }
+      await assert.rejects(() => copyMigrationDirectory({ ...input, pendingFile: { name } }), /无法确认归属/)
+      assert.equal(await fs.readFile(targetFile, 'utf8'), 'partial')
+
+      const pendingFile = { name, identity: { ino: String(original.ino), dev: String(original.dev) } }
+      let saved: DirectoryMigrationCopyInput['pendingFile']
+      await copyMigrationDirectory({ ...input, pendingFile }, true, async (file) => {
+        if (file?.identity) {
+          assert.equal((await fs.stat(targetFile)).size, 0)
+          assert.deepEqual(await fs.readdir(targetPath), [name])
+          saved = file
+        }
+      })
+      assert.equal(saved?.name, name)
+      assert.equal(await fs.readFile(targetFile, 'utf8'), 'complete archive')
+      assert.deepEqual(await fs.readdir(targetPath), [name])
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }

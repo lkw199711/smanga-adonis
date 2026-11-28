@@ -69,7 +69,8 @@ export default class TasksController {
     if (!(await this.checkAdmin(request, response))) return
 
     const count = await cleanJobs()
-    return response.json({ code: 200, message: '可移除的待执行任务已清空', count })
+    const message = count > 0 ? `已清空 ${count} 个待执行任务` : '没有可清空的待执行任务'
+    return response.json({ code: 200, message, count })
   }
 
   async failed({ request, response }: HttpContext) {
